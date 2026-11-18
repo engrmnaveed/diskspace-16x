@@ -1,5 +1,5 @@
 import Foundation
-import SpaceCore
+@testable import SpaceCore
 import XCTest
 
 #if canImport(Darwin)
@@ -169,7 +169,7 @@ final class DiskScannerTests: XCTestCase {
             _ = try makeFile("one", bytes: 1, under: root)
             let folder = try makeDirectory("nested", under: root)
             _ = try makeFile("two", bytes: 2, under: folder)
-            let progress = ProgressRecorder()
+            let progress = ScanRecorder<ScanProgress>()
             let report = try DiskScanner.scan(path: root.path, progress: progress.record)
 
             XCTAssertEqual(report.root.logicalBytes, 3)
@@ -179,7 +179,7 @@ final class DiskScannerTests: XCTestCase {
             XCTAssertEqual(snapshots.last?.currentPath, root.path)
             XCTAssertEqual(snapshots.map(\.visitedEntries), snapshots.map(\.visitedEntries).sorted())
 
-            let cancellation = ProgressRecorder()
+            let cancellation = ScanRecorder<ScanProgress>()
             XCTAssertThrowsError(try DiskScanner.scan(
                 path: root.path, progress: cancellation.record,
                 isCancelled: { !cancellation.snapshots.isEmpty }
@@ -188,6 +188,125 @@ final class DiskScannerTests: XCTestCase {
             }
         }
     }
+
+    func testPreviewShowsTwoLevelsWithoutCountingUnresolvedHardLinks() throws {
+        try withFixture { root in
+            let first = try makeDirectory("a-first", under: root)
+            let boundary = try makeDirectory("nested", under: first)
+            let deep = try makeFile("deep", bytes: 8_192, under: boundary)
+            let visible = try makeFile("visible", bytes: 4_096, under: first)
+            try FileManager.default.linkItem(at: deep, to: root.appendingPathComponent("z-alias"))
+            let previews = ScanRecorder<ScanReport>()
+
+            let final = try DiskScanner.scan(path: root.path, preview: previews.record)
+            let preview = try XCTUnwrap(previews.snapshots.first)
+            let firstFolder = try XCTUnwrap(preview.root.children.first)
+            let nested = try XCTUnwrap(firstFolder.children.first)
+            XCTAssertTrue(preview.isPreview)
+            XCTAssertEqual(nested.path, boundary.path)
+            XCTAssertTrue(nested.isPending)
+            XCTAssertTrue(nested.children.isEmpty)
+            XCTAssertEqual(preview.root.allocatedBytes, try allocatedBytes(of: visible))
+            XCTAssertEqual(preview.largestFiles(limit: 10, by: .allocated).map(\.path), [visible.path])
+            XCTAssertEqual(preview.root.children.last?.isPending, true)
+
+            let direct = try DiskScanner.scan(path: root.path)
+            XCTAssertFalse(final.isPreview)
+            XCTAssertFalse(final.root.isPending)
+            XCTAssertEqual(final.root.allocatedBytes, direct.root.allocatedBytes)
+            XCTAssertEqual(final.root.logicalBytes, direct.root.logicalBytes)
+            XCTAssertEqual(final.root.children.last?.isHardLinkAlias, true)
+            XCTAssertEqual(final.largestFiles(limit: 10, by: .allocated).map(\.path),
+                           direct.largestFiles(limit: 10, by: .allocated).map(\.path))
+        }
+    }
+
+    func testPreviewUpdatesFinishedFoldersAndKeepsOtherFoldersPending() throws {
+        try withFixture { root in
+            for name in ["first", "second"] {
+                let folder = try makeDirectory(name, under: root)
+                let nested = try makeDirectory("nested", under: folder)
+                _ = try makeFile("payload", bytes: 10, under: nested)
+            }
+            let previews = ScanRecorder<ScanReport>()
+            _ = try DiskScanner.scan(path: root.path, progress: { update in
+                if update.visitedEntries == 1 {
+                    // Let the publication interval elapse before any branch completes.
+                    Thread.sleep(forTimeInterval: 0.45)
+                }
+            }, preview: previews.record)
+
+            let refined = try XCTUnwrap(previews.snapshots.dropFirst().first)
+            XCTAssertEqual(refined.root.children.first?.children.first?.children.first?.name, "payload")
+            XCTAssertEqual(refined.root.children.first?.isPending, false)
+            XCTAssertEqual(refined.root.children.last?.isPending, true)
+            XCTAssertTrue(refined.isPreview)
+        }
+    }
+
+    func testCancellationAfterPreviewStopsBeforeDeepScan() throws {
+        try withFixture { root in
+            let folder = try makeDirectory("first", under: root)
+            let nested = try makeDirectory("second", under: folder)
+            _ = try makeFile("payload", bytes: 10, under: nested)
+            let previews = ScanRecorder<ScanReport>()
+            let progress = ScanRecorder<ScanProgress>()
+
+            XCTAssertThrowsError(try DiskScanner.scan(
+                path: root.path, progress: progress.record, preview: previews.record,
+                isCancelled: { !previews.snapshots.isEmpty }
+            )) { error in
+                XCTAssertTrue(error is CancellationError)
+            }
+            XCTAssertEqual(previews.snapshots.count, 1)
+            XCTAssertTrue(progress.snapshots.isEmpty)
+        }
+    }
+
+    #if canImport(Darwin)
+    func testCloudMetadataTimeoutDoesNotDelayTheSamePathTwice() throws {
+        let access = MetadataAccess(isCancelled: { false })
+        let finish = DispatchSemaphore(value: 0)
+        let didFinish = DispatchSemaphore(value: 0)
+        defer {
+            finish.signal()
+            _ = didFinish.wait(timeout: .now() + .seconds(2))
+        }
+        let path = "/Library/Mobile Documents/provider/folder"
+        XCTAssertTrue(MetadataAccess.isProviderPath(path))
+        XCTAssertTrue(MetadataAccess.isProviderPath("/Users/test/Library/CloudStorage/Provider"))
+        XCTAssertFalse(MetadataAccess.isProviderPath("/Users/test/Library/CloudStorageBackup"))
+
+        let start = DispatchTime.now().uptimeNanoseconds
+        XCTAssertThrowsError(try access.perform(at: path, isProvider: true) { _ in
+            _ = finish.wait(timeout: .now() + .seconds(5))
+            didFinish.signal()
+            return 0
+        }) { error in
+            XCTAssertTrue(error is MetadataUnavailable)
+        }
+        XCTAssertLessThan(DispatchTime.now().uptimeNanoseconds - start, 3_000_000_000)
+        XCTAssertThrowsError(try access.perform(at: path, isProvider: true) { _ in
+            XCTFail("A timed-out path should not be retried during the scan.")
+            return 0
+        })
+        XCTAssertEqual(try access.perform(at: "/Local", isProvider: false) { _ in 1 }, 1)
+    }
+
+    func testScanDisablesCloudMaterializationAndRestoresTheThreadPolicy() throws {
+        try withFixture { root in
+            let kind = IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES
+            let previous = getiopolicy_np(kind, IOPOL_SCOPE_THREAD)
+            let policies = ScanRecorder<Int32>()
+            _ = try DiskScanner.scan(path: root.path, progress: { _ in
+                policies.record(getiopolicy_np(kind, IOPOL_SCOPE_THREAD))
+            })
+
+            XCTAssertEqual(policies.snapshots, [IOPOL_MATERIALIZE_DATALESS_FILES_OFF, IOPOL_MATERIALIZE_DATALESS_FILES_OFF])
+            XCTAssertEqual(getiopolicy_np(kind, IOPOL_SCOPE_THREAD), previous)
+        }
+    }
+    #endif
 
     private func withFixture(_ body: (URL) throws -> Void) throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("space16x-tests-\(UUID().uuidString)")
@@ -217,15 +336,15 @@ final class DiskScannerTests: XCTestCase {
     }
 }
 
-private final class ProgressRecorder: @unchecked Sendable {
+private final class ScanRecorder<Value: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
-    private var values: [ScanProgress] = []
+    private var values: [Value] = []
 
-    var snapshots: [ScanProgress] {
+    var snapshots: [Value] {
         lock.withLock { values }
     }
 
-    func record(_ progress: ScanProgress) {
-        lock.withLock { values.append(progress) }
+    func record(_ value: Value) {
+        lock.withLock { values.append(value) }
     }
 }

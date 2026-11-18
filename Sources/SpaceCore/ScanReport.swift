@@ -10,6 +10,9 @@ public struct ScanEntry: Identifiable, Sendable {
     public let isDirectory: Bool
     /// A later directory entry for an inode whose bytes already contribute elsewhere in the scan.
     public let isHardLinkAlias: Bool
+    public let isCloudOnly: Bool
+    /// The preview still has local entries to inspect for this item.
+    public let isPending: Bool
     public let logicalBytes: UInt64
     public let allocatedBytes: UInt64
     public let children: [ScanEntry]
@@ -49,7 +52,14 @@ public struct ScanProgress: Sendable {
 public struct ScanReport: Sendable {
     public let root: ScanEntry
     public let issues: [ScanIssue]
+    public let isPreview: Bool
     public var isPartial: Bool { !issues.isEmpty }
+
+    init(root: ScanEntry, issues: [ScanIssue], isPreview: Bool = false) {
+        self.root = root
+        self.issues = issues
+        self.isPreview = isPreview
+    }
 
     /// Ranks each counted regular file in the selected subtree. Hard-link ownership
     /// is determined by the full scan and is retained when browsing a subtree.
@@ -57,19 +67,20 @@ public struct ScanReport: Sendable {
         guard limit > 0 else { return [] }
         let scope = entry ?? root
         if !scope.isDirectory {
-            return scope.isHardLinkAlias ? [] : [scope]
+            return scope.isHardLinkAlias || scope.isCloudOnly || scope.isPending ? [] : [scope]
         }
 
         var top = TopFiles(limit: limit, metric: metric)
         var levels = [scope.children[...]]
         while let level = levels.indices.last {
+            if Task.isCancelled { return [] }
             guard let child = levels[level].popFirst() else {
                 levels.removeLast()
                 continue
             }
             if child.isDirectory {
                 levels.append(child.children[...])
-            } else if !child.isHardLinkAlias {
+            } else if !child.isHardLinkAlias, !child.isCloudOnly, !child.isPending {
                 top.consider(child)
             }
         }

@@ -21,6 +21,7 @@ public enum DiskScanner {
     public static func scan(
         path: String,
         progress: (@Sendable (ScanProgress) -> Void)? = nil,
+        preview: (@Sendable (ScanReport) -> Void)? = nil,
         isCancelled: @escaping @Sendable () -> Bool = { false }
     ) throws -> ScanReport {
         guard !path.isEmpty, !path.utf8.contains(0) else {
@@ -34,29 +35,65 @@ public enum DiskScanner {
             .map { String(decoding: $0, as: UTF8.self) }
             .filter { $0 != "." }
         let scope = "/" + components.joined(separator: "/")
-        var scan = Traversal(progress: progress, isCancelled: isCancelled)
-        return try scan.scan(path: scope, rootName: components.last ?? "/")
+        let rootName = components.last ?? "/"
+
+        do {
+            return try withDatalessMaterializationDisabled {
+                let metadata = MetadataAccess(isCancelled: isCancelled)
+                var updates: PreviewUpdates?
+                if let preview {
+                    var discovery = Traversal(depthLimit: 2, metadata: metadata, isCancelled: isCancelled)
+                    let initial = try discovery.scan(path: scope, rootName: rootName)
+                    guard initial.root.isPending else { return initial }
+                    preview(ScanReport(root: initial.root, issues: initial.issues, isPreview: true))
+                    updates = PreviewUpdates(root: initial.root, callback: preview)
+                }
+                var scan = Traversal(
+                    progress: progress, previewUpdates: updates, metadata: metadata, isCancelled: isCancelled
+                )
+                return try scan.scan(path: scope, rootName: rootName)
+            }
+        } catch let error as DatalessPolicyError {
+            throw ScanFailure(path: scope, reason: error.localizedDescription)
+        }
     }
 }
 
 private struct Traversal {
     let progress: (@Sendable (ScanProgress) -> Void)?
     let isCancelled: @Sendable () -> Bool
+    let depthLimit: Int?
+    let metadata: MetadataAccess
+    private var previewUpdates: PreviewUpdates?
     private var issues: [ScanIssue] = []
     private var hardLinks: Set<FileIdentity> = []
     private var visited: UInt64 = 0
     private var lastProgress: UInt64 = 0
 
-    init(progress: (@Sendable (ScanProgress) -> Void)?, isCancelled: @escaping @Sendable () -> Bool) {
+    init(
+        progress: (@Sendable (ScanProgress) -> Void)? = nil,
+        depthLimit: Int? = nil,
+        previewUpdates: PreviewUpdates? = nil,
+        metadata: MetadataAccess,
+        isCancelled: @escaping @Sendable () -> Bool
+    ) {
         self.progress = progress
+        self.depthLimit = depthLimit
+        self.previewUpdates = previewUpdates
+        self.metadata = metadata
         self.isCancelled = isCancelled
     }
 
     mutating func scan(path: String, rootName: String) throws -> ScanReport {
         try checkCancellation()
-        var expected = stat()
-        guard path.withCString({ lstat($0, &expected) }) == 0 else {
-            throw ScanFailure(path: path, reason: posixMessage("Reading metadata", errno))
+        let rootIsProvider = MetadataAccess.isProviderPath(path)
+        let expected: stat
+        do {
+            expected = try readMetadata(path: path, name: path, parent: nil, isProvider: rootIsProvider)
+        } catch let error as MetadataUnavailable {
+            return unavailableRoot(path: path, name: rootName, error: error)
+        } catch let problem as DirectoryFailure {
+            throw ScanFailure(path: path, reason: problem.message)
         }
         switch expected.st_mode & mode_t(S_IFMT) {
         case mode_t(S_IFLNK):
@@ -69,15 +106,25 @@ private struct Traversal {
 
         visited = 1
         reportProgress(at: path, force: true)
-        let rootHandle: DirectoryHandle
+        if isCloudReference(expected) {
+            return ScanReport(root: directoryEntry(path: path, name: rootName, cloudOnly: true), issues: [])
+        }
+        let rootListing: DirectoryListing
         do {
-            rootHandle = try DirectoryHandle(parent: AT_FDCWD, name: path, expected: expected)
+            rootListing = try readDirectory(path: path, name: path, parent: nil, expected: expected)
+        } catch let error as MetadataUnavailable {
+            return unavailableRoot(path: path, name: rootName, error: error)
         } catch let problem as DirectoryFailure {
+            if problem.isCloudOnly {
+                return ScanReport(root: directoryEntry(path: path, name: rootName, cloudOnly: true), issues: [])
+            }
             throw ScanFailure(path: path, reason: problem.message)
         }
-        let rootListing = try rootHandle.readNames(checkCancellation: checkCancellation)
         if let error = rootListing.error {
-            throw ScanFailure(path: path, reason: error)
+            if error.isCloudOnly {
+                return ScanReport(root: directoryEntry(path: path, name: rootName, cloudOnly: true), issues: [])
+            }
+            throw ScanFailure(path: path, reason: error.message)
         }
 
         let rootDevice = expected.st_dev
@@ -85,7 +132,7 @@ private struct Traversal {
         var stack = [DirectoryFrame(
             path: path,
             name: rootName,
-            directory: rootHandle,
+            directory: rootListing.directory,
             names: rootListing.names
         )]
 
@@ -104,7 +151,7 @@ private struct Traversal {
                     return ScanReport(root: entry, issues: issues)
                 }
                 ancestors.remove(finished.directory.identity)
-                stack[parent].add(entry)
+                add(entry, to: &stack[parent], parentDepth: parent)
                 continue
             }
 
@@ -117,39 +164,61 @@ private struct Traversal {
                 continue
             }
 
-            let descriptor = stack[level].directory.descriptor
-            var metadata = stat()
-            guard name.displayName.withCString({ fstatat(descriptor, $0, &metadata, AT_SYMLINK_NOFOLLOW) }) == 0 else {
-                issues.append(ScanIssue(path: childPath, message: posixMessage("Reading metadata", errno)))
+            let parent = stack[level].directory
+            let metadata: stat
+            do {
+                metadata = try readMetadata(
+                    path: childPath, name: name.displayName, parent: parent, isProvider: parent.isProvider
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                issues.append(ScanIssue(path: childPath, message: error.localizedDescription))
                 continue
             }
             guard metadata.st_dev == rootDevice else { continue }
 
             switch metadata.st_mode & mode_t(S_IFMT) {
             case mode_t(S_IFDIR):
+                if isCloudReference(metadata) {
+                    let entry = directoryEntry(path: childPath, name: name.displayName, cloudOnly: true)
+                    add(entry, to: &stack[level], parentDepth: level)
+                    continue
+                }
+                if let depthLimit, level + 1 >= depthLimit {
+                    stack[level].add(directoryEntry(path: childPath, name: name.displayName, pending: true))
+                    continue
+                }
                 let identity = FileIdentity(metadata)
                 guard !ancestors.contains(identity) else {
                     issues.append(ScanIssue(path: childPath, message: "Skipped a directory that points back to an ancestor."))
                     continue
                 }
                 do {
-                    let directory = try DirectoryHandle(parent: descriptor, name: name.displayName, expected: metadata)
-                    let listing = try directory.readNames(checkCancellation: checkCancellation)
+                    let listing = try readDirectory(
+                        path: childPath, name: name.displayName, parent: parent, expected: metadata
+                    )
                     if let error = listing.error {
-                        issues.append(ScanIssue(path: childPath, message: error))
+                        if error.isCloudOnly { throw error }
+                        issues.append(ScanIssue(path: childPath, message: error.message))
                     }
                     ancestors.insert(identity)
-                    stack.append(DirectoryFrame(path: childPath, name: name.displayName, directory: directory, names: listing.names))
-                } catch let problem as DirectoryFailure {
-                    issues.append(ScanIssue(path: childPath, message: problem.message))
-                    stack[level].add(ScanEntry(
-                        path: childPath, name: name.displayName, isDirectory: true, isHardLinkAlias: false,
-                        logicalBytes: 0, allocatedBytes: 0, children: []
+                    stack.append(DirectoryFrame(
+                        path: childPath, name: name.displayName, directory: listing.directory, names: listing.names
                     ))
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    let cloudOnly = (error as? DirectoryFailure)?.isCloudOnly == true
+                    if !cloudOnly {
+                        issues.append(ScanIssue(path: childPath, message: error.localizedDescription))
+                    }
+                    let entry = directoryEntry(path: childPath, name: name.displayName, cloudOnly: cloudOnly)
+                    add(entry, to: &stack[level], parentDepth: level)
                 }
             case mode_t(S_IFREG):
                 let entry = file(name: name.displayName, path: childPath, metadata: metadata)
-                stack[level].add(entry)
+                add(entry, to: &stack[level], parentDepth: level)
             default:
                 // Symlinks, sockets, pipes, and device nodes have no counted bytes.
                 continue
@@ -159,19 +228,63 @@ private struct Traversal {
         preconditionFailure("Traversal must finish at the root directory.")
     }
 
+    private func unavailableRoot(path: String, name: String, error: MetadataUnavailable) -> ScanReport {
+        ScanReport(
+            root: directoryEntry(path: path, name: name),
+            issues: [ScanIssue(path: path, message: error.localizedDescription)]
+        )
+    }
+
+    private func readMetadata(path: String, name: String, parent: DirectoryHandle?, isProvider: Bool) throws -> stat {
+        try metadata.perform(at: path, isProvider: isProvider) { _ in
+            var value = stat()
+            let result = name.withCString { rawPath in
+                if let parent { return fstatat(parent.descriptor, rawPath, &value, AT_SYMLINK_NOFOLLOW) }
+                return lstat(rawPath, &value)
+            }
+            guard result == 0 else { throw DirectoryFailure(operation: "Reading metadata", code: errno) }
+            return value
+        }
+    }
+
+    private func readDirectory(path: String, name: String, parent: DirectoryHandle?, expected: stat) throws -> DirectoryListing {
+        let isProvider = parent?.isProvider == true || MetadataAccess.isProviderPath(path)
+        return try metadata.perform(at: path, isProvider: isProvider) { check in
+            let directory = try DirectoryHandle(
+                parent: parent?.descriptor ?? AT_FDCWD, name: name, expected: expected, isProvider: isProvider
+            )
+            let listing = try directory.readNames(checkCancellation: check)
+            return DirectoryListing(directory: directory, names: listing.names, error: listing.error)
+        }
+    }
+
     private mutating func file(name: String, path: String, metadata: stat) -> ScanEntry {
-        let isAlias = metadata.st_nlink > 1 && !hardLinks.insert(FileIdentity(metadata)).inserted
-        let logical = isAlias ? 0 : UInt64(max(0, metadata.st_size))
+        let cloudOnly = isCloudReference(metadata)
+        // An unseen deeper path can own the inode. Defer these bytes until the full
+        // depth-first traversal assigns each hard link to its deterministic owner.
+        let pending = depthLimit != nil && metadata.st_nlink > 1 && !cloudOnly
+        let isAlias = !cloudOnly && !pending && metadata.st_nlink > 1
+            && !hardLinks.insert(FileIdentity(metadata)).inserted
+        let excluded = cloudOnly || pending || isAlias
+        let logical = excluded ? 0 : UInt64(max(0, metadata.st_size))
         // st_blocks is expressed in 512-byte units on both supported platforms.
-        let blocks = isAlias ? 0 : UInt64(max(0, metadata.st_blocks))
+        let blocks = excluded ? 0 : UInt64(max(0, metadata.st_blocks))
         let (allocated, overflow) = blocks.multipliedReportingOverflow(by: 512)
         if overflow {
             issues.append(ScanIssue(path: path, message: "Allocated size exceeds the supported byte range."))
         }
         return ScanEntry(
             path: path, name: name, isDirectory: false, isHardLinkAlias: isAlias,
+            isCloudOnly: cloudOnly, isPending: pending,
             logicalBytes: logical, allocatedBytes: overflow ? .max : allocated, children: []
         )
+    }
+
+    private mutating func add(_ entry: ScanEntry, to parent: inout DirectoryFrame, parentDepth: Int) {
+        parent.add(entry)
+        if parentDepth < 2, previewUpdates?.record(entry, in: parent.path) == true {
+            previewUpdates?.publishIfReady(issues: issues)
+        }
     }
 
     private func checkCancellation() throws {
@@ -181,11 +294,12 @@ private struct Traversal {
     }
 
     private mutating func reportProgress(at path: String, force: Bool = false) {
-        guard let progress else { return }
+        guard progress != nil || previewUpdates != nil else { return }
         let now = DispatchTime.now().uptimeNanoseconds
         guard force || now - lastProgress >= 100_000_000 else { return }
         lastProgress = now
-        progress(ScanProgress(visitedEntries: visited, currentPath: path))
+        progress?(ScanProgress(visitedEntries: visited, currentPath: path))
+        previewUpdates?.publishIfReady(issues: issues)
     }
 }
 
@@ -199,16 +313,36 @@ private struct FileIdentity: Equatable, Hashable {
     }
 }
 
-private struct DirectoryName {
+private struct DirectoryListing: Sendable {
+    let directory: DirectoryHandle
+    let names: [DirectoryName]
+    let error: DirectoryFailure?
+}
+
+private struct DirectoryName: Sendable {
     let displayName: String
     let isUTF8: Bool
 }
 
-private struct DirectoryFailure: Error {
-    let message: String
+private struct DirectoryFailure: LocalizedError {
+    let operation: String
+    let code: Int32
+
+    var isCloudOnly: Bool {
+        #if canImport(Darwin)
+        code == EDEADLK
+        #else
+        false
+        #endif
+    }
+
+    var message: String { directoryError(operation, code) }
+    var errorDescription: String? { message }
 }
 
-private final class DirectoryHandle {
+// The stream is enumerated on its opening thread before publishing the handle.
+// Subsequent metadata calls only use its immutable descriptor and retain it.
+private final class DirectoryHandle: @unchecked Sendable {
     #if canImport(Darwin)
     private let stream: UnsafeMutablePointer<DIR>
     #else
@@ -216,11 +350,12 @@ private final class DirectoryHandle {
     #endif
     let descriptor: Int32
     let identity: FileIdentity
+    let isProvider: Bool
 
-    init(parent: Int32, name: String, expected: stat) throws {
+    init(parent: Int32, name: String, expected: stat, isProvider: Bool) throws {
         let descriptor = name.withCString { openat(parent, $0, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC) }
         guard descriptor >= 0 else {
-            throw DirectoryFailure(message: posixMessage("Opening directory", errno))
+            throw DirectoryFailure(operation: "Opening directory", code: errno)
         }
         var adopted = false
         defer {
@@ -228,18 +363,19 @@ private final class DirectoryHandle {
         }
         var actual = stat()
         guard fstat(descriptor, &actual) == 0 else {
-            throw DirectoryFailure(message: posixMessage("Reading directory metadata", errno))
+            throw DirectoryFailure(operation: "Reading directory metadata", code: errno)
         }
         let identity = FileIdentity(actual)
         guard identity == FileIdentity(expected) else {
-            throw DirectoryFailure(message: "Directory changed during the scan.")
+            throw DirectoryFailure(operation: "Reopening directory after its identity changed", code: ESTALE)
         }
         guard let stream = fdopendir(descriptor) else {
-            throw DirectoryFailure(message: posixMessage("Opening directory stream", errno))
+            throw DirectoryFailure(operation: "Opening directory stream", code: errno)
         }
         adopted = true
         self.descriptor = descriptor
         self.identity = identity
+        self.isProvider = isProvider
         self.stream = stream
     }
 
@@ -247,15 +383,15 @@ private final class DirectoryHandle {
         _ = closedir(stream)
     }
 
-    func readNames(checkCancellation: () throws -> Void) throws -> (names: [DirectoryName], error: String?) {
+    func readNames(checkCancellation: () throws -> Void) throws -> (names: [DirectoryName], error: DirectoryFailure?) {
         var names: [DirectoryName] = []
-        var error: String?
+        var error: DirectoryFailure?
         while true {
             try checkCancellation()
             errno = 0
             guard let entry = readdir(stream) else {
                 let code = errno
-                if code != 0 { error = posixMessage("Listing directory", code) }
+                if code != 0 { error = DirectoryFailure(operation: "Listing directory", code: code) }
                 break
             }
             let name = withUnsafeBytes(of: &entry.pointee.d_name) { buffer in
@@ -275,6 +411,69 @@ private final class DirectoryHandle {
     }
 }
 
+/// Publishes completed branches against the shallow tree. Snapshots reuse finished
+/// subtrees and never copy or walk the full tree to report progress.
+private struct PreviewUpdates {
+    private var root: ScanEntry
+    private let callback: @Sendable (ScanReport) -> Void
+    private var unresolvedPaths: Set<String> = []
+    private var replacements: [String: [String: ScanEntry]] = [:]
+    private var lastPublication = DispatchTime.now().uptimeNanoseconds
+
+    init(root: ScanEntry, callback: @escaping @Sendable (ScanReport) -> Void) {
+        self.root = root
+        self.callback = callback
+        for child in root.children where child.isPending {
+            unresolvedPaths.insert(child.path)
+            for grandchild in child.children where grandchild.isPending {
+                unresolvedPaths.insert(grandchild.path)
+            }
+        }
+    }
+
+    mutating func record(_ entry: ScanEntry, in parent: String) -> Bool {
+        guard unresolvedPaths.remove(entry.path) != nil else { return false }
+        replacements[parent, default: [:]][entry.path] = entry
+        return true
+    }
+
+    mutating func publishIfReady(issues: [ScanIssue]) {
+        guard !replacements.isEmpty else { return }
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard now - lastPublication >= 400_000_000 else { return }
+        let direct = replacements[root.path] ?? [:]
+        let children = root.children.map { child in
+            if let finished = direct[child.path] { return finished }
+            guard let nested = replacements[child.path] else { return child }
+            return child.withChildren(child.children.map { nested[$0.path] ?? $0 })
+        }
+        root = root.withChildren(children)
+        replacements.removeAll(keepingCapacity: true)
+        lastPublication = now
+        callback(ScanReport(root: root, issues: issues, isPreview: true))
+    }
+}
+
+private extension ScanEntry {
+    func withChildren(_ children: [ScanEntry]) -> ScanEntry {
+        var logical: UInt64 = 0
+        var allocated: UInt64 = 0
+        var pending = false
+        for entry in children {
+            let (nextLogical, logicalOverflow) = logical.addingReportingOverflow(entry.logicalBytes)
+            let (nextAllocated, allocatedOverflow) = allocated.addingReportingOverflow(entry.allocatedBytes)
+            logical = logicalOverflow ? .max : nextLogical
+            allocated = allocatedOverflow ? .max : nextAllocated
+            pending = pending || entry.isPending
+        }
+        return ScanEntry(
+            path: path, name: name, isDirectory: true, isHardLinkAlias: false,
+            isCloudOnly: false, isPending: pending, logicalBytes: logical,
+            allocatedBytes: allocated, children: children
+        )
+    }
+}
+
 private struct DirectoryFrame {
     let path: String
     let name: String
@@ -285,10 +484,12 @@ private struct DirectoryFrame {
     private var allocated: UInt64 = 0
     private var children: [ScanEntry] = []
     private(set) var didOverflow = false
+    private var isPending = false
 
     var entry: ScanEntry {
         ScanEntry(
             path: path, name: name, isDirectory: true, isHardLinkAlias: false,
+            isCloudOnly: false, isPending: isPending,
             logicalBytes: logical, allocatedBytes: allocated, children: children
         )
     }
@@ -307,6 +508,7 @@ private struct DirectoryFrame {
     }
 
     mutating func add(_ entry: ScanEntry) {
+        isPending = isPending || entry.isPending
         let (newLogical, logicalOverflow) = logical.addingReportingOverflow(entry.logicalBytes)
         let (newAllocated, allocatedOverflow) = allocated.addingReportingOverflow(entry.allocatedBytes)
         logical = logicalOverflow ? .max : newLogical
@@ -314,6 +516,29 @@ private struct DirectoryFrame {
         didOverflow = didOverflow || logicalOverflow || allocatedOverflow
         children.append(entry)
     }
+}
+
+private func directoryEntry(path: String, name: String, cloudOnly: Bool = false, pending: Bool = false) -> ScanEntry {
+    ScanEntry(
+        path: path, name: name, isDirectory: true, isHardLinkAlias: false,
+        isCloudOnly: cloudOnly, isPending: pending,
+        logicalBytes: 0, allocatedBytes: 0, children: []
+    )
+}
+
+private func isCloudReference(_ metadata: stat) -> Bool {
+    #if canImport(Darwin)
+    metadata.st_flags & UInt32(SF_DATALESS) != 0
+    #else
+    false
+    #endif
+}
+
+private func directoryError(_ operation: String, _ code: Int32) -> String {
+    #if canImport(Darwin)
+    if code == EDEADLK { return "This path needs cloud content that is unavailable locally." }
+    #endif
+    return posixMessage(operation, code)
 }
 
 private func posixMessage(_ operation: String, _ code: Int32) -> String {
