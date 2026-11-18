@@ -1,0 +1,113 @@
+name: Release artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify release tag
+        run: |
+          if [[ "$GITHUB_REF_TYPE" != tag || "$GITHUB_REF_NAME" != "v$(cat scripts/release-version)" ]]; then
+            echo "Run this workflow on the version tag matching scripts/release-version." >&2
+            exit 1
+          fi
+
+  test:
+    needs: verify
+    uses: ./.github/workflows/ci.yml
+
+  linux:
+    needs: test
+    name: Package Linux CLI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build, verify and archive
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --volume "$PWD:/workspace" --workdir /workspace \
+            swift:6.2.4-noble@sha256:3459518b2e723a7c363d0f8cfa44fc796c77ecd8c18e92fd10e6f92dd78c0b12 \
+            scripts/package-linux.sh
+          (cd dist && sha256sum --check space16x-*.tar.gz.sha256)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: space16x-linux-x86_64
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          if-no-files-found: error
+
+  macos:
+    needs: test
+    name: Sign and notarize Mac app
+    runs-on: macos-15
+    environment: release-signing
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build universal application
+        run: scripts/package-macos.sh --universal
+      - name: Sign, notarize, and archive
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          : "${MACOS_CERTIFICATE_BASE64:?Missing Developer ID PKCS12 certificate.}"
+          : "${MACOS_CERTIFICATE_PASSWORD:?Missing certificate password.}"
+          : "${MACOS_SIGN_IDENTITY:?Missing Developer ID Application identity.}"
+          : "${APPLE_API_KEY_BASE64:?Missing notary API key.}"
+          : "${APPLE_API_KEY_ID:?Missing notary API key ID.}"
+          : "${APPLE_API_ISSUER:?Missing notary API issuer ID.}"
+
+          umask 077
+          signing_dir="$(mktemp -d "$RUNNER_TEMP/space16x-signing.XXXXXX")"
+          keychain="$signing_dir/release.keychain-db"
+          cleanup() {
+            security delete-keychain "$keychain" 2>/dev/null || true
+            rm -rf "$signing_dir"
+          }
+          trap cleanup EXIT
+
+          certificate="$signing_dir/developer-id.p12"
+          export APPLE_API_KEY_PATH="$signing_dir/AuthKey_$APPLE_API_KEY_ID.p8"
+          printf '%s' "$MACOS_CERTIFICATE_BASE64" | base64 --decode > "$certificate"
+          printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$APPLE_API_KEY_PATH"
+          unset MACOS_CERTIFICATE_BASE64 APPLE_API_KEY_BASE64
+
+          keychain_password="$(openssl rand -hex 32)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -t cert -f pkcs12 -k "$keychain"
+          unset MACOS_CERTIFICATE_PASSWORD
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain"
+          scripts/notarize-macos.sh "dist/Space 16X.app"
+          (cd dist && shasum -a 256 -c space16x-*.zip.sha256)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: space16x-macos-universal
+          path: |
+            dist/*.zip
+            dist/*.zip.sha256
+            dist/macos-notary-log.json
+          if-no-files-found: error
