@@ -49,7 +49,7 @@ struct ScanDetailsView: View {
                         }
                         .padding(.vertical, 4)
                     }
-                    .listStyle(.inset(alternatesRowBackgrounds: true))
+                    .listStyle(.inset(alternatesRowBackgrounds: false))
                     .frame(minHeight: 120, idealHeight: 210)
                     .overlay {
                         RoundedRectangle(cornerRadius: 5)

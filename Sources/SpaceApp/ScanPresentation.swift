@@ -44,6 +44,7 @@ enum ScanFormat {
     }()
 
     static func size(_ bytes: UInt64) -> String {
+        if bytes == 0 { return exactSize(bytes) }
         if let signed = Int64(exactly: bytes) {
             return byteFormatter.string(fromByteCount: signed)
         }

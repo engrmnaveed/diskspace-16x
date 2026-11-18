@@ -12,6 +12,7 @@ struct Space16XApp: App {
         Window("Space 16X", id: "workspace") {
             WorkspaceView(workspace: workspace)
                 .frame(minWidth: 760, minHeight: 500)
+                .onDisappear { workspace.cancelScan() }
         }
         .defaultSize(width: 1040, height: 700)
         .windowResizability(.contentMinSize)

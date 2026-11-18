@@ -197,6 +197,7 @@ struct ResultsView: View {
             .frame(width: 165)
             .help(workspace.metric.explanation)
         }
+        .tint(Color(nsColor: .controlAccentColor))
         .padding(.horizontal, 24)
         .padding(.vertical, 8)
     }
@@ -223,6 +224,7 @@ struct ResultsView: View {
             }
             .width(min: 85, ideal: 118, max: 155)
         }
+        .tableStyle(.inset(alternatesRowBackgrounds: false))
         .contextMenu(forSelectionType: String.self) { identifiers in
             if let entry = entry(for: identifiers) {
                 rowActions(entry)

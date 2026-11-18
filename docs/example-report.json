@@ -1,0 +1,22 @@
+{
+  "allocatedBytes": 8392704,
+  "isPartial": false,
+  "issues": [],
+  "logicalBytes": 8389704,
+  "metric": "allocated",
+  "schemaVersion": 1,
+  "scope": "/demo/Photo Archive",
+  "topFiles": [
+    {
+      "allocatedBytes": 8388608,
+      "logicalBytes": 8388608,
+      "path": "/demo/Photo Archive/2026/contact-sheet.tiff"
+    },
+    {
+      "allocatedBytes": 4096,
+      "logicalBytes": 1096,
+      "path": "/demo/Photo Archive/2026/index.txt"
+    }
+  ],
+  "topLimit": 2
+}

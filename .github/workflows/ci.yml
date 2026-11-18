@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: Mac • ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test scanner and CLI
+        run: |
+          swift --version
+          swift test
+          swift build --product space16x
+          python3 scripts/check-cli.py "$(swift build --show-bin-path)/space16x"
+      - name: Build and verify native application
+        run: |
+          app="$(scripts/package-macos.sh)"
+          codesign --verify --strict "$app"
+          xcrun lipo "$app/Contents/MacOS/Space16X" -verify_arch "$(uname -m)"
+
+  linux:
+    name: Ubuntu 24.04 • x86-64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test and package CLI with Swift 6.2.4
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --volume "$PWD:/workspace" --workdir /workspace \
+            swift:6.2.4-noble@sha256:3459518b2e723a7c363d0f8cfa44fc796c77ecd8c18e92fd10e6f92dd78c0b12 \
+            bash -euc 'swift --version && swift test && scripts/package-linux.sh'
+      - name: Smoke-test packaged CLI without Swift installed
+        run: |
+          name="space16x-$(cat scripts/release-version)-linux-x86_64"
+          tar -C dist -xzf "dist/$name.tar.gz"
+          python3 scripts/check-cli.py "dist/$name/space16x"
+          docker run --rm --network none --volume "$PWD/dist:/dist:ro" ubuntu:24.04 \
+            bash -euc '"/dist/$1/space16x" scan "$(mktemp -d)" --top 0 --json' \
+            -- "$name"
