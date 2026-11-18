@@ -42,8 +42,8 @@ Use the following steps once release bundles are available.
 Download the universal ZIP and its companion SHA-256 file. From the download directory, verify and expand the ZIP:
 
 ```sh
-shasum -a 256 -c space16x-0.1.0-macos-universal.zip.sha256
-ditto -x -k space16x-0.1.0-macos-universal.zip .
+shasum -a 256 -c space16x-0.1.1-macos-universal.zip.sha256
+ditto -x -k space16x-0.1.1-macos-universal.zip .
 ```
 
 Move **Space 16X.app** to Applications in Finder and open it. The release app uses Developer ID signing and Apple notarization.
@@ -53,10 +53,10 @@ Move **Space 16X.app** to Applications in Finder and open it. The release app us
 Download the CLI archive and its companion SHA-256 file. From the download directory:
 
 ```sh
-sha256sum -c space16x-0.1.0-linux-x86_64.tar.gz.sha256
-tar -xzf space16x-0.1.0-linux-x86_64.tar.gz
+sha256sum -c space16x-0.1.1-linux-x86_64.tar.gz.sha256
+tar -xzf space16x-0.1.1-linux-x86_64.tar.gz
 mkdir -p "$HOME/.local/bin"
-install -m 0755 space16x-0.1.0-linux-x86_64/space16x "$HOME/.local/bin/space16x"
+install -m 0755 space16x-0.1.1-linux-x86_64/space16x "$HOME/.local/bin/space16x"
 "$HOME/.local/bin/space16x" --version
 ```
 
@@ -72,6 +72,7 @@ Focus the file table to use arrow keys for row selection. Core commands are avai
 | Browse folders | ⌘1 |
 | Show largest files | ⌘2 |
 | Show the folder treemap | ⌘3 |
+| Show the folder donut chart | ⌘4 |
 | Open a selected folder | ⌘↓ |
 | Go to the parent folder | ⌘↑ |
 | Reveal a selected item in Finder | ⇧⌘R |

@@ -19,12 +19,13 @@ open "$fixture"
 
 - Open the fixture with the picker and then drop the folder from Finder. Repeat for a readable mounted local volume.
 - Drill down through **Photos** and **Shoots**. Find the largest allocated file with the keyboard, reveal it in Finder, then repeat with the pointer. Copy its path and verify it matches the revealed item.
-- Switch to **Largest Files** and change the metric. With equal filesystem metadata, confirm the allocated ranking shows the contact sheet and the logical ranking puts the sparse file first. Compare the totals and paths with CLI output for both metrics.
-- Switch between the list and **Folder Treemap**. Check that the largest visible area follows the ranking metric. Activate a folder tile to drill in and a file tile to select its path.
+- Switch to **Largest Files**. Confirm the contact sheet comes first and the sparse file shows its actual allocated size. Compare the totals and paths with the CLI's allocated report.
+- Switch between **List**, **Treemap**, and **Donut**. Check that chart tiles, slices, and shares follow allocated bytes within the current folder. Activate a folder or file from the chart.
 - Navigate by breadcrumb, keyboard, and the app menus. Confirm the selected row, progress, issues, and actionable controls are legible with VoiceOver and in both appearances.
 - Confirm the link alias and symbolic link never add to the bytes. Compare root totals with the CLI using the same folder, metric, and snapshot in time.
 - Add an unreadable descendant as a standard user. Confirm the app keeps readable items, qualifies the totals, and identifies the denied path. Restore permissions after the check. Confirm an unreadable root fails with a clear message.
-- Start scanning a large synthetic tree and immediately cancel. Confirm the window stays responsive and a subsequent scan can finish. Close the window during a scan and verify the operation stops.
+- Scan a large synthetic tree with files at several depths. Confirm a browseable two-level preview appears before deeper results. Drill into a pending folder and check that it fills in without losing the current location. Cancel from the progress strip and confirm the incomplete totals remain labeled. Close the window during another scan and verify the operation stops.
+- Scan a test folder with local items and cloud-only entries. Compare placeholder availability before and after. Confirm cloud-only rows have zero allocated bytes and the contents of cloud-only directories are left unexpanded. If a known provider directory stalls, confirm other local branches finish and the skipped path appears in Scan Details.
 - Verify scans do not modify or move the fixture items.
 
 Clean up the temporary folder when finished.

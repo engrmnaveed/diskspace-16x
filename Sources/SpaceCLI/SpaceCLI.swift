@@ -9,7 +9,7 @@ import Glibc
 
 @main
 enum SpaceCLI {
-    private static let version = "0.1.0"
+    private static let version = "0.1.1"
     private static let usage = """
         Usage: space16x scan PATH [--top N] [--metric allocated|logical] [--json]
 

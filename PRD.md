@@ -24,14 +24,14 @@ The core scanner, macOS Community app, and CLI are free and open source. The CLI
 | Area | v0.1 requirement |
 | --- | --- |
 | Start a scan | Choose a folder or mounted local drive using the Mac folder picker or Finder drag-and-drop. The CLI takes a folder path. Ordinary readable folders work with standard user permissions. |
-| Browse | Show a size-ranked folder list, drill-down and breadcrumb navigation, logical and allocated size, and a largest-files view. Keep core navigation accessible by keyboard. |
-| Inspect | Reveal an item in Finder and copy its path. Show understandable scan progress, cancellation, and error details. |
+| Browse | Rank the Mac app's list, treemap, donut, and largest-files view by allocated size. Keep drill-down and breadcrumb navigation accessible by keyboard. |
+| Inspect | Reveal an item in Finder and copy its path. Show the first two levels while deeper scanning continues, with overall progress, folder status, cancellation, and error details. |
 | Automate | Provide `space16x scan PATH --top N` and `--json`. JSON includes the scan scope, byte counts, the top-file limit, and whether errors made the results partial. |
-| Scan correctly | Walk metadata only. Skip symbolic links and different-device mounts. Count each hard-linked file's bytes once within the scan. Continue past unreadable descendants and fail clearly when the root itself is unreadable. |
+| Scan correctly | Walk metadata only. Skip symbolic links and different-device mounts. Keep macOS cloud-only placeholders as references with zero counted bytes and leave their folder contents unexpanded. Count each hard-linked file's bytes once within the scan. Continue past unreadable descendants and fail clearly when the root itself is unreadable. |
 | Explain disk usage | Directory totals sum counted regular-file bytes. Allocated bytes are reported by the filesystem. APFS clones may share blocks, snapshots may retain blocks, and scan totals can differ from volume usage or space recovered after deletion. |
 | Preserve user control | The analyzer is read-only. v0.1 keeps scan results in memory, with JSON written by the CLI on request. File management happens in Finder. |
 
-Add a treemap after the list and size accounting are reliable. Defer automatic cleanup, duplicate hashing, background monitoring, network and cloud scans, and full-volume storage reconciliation. Validate cloud-placeholder behavior before promising explicitly offline-provider scans.
+Defer automatic cleanup, duplicate hashing, background monitoring, network scans, and full-volume storage reconciliation. Validate behavior with actual cloud providers before promising offline directory enumeration.
 
 ## macOS premium hypothesis
 

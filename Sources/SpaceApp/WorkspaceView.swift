@@ -14,10 +14,11 @@ struct WorkspaceView: View {
                 if let notice = workspace.notice {
                     noticeBar(notice)
                 }
-                if workspace.isScanning {
-                    scanInProgress
-                } else if workspace.report != nil {
+                if workspace.canBrowse {
+                    if workspace.isScanning { backgroundScanProgress }
                     ResultsView(workspace: workspace)
+                } else if workspace.isScanning {
+                    scanInProgress
                 } else {
                     startView
                 }
@@ -91,7 +92,7 @@ struct WorkspaceView: View {
 
             Spacer(minLength: 16)
 
-            if let report = workspace.report {
+            if workspace.canBrowse, let report = workspace.report {
                 sidebarSummary(report)
             }
         }
@@ -159,7 +160,6 @@ struct WorkspaceView: View {
             .buttonStyle(.borderless)
             .padding(.horizontal, 7)
             .help("Review the scan scope and any skipped paths (⌘I)")
-            .disabled(workspace.isScanning)
         }
     }
 
@@ -205,7 +205,7 @@ struct WorkspaceView: View {
         VStack(spacing: 17) {
             SpaceMark(size: 54)
             VStack(spacing: 8) {
-                Text(workspace.isCancelling ? "Cancelling scan…" : "Scanning metadata…")
+                Text(workspace.isCancelling ? "Cancelling scan…" : "Scanning the first two levels…")
                     .font(.title2.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
                 Text(workspace.scanPath ?? "")
@@ -237,6 +237,39 @@ struct WorkspaceView: View {
         }
         .padding(36)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var backgroundScanProgress: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.small)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(workspace.isCancelling ? "Cancelling scan…" : "Scanning deeper folders…")
+                    .font(.subheadline.weight(.semibold))
+                Text(workspace.progress?.currentPath ?? workspace.scanPath ?? "")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(workspace.progress?.currentPath ?? workspace.scanPath ?? "")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if let progress = workspace.progress {
+                Text("\(progress.visitedEntries.formatted()) visited")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+            }
+            Button("Cancel Scan", action: workspace.cancelScan)
+                .disabled(workspace.isCancelling)
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 9)
+        .background(SpaceColor.accent.opacity(0.08))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Background scan progress")
     }
 
     private func noticeBar(_ notice: ScanWorkspace.Notice) -> some View {

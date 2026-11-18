@@ -9,10 +9,10 @@ Find the file or folder using your disk space. Space 16X is a read-only analyzer
 ## Analyze a folder on macOS
 
 1. Choose a folder or local drive, or drop it into the Space 16X window.
-2. Browse the ranked folder list or treemap, drill down with the breadcrumb, or switch to **Largest Files**.
+2. Browse the folder list, treemap, or donut chart. Drill down with the breadcrumb or switch to **Largest Files**.
 3. Reveal a selected item in Finder or copy its path.
 
-Allocated size is the default ranking. Switch to **Logical** to rank by file length. Both byte totals stay visible as you browse.
+The Mac app uses allocated size for totals, rankings, and chart shares. On a large scan, the first two levels are available while deeper folders are scanned. The progress strip shows the current path, and the list marks pending folders. A cancelled scan keeps the preview and labels its unfinished folders.
 
 The treemap shows the largest items with a positive size. Remaining bytes are grouped as **Other Items**. Switch back to **List** to inspect each item.
 
@@ -47,6 +47,7 @@ See the [installation guide](docs/install.md) for configuration, package verific
 
 - Allocated bytes come from filesystem metadata. Logical bytes come from file length. Sparse files often have fewer allocated bytes than logical bytes.
 - Directory totals sum regular-file bytes within the scan. A hard-linked file contributes once. Symbolic links and mounts on other devices are skipped.
+- macOS scans keep cloud-only placeholders as references with zero counted bytes and leave cloud-only folders unexpanded. If a metadata call stalls in a known iCloud or File Provider directory, the scan skips the affected path and reports partial results.
 - If a descendant cannot be inspected, the scan continues and marks its result as partial. Open the scan details to see which paths were affected.
 - APFS clones can share blocks and snapshots can retain blocks. Scan totals can differ from volume usage and the amount of space reclaimed after deleting a file.
 - Scan results reflect metadata observed during the traversal. Activity in the scanned folders can change results between runs.

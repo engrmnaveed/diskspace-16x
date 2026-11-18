@@ -1,4 +1,12 @@
-# Space 16X 0.1.0 verification
+# Space 16X verification
+
+## 0.1.1
+
+- Twelve macOS fixture tests and eleven Ubuntu x86-64 fixture tests passed. The new tests cover the depth cutoff, completed-folder updates, cancellation, hard-link attribution across the preview boundary, and macOS's bounded provider calls.
+- The native-window harness preserved navigation into a pending folder when deeper results arrived. It also kept the preview browseable after cancellation. The donut and legend were inspected at narrow and wide widths in light and dark appearances.
+- The reported Books package originally stalled inside a directory open, even with dataless materialization disabled. After adding the deadline, the package and its Books directory completed a local retest in approximately 0.05 and 0.16 seconds, respectively, with their flags unchanged. A controlled test exercised the one-second timeout and verified that the same stalled path was not retried during the scan.
+
+## 0.1.0
 
 Local run on 18 November 2026. macOS testing used a MacBook Pro with an Apple M5 Pro, 48 GB of memory, macOS 27.2.1, and Xcode 27.2. Ubuntu 24.04 x86-64 ran in Docker Desktop on the same Mac.
 

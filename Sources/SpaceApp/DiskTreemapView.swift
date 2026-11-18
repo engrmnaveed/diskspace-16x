@@ -13,11 +13,12 @@ struct DiskTreemapView: View {
                     RoundedRectangle(cornerRadius: 9)
                         .fill(.quaternary.opacity(0.35))
                         .accessibilityHidden(true)
-                    if workspace.isLoadingRows {
+                    if workspace.isLoadingRows && workspace.rows.isEmpty {
                         ProgressView("Ranking items…")
                             .controlSize(.small)
                     } else if tiles.isEmpty {
-                        Text("No counted \(workspace.metric.title.lowercased()) bytes here")
+                        Text(folder.isPending && workspace.isScanning
+                            ? "Waiting for allocated sizes…" : "No allocated bytes counted here")
                             .font(.headline)
                             .foregroundStyle(.secondary)
                     } else {
@@ -32,7 +33,7 @@ struct DiskTreemapView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             HStack {
-                Text("Area represents \(workspace.metric.title.lowercased()) size.")
+                Text(folder.isPending ? "Area shows allocated space counted so far." : "Area represents allocated size.")
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 5)
                 Button("Show All Items") { workspace.folderPresentation = .list }
@@ -62,17 +63,16 @@ struct DiskTreemapView: View {
     }
 
     private func makeTiles() -> [Tile] {
-        let metric = workspace.metric
-        let total = folder.bytes(for: metric)
-        guard !workspace.isLoadingRows, total > 0 else { return [] }
+        let total = folder.allocatedBytes
+        guard total > 0 else { return [] }
         var tiles: [Tile] = []
         var remaining = total
         let minimumBytes = max(total / 250, 1)
         for entry in workspace.rows.prefix(32) {
-            let bytes = entry.bytes(for: metric)
+            let bytes = min(entry.allocatedBytes, remaining)
             guard bytes >= minimumBytes, remaining > 0 else { break }
             tiles.append(.item(entry: entry, bytes: bytes))
-            remaining -= min(remaining, bytes)
+            remaining -= bytes
         }
         if remaining > 0 { tiles.append(.other(bytes: remaining)) }
         return tiles

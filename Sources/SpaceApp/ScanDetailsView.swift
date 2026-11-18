@@ -26,7 +26,11 @@ struct ScanDetailsView: View {
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
                 Text("Folder totals sum regular files in the scan. Space 16X skips symbolic links and other devices, and counts each hard-linked file once.")
-                Text("Logical size is the file length. Allocated size is what the filesystem reports. APFS clones can share blocks and snapshots can retain them, so totals can differ from volume usage or from the space recovered after deletion.")
+                Text("Allocated size is what the filesystem reports. APFS clones can share blocks and snapshots can retain them, so totals can differ from volume usage or from the space recovered after deletion.")
+                Text("Cloud-only entries are shown as references. They contribute no bytes, and cloud-only folders stay unexpanded.")
+                if report.isPreview {
+                    Text("This preview shows allocated space counted so far. Folders awaiting a deeper scan have a status in the list.")
+                }
             }
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)

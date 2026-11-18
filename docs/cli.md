@@ -27,6 +27,8 @@ Ties use the bytewise UTF-8 order of full paths. A hard-linked file contributes 
 
 Expected scope exclusions such as symlinks and mounts on other devices are part of a complete scan. Unreadable paths and other scan errors mark results partial. Paths with names that cannot be represented as UTF-8 are skipped and use percent-encoded name bytes in the issue.
 
+On macOS, cloud-only references contribute zero bytes and are excluded from the largest-files list. Cloud-only directories remain unexpanded. Metadata calls in known provider locations have a time limit. A timeout lists the affected path in `issues` and makes the scan partial.
+
 ## JSON schema 1
 
 | Field | Meaning |

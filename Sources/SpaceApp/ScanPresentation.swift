@@ -2,22 +2,6 @@ import AppKit
 import SpaceCore
 import SwiftUI
 
-extension SizeMetric {
-    var title: String {
-        switch self {
-        case .allocated: "Allocated"
-        case .logical: "Logical"
-        }
-    }
-
-    var explanation: String {
-        switch self {
-        case .allocated: "Bytes the filesystem reports as allocated."
-        case .logical: "File lengths, including unallocated regions in sparse files."
-        }
-    }
-}
-
 enum SpaceColor {
     static let accent = Color(nsColor: NSColor(name: nil) { appearance in
         let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua

@@ -17,6 +17,7 @@ enum BrowseMode: String, CaseIterable {
 enum FolderPresentation: String, CaseIterable {
     case list = "List"
     case treemap = "Treemap"
+    case donut = "Donut"
 }
 
 @MainActor
@@ -25,10 +26,13 @@ final class ScanWorkspace {
     nonisolated static let largestFileLimit = 100
 
     private(set) var report: ScanReport?
+    private(set) var issuePaths: Set<String> = []
     private(set) var scope: [ScanEntry] = []
     private(set) var rows: [ScanEntry] = []
+    private(set) var rankedScope: ScanEntry?
     private(set) var isLoadingRows = false
     private(set) var scanPath: String?
+    private(set) var scanHasResults = false
     private(set) var progress: ScanProgress?
     private(set) var isCancelling = false
     private var isPresentingPicker = false
@@ -51,12 +55,6 @@ final class ScanWorkspace {
         }
     }
 
-    var metric: SizeMetric = .allocated {
-        didSet {
-            if metric != oldValue { loadRows() }
-        }
-    }
-
     @ObservationIgnored private var scanTask: Task<Void, Never>?
     @ObservationIgnored private var rowsTask: Task<Void, Never>?
 
@@ -64,7 +62,7 @@ final class ScanWorkspace {
     var visibleScope: ScanEntry? { mode == .folders ? currentFolder : report?.root }
     var isScanning: Bool { scanPath != nil }
     var canChooseFolder: Bool { !isScanning && !isPresentingPicker }
-    var canBrowse: Bool { report != nil && !isScanning }
+    var canBrowse: Bool { report != nil && (!isScanning || scanHasResults) }
     var canRescan: Bool { report != nil && canChooseFolder }
     var canBrowseParent: Bool { canBrowse && mode == .folders && scope.count > 1 }
 
@@ -84,8 +82,8 @@ final class ScanWorkspace {
         picker.allowsMultipleSelection = false
         picker.treatsFilePackagesAsDirectories = true
         picker.resolvesAliases = false
-        if let path = report?.root.path {
-            picker.directoryURL = URL(filePath: path, directoryHint: .isDirectory)
+        if let root = report?.root, !root.isCloudOnly, !issuePaths.contains(root.path) {
+            picker.directoryURL = URL(filePath: root.path, directoryHint: .isDirectory)
         }
 
         isPresentingPicker = true
@@ -129,6 +127,7 @@ final class ScanWorkspace {
         let didAccess = url.startAccessingSecurityScopedResource()
         let path = url.path(percentEncoded: false)
         scanPath = path
+        scanHasResults = false
         progress = nil
         notice = nil
         showsDetails = false
@@ -137,14 +136,20 @@ final class ScanWorkspace {
             of: ScanProgress.self,
             bufferingPolicy: .bufferingNewest(1)
         )
+        let (snapshots, snapshotContinuation) = AsyncStream.makeStream(
+            of: ScanReport.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
         let worker = Task.detached(priority: .userInitiated) {
             defer {
                 continuation.finish()
+                snapshotContinuation.finish()
                 if didAccess { url.stopAccessingSecurityScopedResource() }
             }
             return try DiskScanner.scan(
                 path: path,
                 progress: { continuation.yield($0) },
+                preview: { snapshotContinuation.yield($0) },
                 isCancelled: { Task.isCancelled }
             )
         }
@@ -157,8 +162,15 @@ final class ScanWorkspace {
                     try? await Task.sleep(for: .milliseconds(100))
                 }
             }
+            let snapshotTask = Task { [weak self] in
+                for await snapshot in snapshots {
+                    guard !Task.isCancelled, let self, !isCancelling else { return }
+                    acceptReport(snapshot)
+                }
+            }
             defer {
                 progressTask.cancel()
+                snapshotTask.cancel()
                 self?.scanTask = nil
                 self?.scanPath = nil
                 self?.progress = nil
@@ -171,13 +183,17 @@ final class ScanWorkspace {
                     worker.cancel()
                 }
                 try Task.checkCancellation()
-                self?.useReport(result)
+                snapshotTask.cancel()
+                self?.acceptReport(result)
             } catch {
+                snapshotTask.cancel()
+                let keptPreview = self?.scanHasResults == true
+                let previewMessage = "Showing the allocated space counted so far."
                 if error is CancellationError || Task.isCancelled {
-                    self?.notice = Notice(title: "Scan cancelled", message: path)
+                    self?.notice = Notice(title: "Scan cancelled", message: keptPreview ? previewMessage : path)
                 } else {
                     self?.notice = Notice(
-                        title: "Couldn’t scan this location",
+                        title: keptPreview ? "Scan stopped before it finished" : "Couldn’t scan this location",
                         message: error.localizedDescription,
                         isError: true
                     )
@@ -195,8 +211,10 @@ final class ScanWorkspace {
     func dismissNotice() { notice = nil }
 
     func browse(_ entry: ScanEntry) {
-        guard canBrowse, entry.isDirectory, mode == .folders else { return }
-        scope.append(entry)
+        guard canBrowse, entry.isDirectory, mode == .folders,
+              let current = currentFolder?.children.first(where: { $0.id == entry.id && $0.isDirectory })
+        else { return }
+        scope.append(current)
         selection = nil
         loadRows()
     }
@@ -246,30 +264,43 @@ final class ScanWorkspace {
         NSPasteboard.general.setString(entry.path, forType: .string)
     }
 
-    private func useReport(_ result: ScanReport) {
+    private func acceptReport(_ result: ScanReport) {
+        let continuing = scanHasResults
+        scanHasResults = true
         report = result
+        issuePaths = Set(result.issues.map(\.path))
+        let oldScope = scope
         scope = [result.root]
-        rows = []
-        selection = nil
-        if mode == .folders {
-            loadRows()
-        } else {
+        if continuing {
+            for folder in oldScope.dropFirst() {
+                guard let next = scope.last?.children.first(where: { $0.id == folder.id && $0.isDirectory }) else { break }
+                scope.append(next)
+            }
+            let sameLocation = mode == .largestFiles || oldScope.last?.id == scope.last?.id
+            if !sameLocation { selection = nil }
+            loadRows(keepingRows: sameLocation)
+        } else if mode != .folders {
             mode = .folders
+        } else {
+            selection = nil
+            loadRows()
         }
     }
 
-    private func loadRows() {
+    private func loadRows(keepingRows: Bool = false) {
         let previousTask = rowsTask
         previousTask?.cancel()
-        rows = []
-        selectedEntry = nil
+        if !keepingRows {
+            rows = []
+            rankedScope = nil
+            selectedEntry = nil
+        }
         guard let report, let folder = currentFolder else {
             isLoadingRows = false
             return
         }
         isLoadingRows = true
         let mode = mode
-        let metric = metric
         rowsTask = Task { [weak self] in
             // Let a running sort release its buffers before allocating for a newer ranking.
             await previousTask?.value
@@ -277,9 +308,9 @@ final class ScanWorkspace {
             let worker = Task.detached(priority: .userInitiated) {
                 switch mode {
                 case .folders:
-                    folder.rankedChildren(by: metric)
+                    folder.rankedChildren(by: .allocated)
                 case .largestFiles:
-                    report.largestFiles(limit: Self.largestFileLimit, by: metric)
+                    report.largestFiles(limit: Self.largestFileLimit, by: .allocated)
                 }
             }
             let result = await withTaskCancellationHandler {
@@ -288,7 +319,9 @@ final class ScanWorkspace {
                 worker.cancel()
             }
             guard !Task.isCancelled, let self else { return }
+            rankedScope = mode == .folders ? folder : report.root
             rows = result
+            if let selection, entry(withPath: selection) == nil { self.selection = nil }
             selectedEntry = selection.flatMap(entry(withPath:))
             isLoadingRows = false
             rowsTask = nil

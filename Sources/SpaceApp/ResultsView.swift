@@ -11,11 +11,14 @@ struct ResultsView: View {
                 if let report = workspace.report, report.isPartial {
                     partialWarning(report.issues.count)
                 }
-                rankingBar
-                if workspace.mode == .folders && workspace.folderPresentation == .treemap {
-                    DiskTreemapView(workspace: workspace, folder: scope)
-                } else {
-                    resultsTable(scope: scope)
+                if workspace.mode == .folders {
+                    presentationBar
+                }
+                let rankedScope = workspace.rankedScope ?? scope
+                switch workspace.mode == .folders ? workspace.folderPresentation : .list {
+                case .list: resultsTable(scope: rankedScope)
+                case .treemap: DiskTreemapView(workspace: workspace, folder: rankedScope)
+                case .donut: DiskDonutView(workspace: workspace, folder: rankedScope)
                 }
                 selectionBar
             }
@@ -52,15 +55,8 @@ struct ResultsView: View {
 
                 Spacer(minLength: 4)
 
-                HStack(spacing: 0) {
-                    sizeSummary(scope, metric: .allocated)
-                    Rectangle()
-                        .fill(Color(nsColor: .separatorColor))
-                        .frame(width: 1, height: 26)
-                        .accessibilityHidden(true)
-                    sizeSummary(scope, metric: .logical)
-                }
-                .padding(.horizontal, 3)
+                sizeSummary(scope)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(.quaternary.opacity(0.34), in: RoundedRectangle(cornerRadius: 9))
                 .fixedSize()
@@ -80,25 +76,31 @@ struct ResultsView: View {
     }
 
     private func scopeCaption(_ scope: ScanEntry) -> String {
-        if workspace.mode == .folders { return ScanFormat.items(scope.children.count) }
+        if workspace.mode == .folders {
+            if scope.isCloudOnly { return "Cloud only" }
+            let count = ScanFormat.items(scope.children.count)
+            if scope.isPending { return "\(count) found so far" }
+            return count
+        }
+        if workspace.report?.isPreview == true { return "Largest files found so far" }
         return "Top \(ScanWorkspace.largestFileLimit) files across the scan root"
     }
 
-    private func sizeSummary(_ scope: ScanEntry, metric: SizeMetric) -> some View {
-        let bytes = scope.bytes(for: metric)
+    private func sizeSummary(_ scope: ScanEntry) -> some View {
+        let bytes = scope.allocatedBytes
+        let title = scope.isPending ? "Allocated so far" : "Allocated"
         return VStack(alignment: .leading, spacing: 3) {
-            Text(metric.title)
+            Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(ScanFormat.size(bytes))
                 .font(.system(size: 18, weight: .semibold).monospacedDigit())
-                .foregroundStyle(metric == workspace.metric ? SpaceColor.accent : .primary)
+                .foregroundStyle(SpaceColor.accent)
         }
-        .padding(.horizontal, 11)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(metric.title) total")
+        .accessibilityLabel(title)
         .accessibilityValue(ScanFormat.exactSize(bytes))
-        .help("\(ScanFormat.exactSize(bytes)) • \(metric.explanation)")
+        .help(ScanFormat.exactSize(bytes))
     }
 
     private var breadcrumbs: some View {
@@ -167,35 +169,20 @@ struct ResultsView: View {
         .background(.orange.opacity(0.11))
     }
 
-    private var rankingBar: some View {
+    private var presentationBar: some View {
         HStack(spacing: 8) {
-            Text(workspace.mode == .folders ? "Contents" : "Results")
+            Text("Contents")
                 .font(.subheadline.weight(.semibold))
-                .accessibilityAddTraits(.isHeader)
-            if workspace.mode == .folders {
-                Picker("Folder view", selection: $workspace.folderPresentation) {
-                    ForEach(FolderPresentation.allCases, id: \.self) { presentation in
-                        Text(presentation.rawValue).tag(presentation)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 132)
-            }
-            Spacer()
-            Text("Rank by")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
-            Picker("Rank by", selection: $workspace.metric) {
-                ForEach(SizeMetric.allCases, id: \.self) { metric in
-                    Text(metric.title).tag(metric)
+            Picker("Folder view", selection: $workspace.folderPresentation) {
+                ForEach(FolderPresentation.allCases, id: \.self) { presentation in
+                    Text(presentation.rawValue).tag(presentation)
                 }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 165)
-            .help(workspace.metric.explanation)
+            .frame(width: 210)
+            Spacer(minLength: 0)
         }
         .tint(Color(nsColor: .controlAccentColor))
         .padding(.horizontal, 24)
@@ -207,15 +194,10 @@ struct ResultsView: View {
             TableColumn("Name") { entry in
                 nameCell(entry, scope: scope)
             }
-            .width(min: 190, ideal: 315)
+            .width(min: 190, ideal: 280)
 
             TableColumn("Allocated") { entry in
-                sizeCell(entry, metric: .allocated)
-            }
-            .width(min: 88, ideal: 108, max: 164)
-
-            TableColumn("Logical") { entry in
-                sizeCell(entry, metric: .logical)
+                sizeCell(entry)
             }
             .width(min: 88, ideal: 108, max: 164)
 
@@ -223,6 +205,7 @@ struct ResultsView: View {
                 shareCell(entry, of: scope)
             }
             .width(min: 85, ideal: 118, max: 155)
+
         }
         .tableStyle(.inset(alternatesRowBackgrounds: false))
         .contextMenu(forSelectionType: String.self) { identifiers in
@@ -239,7 +222,7 @@ struct ResultsView: View {
         }
         .accessibilityLabel(workspace.mode == .folders ? "Folder contents" : "Largest files")
         .overlay {
-            if workspace.isLoadingRows {
+            if workspace.isLoadingRows && workspace.rows.isEmpty {
                 ProgressView("Ranking items…")
                     .controlSize(.small)
                     .padding(16)
@@ -250,11 +233,42 @@ struct ResultsView: View {
                         .font(.title)
                         .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
-                    Text(workspace.mode == .folders ? "No scanned items here" : "No files to rank")
+                    Text(emptyMessage(for: scope))
                         .font(.headline)
                         .foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    private func emptyMessage(for scope: ScanEntry) -> String {
+        if scope.isCloudOnly { return "Contents are available in the cloud" }
+        if workspace.issuePaths.contains(scope.path) { return "Folder metadata is unavailable" }
+        if scope.isPending {
+            return workspace.isScanning ? "Waiting for scanned items…" : "Contents were not scanned"
+        }
+        return workspace.mode == .folders ? "No scanned items here" : "No files to rank"
+    }
+
+    @ViewBuilder
+    private func entryStatus(_ entry: ScanEntry) -> some View {
+        if entry.isCloudOnly {
+            Label("Cloud only", systemImage: "cloud")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else if workspace.issuePaths.contains(entry.path) {
+            Label("Incomplete", systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else if entry.isPending {
+            let currentPath = workspace.progress?.currentPath ?? ""
+            let isActive = workspace.isScanning && (currentPath == entry.path || currentPath.hasPrefix(entry.path + "/"))
+            Label(
+                isActive ? "Scanning…" : (workspace.isScanning ? "Pending" : "Unscanned"),
+                systemImage: isActive ? "arrow.clockwise" : "clock"
+            )
+            .font(.caption)
+            .foregroundStyle(isActive ? SpaceColor.accent : .secondary)
         }
     }
 
@@ -283,6 +297,8 @@ struct ResultsView: View {
                     .help("Hard link counted elsewhere in this scan")
                     .accessibilityLabel("Hard link counted elsewhere")
             }
+            entryStatus(entry)
+                .fixedSize()
         }
         .help(entry.path)
         .accessibilityElement(children: .combine)
@@ -296,20 +312,37 @@ struct ResultsView: View {
         return String(path[..<separator])
     }
 
-    private func sizeCell(_ entry: ScanEntry, metric: SizeMetric) -> some View {
-        let bytes = entry.bytes(for: metric)
-        return Text(ScanFormat.size(bytes))
+    private func sizeCell(_ entry: ScanEntry) -> some View {
+        let bytes = entry.allocatedBytes
+        let unknown = bytes == 0 && (entry.isPending || workspace.issuePaths.contains(entry.path))
+        let exact = unknown
+            ? (workspace.isScanning ? "Allocation pending" : "Allocation unknown")
+            : ScanFormat.exactSize(bytes)
+        return Text(unknown ? "—" : ScanFormat.size(bytes))
             .monospacedDigit()
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .trailing)
-            .foregroundStyle(metric == workspace.metric ? .primary : .secondary)
-            .help(ScanFormat.exactSize(bytes))
-            .accessibilityLabel(ScanFormat.exactSize(bytes))
+            .foregroundStyle(unknown ? .secondary : .primary)
+            .help(exact)
+            .accessibilityLabel(exact)
     }
 
+    @ViewBuilder
     private func shareCell(_ entry: ScanEntry, of scope: ScanEntry) -> some View {
-        let total = scope.bytes(for: workspace.metric)
-        let ratio = total == 0 ? 0 : Double(entry.bytes(for: workspace.metric)) / Double(total)
+        if entry.allocatedBytes == 0 && (entry.isPending || workspace.issuePaths.contains(entry.path)) {
+            Text("—")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .accessibilityLabel("Share unknown")
+        } else {
+            knownShare(entry, of: scope)
+        }
+    }
+
+    private func knownShare(_ entry: ScanEntry, of scope: ScanEntry) -> some View {
+        let total = scope.allocatedBytes
+        let ratio = total == 0 ? 0 : min(Double(entry.allocatedBytes) / Double(total), 1)
         let formatted = ratio.formatted(.percent.precision(.fractionLength(0...1)))
         return HStack(spacing: 5) {
             GeometryReader { proxy in
@@ -329,7 +362,7 @@ struct ResultsView: View {
                 .frame(minWidth: 44, alignment: .trailing)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(formatted) of \(workspace.metric.title.lowercased()) bytes")
+        .accessibilityLabel("\(formatted) of counted allocated bytes")
     }
 
     private var selectionBar: some View {

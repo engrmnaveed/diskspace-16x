@@ -32,7 +32,7 @@ struct Space16XApp: App {
                 Divider()
                 Button("Show Scan Details") { workspace.showsDetails = true }
                     .keyboardShortcut("i")
-                    .disabled(workspace.report == nil || workspace.isScanning)
+                    .disabled(!workspace.canBrowse)
             }
             CommandMenu("Browse") {
                 Button("Folder List") {
@@ -49,6 +49,12 @@ struct Space16XApp: App {
                     workspace.folderPresentation = .treemap
                 }
                 .keyboardShortcut("3")
+                .disabled(!workspace.canBrowse)
+                Button("Folder Donut") {
+                    workspace.mode = .folders
+                    workspace.folderPresentation = .donut
+                }
+                .keyboardShortcut("4")
                 .disabled(!workspace.canBrowse)
                 Divider()
                 Button("Open Selected Folder", action: workspace.openSelectedFolder)
