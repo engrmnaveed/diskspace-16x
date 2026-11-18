@@ -1,0 +1,128 @@
+public enum SizeMetric: String, CaseIterable, Sendable, Codable {
+    case allocated
+    case logical
+}
+
+public struct ScanEntry: Identifiable, Sendable {
+    public var id: String { path }
+    public let path: String
+    public let name: String
+    public let isDirectory: Bool
+    /// A later directory entry for an inode whose bytes already contribute elsewhere in the scan.
+    public let isHardLinkAlias: Bool
+    public let logicalBytes: UInt64
+    public let allocatedBytes: UInt64
+    public let children: [ScanEntry]
+
+    public func bytes(for metric: SizeMetric) -> UInt64 {
+        switch metric {
+        case .allocated: allocatedBytes
+        case .logical: logicalBytes
+        }
+    }
+
+    public func rankedChildren(by metric: SizeMetric) -> [ScanEntry] {
+        children.sorted { $0.ranksBefore($1, by: metric) }
+    }
+
+    fileprivate func ranksBefore(_ other: ScanEntry, by metric: SizeMetric) -> Bool {
+        let left = bytes(for: metric)
+        let right = other.bytes(for: metric)
+        if left == right {
+            return path.utf8.lexicographicallyPrecedes(other.path.utf8)
+        }
+        return left > right
+    }
+}
+
+public struct ScanIssue: Identifiable, Sendable, Encodable {
+    public var id: String { path + "\0" + message }
+    public let path: String
+    public let message: String
+}
+
+public struct ScanProgress: Sendable {
+    public let visitedEntries: UInt64
+    public let currentPath: String
+}
+
+public struct ScanReport: Sendable {
+    public let root: ScanEntry
+    public let issues: [ScanIssue]
+    public var isPartial: Bool { !issues.isEmpty }
+
+    /// Ranks each counted regular file in the selected subtree. Hard-link ownership
+    /// is determined by the full scan and is retained when browsing a subtree.
+    public func largestFiles(limit: Int, by metric: SizeMetric, under entry: ScanEntry? = nil) -> [ScanEntry] {
+        guard limit > 0 else { return [] }
+        let scope = entry ?? root
+        if !scope.isDirectory {
+            return scope.isHardLinkAlias ? [] : [scope]
+        }
+
+        var top = TopFiles(limit: limit, metric: metric)
+        var levels = [scope.children[...]]
+        while let level = levels.indices.last {
+            guard let child = levels[level].popFirst() else {
+                levels.removeLast()
+                continue
+            }
+            if child.isDirectory {
+                levels.append(child.children[...])
+            } else if !child.isHardLinkAlias {
+                top.consider(child)
+            }
+        }
+        return top.ranked
+    }
+}
+
+/// The least relevant result is at the root so a small limit stays inexpensive on large scans.
+private struct TopFiles {
+    let limit: Int
+    let metric: SizeMetric
+    private var heap: [ScanEntry] = []
+
+    init(limit: Int, metric: SizeMetric) {
+        self.limit = limit
+        self.metric = metric
+    }
+
+    var ranked: [ScanEntry] {
+        heap.sorted { $0.ranksBefore($1, by: metric) }
+    }
+
+    mutating func consider(_ entry: ScanEntry) {
+        if heap.count < limit {
+            heap.append(entry)
+            siftUp(from: heap.count - 1)
+        } else if entry.ranksBefore(heap[0], by: metric) {
+            heap[0] = entry
+            siftDown()
+        }
+    }
+
+    private mutating func siftUp(from index: Int) {
+        var child = index
+        while child > 0 {
+            let parent = (child - 1) / 2
+            guard heap[parent].ranksBefore(heap[child], by: metric) else { break }
+            heap.swapAt(parent, child)
+            child = parent
+        }
+    }
+
+    private mutating func siftDown() {
+        var parent = 0
+        while parent < heap.count / 2 {
+            let left = parent * 2 + 1
+            let right = left + 1
+            let worseChild = right < heap.count && heap[left].ranksBefore(heap[right], by: metric)
+                ? right
+                : left
+            guard heap[parent].ranksBefore(heap[worseChild], by: metric) else { break }
+            heap.swapAt(parent, worseChild)
+            parent = worseChild
+        }
+    }
+}
