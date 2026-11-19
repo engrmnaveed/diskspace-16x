@@ -135,11 +135,18 @@ Move **Space 16X.app** to Applications in Finder.
 
 ### Allow the first launch
 
-1. Open Space 16X. macOS reports that it can't verify the app. Click **Done**.
-2. Open **System Settings → Privacy & Security**.
-3. Under **Security**, click **Open Anyway** next to the Space 16X message, then confirm.
+macOS blocks the first launch because the app isn't notarized by Apple. The project doesn't use a paid Apple Developer account. To check a download yourself, use the SHA-256 file and `gh attestation verify` as shown above. You only need to approve the app once.
 
-After that, the app opens normally. To skip the prompt, remove the quarantine attribute from a copy you have verified.
+1. Open Space 16X. macOS says it can't verify that the app is free of malware. Click **Done**. Don't click **Move to Trash**, which deletes the app.
+2. Open **System Settings → Privacy & Security**.
+3. Scroll to **Security**. Below **Allow applications from**, click **Open Anyway** next to the message about Space 16X.
+4. Enter your password or use Touch ID, then click **Open Anyway** in the dialog that follows.
+
+After that, the app opens normally.
+
+**If Open Anyway isn't there:** the button appears only after you try to open the app, and for about an hour after that. Open Space 16X again, click **Done**, and return to Privacy & Security. If the app went to the Trash, reinstall it with `brew reinstall --cask space16x` or download the ZIP again.
+
+To skip the prompt entirely, remove the quarantine attribute from a copy you have verified.
 
 ```sh
 xattr -dr com.apple.quarantine "/Applications/Space 16X.app"

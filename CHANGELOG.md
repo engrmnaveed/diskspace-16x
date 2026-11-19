@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Spell out the first launch of the Mac app in the README, the installation guide, and the Homebrew caveats: click Done rather than Move to Trash, find Open Anyway under Security, and confirm with a password or Touch ID.
+
 ## 0.2.2
 
 - Complete scans of very deep folder trees. Both scanners raise the open-file soft limit, which macOS sets to 256 for apps launched by launchd, so deep trees are no longer reported as partial with "Too many open files".
