@@ -1,0 +1,73 @@
+name: Promo video
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/promo.yml
+      - scripts/build-promo.py
+      - scripts/promo/**
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/promo.yml
+      - scripts/build-promo.py
+      - scripts/promo/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    name: Build the Short and README preview
+    runs-on: macos-15
+    timeout-minutes: 15
+    outputs:
+      artifact_url: ${{ steps.media.outputs.artifact-url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install local render tools
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          HOMEBREW_NO_ANALYTICS: '1'
+        run: |
+          if ! ffmpeg -hide_banner -encoders 2>/dev/null | grep -F libx264 >/dev/null; then
+            brew install ffmpeg
+          fi
+          python3 -m venv .build/promo-venv
+          .build/promo-venv/bin/python -m pip install -r scripts/promo/requirements.txt
+      - name: Regenerate promo from this revision
+        run: .build/promo-venv/bin/python scripts/build-promo.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: media
+        with:
+          name: space16x-promo
+          path: |
+            dist/promo/space16x-short.mp4
+            dist/promo/space16x-preview.gif
+          if-no-files-found: error
+          retention-days: 30
+      - name: Record publishing status
+        env:
+          ARTIFACT_URL: ${{ steps.media.outputs.artifact-url }}
+        run: |
+          printf '## Space 16X promo ready\n\n[Download the Short and README preview](%s).\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+
+  notify:
+    name: Notify the owner to publish the Short
+    needs: render
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Mention the owner on the commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_URL: ${{ needs.render.outputs.artifact_url }}
+        run: |
+          body="$(printf '@%s A new Space 16X promo is ready to publish.\n\n[Download the Short and README preview](%s) within 30 days, then upload the MP4 to YouTube Shorts.\n' "$GITHUB_REPOSITORY_OWNER" "$ARTIFACT_URL")"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" --raw-field "body=$body" --jq .html_url

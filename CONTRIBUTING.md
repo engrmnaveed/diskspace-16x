@@ -40,3 +40,4 @@ The benchmark creates 100,000 files with a 512-byte payload under 1,100 director
 Keep changes focused. Use commit messages that explain the outcome, and include the verification commands and platform coverage in your pull request.
 
 For packaging and publication, see the [release runbook](docs/release.md).
+For the YouTube Short and README demo, see the [promotional video workflow](docs/promo.md).

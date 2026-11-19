@@ -8,6 +8,8 @@ Find the file or folder using your disk space. Space 16X is a read-only analyzer
 
 Space 16X is a project by Muhammad Naveed Akram, developed under the [16X Brains](https://16xbrains.com/) banner.
 
+![Space 16X opens an interactive terminal explorer for drilling into folders and ranking files. The macOS app shows a treemap, donut chart, and Largest Files view.](Branding/Space16X-Demo.gif)
+
 ## Analyze a folder on macOS
 
 1. Choose a folder or local drive, or drop it into the Space 16X window.
@@ -19,6 +21,8 @@ The Mac app uses allocated size for totals, rankings, and chart shares. On a lar
 The treemap shows the largest items with a positive size. Remaining bytes are grouped as **Other Items**. Switch back to **List** to inspect each item.
 
 ## Explore from the terminal
+
+Run `space16x` with no arguments to open the interactive explorer for your current folder.
 
 ```sh
 space16x
