@@ -96,6 +96,7 @@ struct TerminalMode;
 
 impl TerminalMode {
     fn enter() -> io::Result<Self> {
+        restore_terminal_before_panic_message();
         enable_raw_mode()?;
         let mode = Self;
         execute!(io::stdout(), EnterAlternateScreen, EnableBracketedPaste)?;
@@ -105,14 +106,32 @@ impl TerminalMode {
 
 impl Drop for TerminalMode {
     fn drop(&mut self) {
-        let _ = disable_raw_mode();
-        let _ = execute!(
-            io::stdout(),
-            DisableBracketedPaste,
-            LeaveAlternateScreen,
-            Show
-        );
+        restore_terminal();
     }
+}
+
+fn restore_terminal() {
+    let _ = disable_raw_mode();
+    let _ = execute!(
+        io::stdout(),
+        DisableBracketedPaste,
+        LeaveAlternateScreen,
+        Show
+    );
+}
+
+/// The default panic hook prints before unwinding runs `TerminalMode::drop`, so the
+/// message would land on the alternate screen and vanish. Restore the terminal first
+/// when the UI thread panics. Worker panics surface through the explorer instead.
+fn restore_terminal_before_panic_message() {
+    let ui_thread = thread::current().id();
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        if thread::current().id() == ui_thread {
+            restore_terminal();
+        }
+        previous(info);
+    }));
 }
 
 struct Progress {

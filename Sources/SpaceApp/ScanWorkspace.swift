@@ -164,8 +164,8 @@ final class ScanWorkspace {
             }
             let snapshotTask = Task { [weak self] in
                 for await snapshot in snapshots {
-                    guard !Task.isCancelled, let self, !isCancelling else { return }
-                    acceptReport(snapshot)
+                    guard !Task.isCancelled, let self, !self.isCancelling else { return }
+                    self.acceptReport(snapshot)
                 }
             }
             defer {

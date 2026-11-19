@@ -36,6 +36,7 @@ public enum DiskScanner {
             .filter { $0 != "." }
         let scope = "/" + components.joined(separator: "/")
         let rootName = components.last ?? "/"
+        raiseOpenFileLimit()
 
         do {
             return try withDatalessMaterializationDisabled {
@@ -524,6 +525,20 @@ private func directoryEntry(path: String, name: String, cloudOnly: Bool = false,
         isCloudOnly: cloudOnly, isPending: pending,
         logicalBytes: 0, allocatedBytes: 0, children: []
     )
+}
+
+/// The traversal keeps one directory descriptor open per level. launchd starts GUI apps
+/// with a soft limit of 256, so deep trees would otherwise fail with EMFILE. Raise the
+/// soft limit toward OPEN_MAX without exceeding the hard limit. This never lowers it.
+private func raiseOpenFileLimit() {
+    #if canImport(Darwin)
+    var limit = rlimit()
+    guard getrlimit(RLIMIT_NOFILE, &limit) == 0 else { return }
+    let target = min(rlim_t(OPEN_MAX), limit.rlim_max)
+    guard limit.rlim_cur < target else { return }
+    limit.rlim_cur = target
+    _ = setrlimit(RLIMIT_NOFILE, &limit)
+    #endif
 }
 
 private func isCloudReference(_ metadata: stat) -> Bool {

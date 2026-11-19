@@ -4,6 +4,7 @@ version = "0.2.1"
 edition = "2024"
 rust-version = "1.100"
 description = "A terminal disk space explorer for macOS and Linux"
+license = "MIT"
 publish = false
 
 [dependencies]

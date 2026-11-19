@@ -30,26 +30,45 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-24.04
+    # Configure required reviewers on this environment so a tag push alone cannot publish.
+    environment: release
     permissions:
       actions: read
+      attestations: write
       contents: write
+      id-token: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - name: Publish the verified CLI archives
+      - name: Collect and verify the tested release assets
         shell: bash
         run: |
           downloads="$RUNNER_TEMP/space16x-cli"
+          release="$RUNNER_TEMP/space16x-release"
+          mkdir -p "$release"
           gh run download "$GITHUB_RUN_ID" --repo "$GH_REPO" --pattern 'space16x-cli-*' --dir "$downloads"
-          assets=()
           for target in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
             folder="$downloads/space16x-cli-$target"
             archive="space16x-$target.tar.gz"
             (cd "$folder" && sha256sum -c "$archive.sha256")
-            assets+=("$folder/$archive" "$folder/$archive.sha256")
+            cp "$folder/$archive" "$folder/$archive.sha256" "$release/"
           done
+          # Publish the installer with the release so users run the reviewed, tagged script.
+          cp "$downloads/space16x-cli-installer/install.sh" "$release/install.sh"
+          (cd "$release" && sha256sum install.sh > install.sh.sha256)
+          echo "RELEASE_DIR=$release" >> "$GITHUB_ENV"
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ env.RELEASE_DIR }}/space16x-*.tar.gz
+            ${{ env.RELEASE_DIR }}/install.sh
+      - name: Publish the verified CLI archives
+        shell: bash
+        run: |
+          cd "$RELEASE_DIR"
           gh release create "$GITHUB_REF_NAME" --verify-tag \
             --title "Space 16X $GITHUB_REF_NAME CLI" \
-            --notes "Space 16X CLI archives for macOS and Linux. See docs/install.md for one-line installation and removal." \
-            "${assets[@]}"
+            --notes "Space 16X CLI archives for macOS and Linux, with SHA-256 files and GitHub build-provenance attestations. See docs/install.md for installation, verification, and removal." \
+            space16x-*.tar.gz space16x-*.tar.gz.sha256 install.sh install.sh.sha256

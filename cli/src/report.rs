@@ -74,12 +74,12 @@ pub(crate) fn format_bytes(bytes: u64) -> String {
 
 pub(crate) fn terminal_path(path: &Path) -> String {
     let path = path.to_string_lossy();
-    if !path.chars().any(|c| c == '\\' || c.is_control()) {
+    if !path.chars().any(|c| c == '\\' || needs_escape(c)) {
         return path.into_owned();
     }
     let mut escaped = String::with_capacity(path.len());
     for character in path.chars() {
-        if character == '\\' || character.is_control() {
+        if character == '\\' || needs_escape(character) {
             escaped.extend(character.escape_default());
         } else {
             escaped.push(character);
@@ -89,18 +89,28 @@ pub(crate) fn terminal_path(path: &Path) -> String {
 }
 
 pub(crate) fn terminal_text(text: &str) -> Cow<'_, str> {
-    if !text.chars().any(char::is_control) {
+    if !text.chars().any(needs_escape) {
         return Cow::Borrowed(text);
     }
     let mut escaped = String::with_capacity(text.len());
     for character in text.chars() {
-        if character.is_control() {
+        if needs_escape(character) {
             escaped.extend(character.escape_default());
         } else {
             escaped.push(character);
         }
     }
     Cow::Owned(escaped)
+}
+
+/// Control characters can drive the terminal. Bidirectional controls can make a crafted
+/// name display as different text, as in "Trojan Source" spoofing. Escape both kinds.
+fn needs_escape(character: char) -> bool {
+    character.is_control()
+        || matches!(
+            character,
+            '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+        )
 }
 
 #[derive(Serialize)]
@@ -320,5 +330,24 @@ impl PartialOrd for RankedFile<'_> {
 impl Ord for RankedFile<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         rank(self.0, other.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escapes_terminal_controls_and_bidirectional_overrides() {
+        assert_eq!(
+            terminal_path(Path::new("/data/invoice\u{202E}fdp.exe")),
+            "/data/invoice\\u{202e}fdp.exe"
+        );
+        assert_eq!(
+            terminal_text("Listing\u{1b}[31m \u{2067}name\u{2069}"),
+            "Listing\\u{1b}[31m \\u{2067}name\\u{2069}"
+        );
+        assert_eq!(terminal_path(Path::new("/données/👨‍👩‍👧")), "/données/👨‍👩‍👧");
+        assert_eq!(terminal_path(Path::new("/a\\b")), "/a\\\\b");
     }
 }

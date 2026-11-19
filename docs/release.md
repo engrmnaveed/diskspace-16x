@@ -8,7 +8,19 @@ Check that [scripts/release-version](../scripts/release-version), [cli/Cargo.tom
 
 ## Build release artifacts in GitHub Actions
 
-Pushing a new `vX.Y.Z` tag that matches `scripts/release-version` runs **Publish CLI**. The workflow tests the four Rust targets and publishes their checksummed archives to the tagged GitHub release. The Mac app signing workflow is separate.
+Pushing a new `vX.Y.Z` tag that matches `scripts/release-version` runs **Publish CLI**. The workflow tests the four Rust targets and uses the `release` environment for publication. Once the environment's protection rules pass, the workflow attests build provenance and publishes the checksummed archives, `install.sh`, and `install.sh.sha256` to the tagged GitHub release. The Mac app signing workflow is separate.
+
+After the first release with `install.sh` is live and GitHub's latest-release URL serves the asset, update the install and uninstall commands in the README and installation guide to use that URL.
+
+### One-time repository settings
+
+These settings live on GitHub, not in the repository. Set them before the next tag:
+
+- **Environments → `release`:** add yourself, or the release owners, as required reviewers. Restrict deployments to tags matching `v*`. Without reviewers, a tag push publishes immediately.
+- **Rules → Rulesets:** protect tags matching `v*` from creation, update, and deletion by anyone outside the release owners. Protect `main` with required pull requests and the CI status checks.
+- **Settings → General → Releases:** enable immutable releases, so published assets and their tags can't be replaced.
+- **Security → Private vulnerability reporting** Enable it to accept reports through GitHub. [Security policy](../SECURITY.md)
+- **Security → Dependabot:** enable alerts and security updates. [.github/dependabot.yml](../.github/dependabot.yml) schedules weekly version updates for Cargo and GitHub Actions.
 
 Push the reviewed source to the default branch. To sign the native Swift app, configure Developer ID and notarization credentials in the `release-signing` environment. Use the certificate's identity name from `security find-identity -v -p codesigning`.
 

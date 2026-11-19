@@ -293,6 +293,28 @@ final class DiskScannerTests: XCTestCase {
         XCTAssertEqual(try access.perform(at: "/Local", isProvider: false) { _ in 1 }, 1)
     }
 
+    func testDeepTreeCompletesWhenTheOpenFileLimitStartsAtTheLaunchdDefault() throws {
+        try withFixture { root in
+            // Each traversal level keeps a directory open. Go deeper than the 256-descriptor
+            // soft limit that launchd gives GUI apps, while staying under PATH_MAX.
+            var deepest = root
+            for _ in 0..<300 { deepest = try makeDirectory("d", under: deepest) }
+            let leaf = try makeFile("leaf.dat", bytes: 4_096, under: deepest)
+
+            var original = rlimit()
+            XCTAssertEqual(getrlimit(RLIMIT_NOFILE, &original), 0)
+            defer { _ = setrlimit(RLIMIT_NOFILE, &original) }
+            var launchdDefault = original
+            launchdDefault.rlim_cur = min(256, original.rlim_cur)
+            XCTAssertEqual(setrlimit(RLIMIT_NOFILE, &launchdDefault), 0)
+
+            let report = try DiskScanner.scan(path: root.path)
+
+            XCTAssertFalse(report.isPartial, "Unexpected issues: \(report.issues.prefix(2).map(\.message))")
+            XCTAssertEqual(report.root.allocatedBytes, try allocatedBytes(of: leaf))
+        }
+    }
+
     func testScanDisablesCloudMaterializationAndRestoresTheThreadPolicy() throws {
         try withFixture { root in
             let kind = IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES
