@@ -47,6 +47,14 @@ Build and open the native app on macOS with Swift 6 or later.
 open "$(scripts/package-macos.sh)"
 ```
 
+Releases after 0.2.1 include the universal Mac app. Install it with Homebrew. Homebrew 6 and later require you to trust the tap first.
+
+```sh
+brew tap engrmnaveed/tap && brew trust engrmnaveed/tap && brew install --cask engrmnaveed/tap/space16x
+```
+
+The app is free and open source, and it is not notarized by Apple. The first time you open it, macOS blocks it. To allow it, open **System Settings → Privacy & Security** and click **Open Anyway**. The [installation guide](docs/install.md#install-the-mac-app) covers the direct download, verification, and removal.
+
 Install a checksummed CLI build from GitHub without sudo. Paste either line in Bash or Zsh.
 
 ```sh

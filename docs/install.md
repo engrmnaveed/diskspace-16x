@@ -97,16 +97,53 @@ open "dist/Space 16X.app"
 
 The app in `dist` is built for the current Mac and ad hoc signed for local development. Use `scripts/package-macos.sh --universal` to build both arm64 and x86-64 slices.
 
-## Install a Mac app release
+## Install the Mac app
 
-When the signed and notarized app release is available, download its universal ZIP and SHA-256 file. Verify and expand the archive from the download directory.
+Releases after 0.2.1 publish a universal Mac app for Apple silicon and Intel on macOS 14 or later. The app is ad hoc signed and is not notarized by Apple, because the project doesn't use a paid Apple Developer account. macOS blocks the first launch until you allow it once.
+
+### Install with Homebrew
+
+The cask lives in the project's tap. Add the tap, then install the app. Homebrew 6 and later only load casks from taps you trust, so run `brew trust` once before installing.
 
 ```sh
-shasum -a 256 -c space16x-0.2.1-macos-universal.zip.sha256
-ditto -x -k space16x-0.2.1-macos-universal.zip .
+brew tap engrmnaveed/tap
 ```
 
-Move **Space 16X.app** to Applications in Finder and open it.
+```sh
+brew trust engrmnaveed/tap
+```
+
+```sh
+brew install --cask engrmnaveed/tap/space16x
+```
+
+Upgrade with `brew upgrade --cask space16x`. Remove the app with `brew uninstall --cask space16x`. Add `--zap` to that command to also remove its preferences and saved window state.
+
+### Install the release ZIP
+
+Download `space16x-<version>-macos-universal.zip` and its `.sha256` file from the [releases page](https://github.com/engrmnaveed/diskspace-16x/releases). Verify the archive and expand it from the download directory. The commands below use version 0.2.2 as an example.
+
+```sh
+shasum -a 256 -c space16x-0.2.2-macos-universal.zip.sha256
+gh attestation verify space16x-0.2.2-macos-universal.zip \
+  --repo engrmnaveed/diskspace-16x \
+  --signer-workflow engrmnaveed/diskspace-16x/.github/workflows/publish-cli.yml
+ditto -x -k space16x-0.2.2-macos-universal.zip .
+```
+
+Move **Space 16X.app** to Applications in Finder.
+
+### Allow the first launch
+
+1. Open Space 16X. macOS reports that it can't verify the app. Click **Done**.
+2. Open **System Settings → Privacy & Security**.
+3. Under **Security**, click **Open Anyway** next to the Space 16X message, then confirm.
+
+After that, the app opens normally. To skip the prompt, remove the quarantine attribute from a copy you have verified.
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/Space 16X.app"
+```
 
 ## Mac app keyboard shortcuts
 

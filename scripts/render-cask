@@ -1,0 +1,21 @@
+#!/bin/sh
+# Print the Homebrew cask for a published Space 16X Mac app release.
+set -eu
+
+if [ "$#" -ne 2 ]; then
+    echo "Usage: $0 VERSION ZIP_SHA256" >&2
+    exit 1
+fi
+version=${1#v}
+digest=$2
+
+printf '%s\n' "$version" | LC_ALL=C grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?$' ||
+    { echo "Use a release version such as 0.2.2." >&2; exit 1; }
+# grep works line by line. Check the entire value before substituting it.
+case "$version" in *[!A-Za-z0-9.-]*) echo "Invalid characters in VERSION." >&2; exit 1 ;; esac
+case "$digest" in *[!0-9a-fA-F]*|'') echo "Use a 64-character SHA-256 digest." >&2; exit 1 ;; esac
+[ "${#digest}" -eq 64 ] || { echo "Use a 64-character SHA-256 digest." >&2; exit 1; }
+digest=$(printf '%s' "$digest" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+
+template="$(dirname "$0")/../packaging/homebrew/space16x.rb.in"
+sed -e "s/@VERSION@/$version/g" -e "s/@SHA256@/$digest/g" "$template"

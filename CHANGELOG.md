@@ -7,6 +7,7 @@
 - Restore the terminal before printing a panic message from the explorer.
 - Publish `install.sh` with each CLI release and attest build provenance for the archives and installer. Pin the one-liners to a reviewed installer commit while the current release is available. Use the `release` environment to apply publication rules.
 - Add a security policy, Dependabot updates, and a cargo-deny check for advisories, licenses, and dependency sources.
+- Publish the universal Mac app with each release as an attested, ad hoc signed ZIP, along with a Homebrew cask. Install it with `brew install --cask engrmnaveed/tap/space16x`. The app isn't notarized, so the installation guide explains the one-time approval on first launch.
 
 ## 0.2.1
 
