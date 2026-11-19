@@ -47,7 +47,7 @@ Build and open the native app on macOS with Swift 6 or later.
 open "$(scripts/package-macos.sh)"
 ```
 
-Releases after 0.2.1 include the universal Mac app. Install it with Homebrew. Homebrew 6 and later require you to trust the tap first.
+Releases from 0.2.2 include the universal Mac app. Install it with Homebrew. Homebrew 6 and later require you to trust the tap first.
 
 ```sh
 brew tap engrmnaveed/tap && brew trust engrmnaveed/tap && brew install --cask engrmnaveed/tap/space16x

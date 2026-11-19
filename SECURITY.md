@@ -30,4 +30,4 @@ Space 16X reads filesystem metadata only. It never opens file contents, writes t
 
 ## Verify a download
 
-Each CLI release archive ships with a `.sha256` file. Releases after 0.2.1 also provide GitHub build-provenance attestations. [Verify a release archive](docs/install.md#verify-a-release-archive)
+Each CLI release archive ships with a `.sha256` file. Releases from 0.2.2 also provide GitHub build-provenance attestations. [Verify a release archive](docs/install.md#verify-a-release-archive)
