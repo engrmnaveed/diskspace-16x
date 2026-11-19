@@ -8,7 +8,22 @@ Check that [scripts/release-version](../scripts/release-version), [cli/Cargo.tom
 
 ## Build release artifacts in GitHub Actions
 
-Pushing a new `vX.Y.Z` tag that matches `scripts/release-version` runs **Publish CLI**. The workflow tests the four Rust targets and uses the `release` environment for publication. Once the environment's protection rules pass, the workflow attests build provenance and publishes the checksummed archives, `install.sh`, and `install.sh.sha256` to the tagged GitHub release. The Mac app signing workflow is separate.
+Pushing a new `vX.Y.Z` tag that matches `scripts/release-version` runs **Publish release** (`publish-cli.yml`). The workflow tests the four Rust targets, runs the Swift tests, and builds the universal Mac app with `scripts/package-macos.sh --universal` and `scripts/archive-macos.sh`. It uses the `release` environment for publication. Once the environment's protection rules pass, the workflow attests build provenance and publishes these assets to the tagged GitHub release:
+
+- the checksummed CLI archives
+- `space16x-X.Y.Z-macos-universal.zip` and its `.sha256` file
+- `space16x.rb`, the Homebrew cask rendered by `scripts/render-cask` from the app ZIP's digest
+- `install.sh` and `install.sh.sha256`
+
+The published Mac app is ad hoc signed and not notarized. Developer ID signing is optional and runs in a separate workflow, described below.
+
+### Homebrew tap
+
+The cask is published through the public tap repository `engrmnaveed/homebrew-tap`, so users run `brew install --cask engrmnaveed/tap/space16x`. Homebrew's official cask repository doesn't accept apps that fail Gatekeeper checks. The template is [packaging/homebrew/space16x.rb.in](../packaging/homebrew/space16x.rb.in).
+
+- **One-time setup:** create `engrmnaveed/homebrew-tap` with a `Casks` folder. Generate an Ed25519 SSH key pair. Add the public key to the tap as a deploy key with write access. Store the private key as the `HOMEBREW_TAP_DEPLOY_KEY` secret in the `release` environment.
+- **Each release:** the publish job commits `Casks/space16x.rb` to the tap after creating the release.
+- **Without the secret:** the job skips the tap update and logs a notice. Download `space16x.rb` from the release and commit it to `Casks/space16x.rb` in the tap by hand.
 
 After the first release with `install.sh` is live and GitHub's latest-release URL serves the asset, update the install and uninstall commands in the README and installation guide to use that URL.
 

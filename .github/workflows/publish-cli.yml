@@ -1,4 +1,4 @@
-name: Publish CLI
+name: Publish release
 
 on:
   push:
@@ -27,8 +27,32 @@ jobs:
       cli_only: true
       upload_cli: true
 
+  macos-app:
+    needs: version
+    name: Mac app • universal
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test the Swift scanner
+        run: swift test
+      - name: Build, verify, and archive the universal app
+        run: |
+          app="$(scripts/package-macos.sh --universal)"
+          archive="$(scripts/archive-macos.sh "$app")"
+          (cd dist && shasum -a 256 -c "$(basename "$archive").sha256")
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: space16x-macos-app
+          path: |
+            dist/space16x-*-macos-universal.zip
+            dist/space16x-*-macos-universal.zip.sha256
+          if-no-files-found: error
+
   publish:
-    needs: test
+    needs: [test, macos-app]
     runs-on: ubuntu-24.04
     # Configure required reviewers on this environment so a tag push alone cannot publish.
     environment: release
@@ -41,6 +65,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Collect and verify the tested release assets
         shell: bash
         run: |
@@ -57,18 +84,63 @@ jobs:
           # Publish the installer with the release so users run the reviewed, tagged script.
           cp "$downloads/space16x-cli-installer/install.sh" "$release/install.sh"
           (cd "$release" && sha256sum install.sh > install.sh.sha256)
+
+          version="$(cat scripts/release-version)"
+          app="space16x-$version-macos-universal.zip"
+          gh run download "$GITHUB_RUN_ID" --repo "$GH_REPO" --name space16x-macos-app --dir "$downloads/macos-app"
+          (cd "$downloads/macos-app" && sha256sum -c "$app.sha256")
+          cp "$downloads/macos-app/$app" "$downloads/macos-app/$app.sha256" "$release/"
+          read -r app_digest _ < "$release/$app.sha256"
+          scripts/render-cask "$version" "$app_digest" > "$release/space16x.rb"
           echo "RELEASE_DIR=$release" >> "$GITHUB_ENV"
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             ${{ env.RELEASE_DIR }}/space16x-*.tar.gz
+            ${{ env.RELEASE_DIR }}/space16x-*-macos-universal.zip
             ${{ env.RELEASE_DIR }}/install.sh
-      - name: Publish the verified CLI archives
+      - name: Publish the verified release assets
         shell: bash
         run: |
           cd "$RELEASE_DIR"
           gh release create "$GITHUB_REF_NAME" --verify-tag \
-            --title "Space 16X $GITHUB_REF_NAME CLI" \
-            --notes "Space 16X CLI archives for macOS and Linux, with SHA-256 files and GitHub build-provenance attestations. See docs/install.md for installation, verification, and removal." \
-            space16x-*.tar.gz space16x-*.tar.gz.sha256 install.sh install.sh.sha256
+            --title "Space 16X $GITHUB_REF_NAME" \
+            --notes "Space 16X CLI archives for macOS and Linux and the universal Mac app, with SHA-256 files and GitHub build-provenance attestations. The Mac app is ad hoc signed and not notarized. Install it with Homebrew from the engrmnaveed/tap tap, or download the ZIP. See docs/install.md for installation, verification, first-launch approval, and removal." \
+            space16x-*.tar.gz space16x-*.tar.gz.sha256 \
+            space16x-*-macos-universal.zip space16x-*-macos-universal.zip.sha256 \
+            space16x.rb install.sh install.sh.sha256
+      - name: Update the Homebrew tap
+        shell: bash
+        env:
+          # A write deploy key for the tap repository only. Without it, publish space16x.rb by hand.
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          TAP_REPO: engrmnaveed/homebrew-tap
+        run: |
+          if [[ -z "$HOMEBREW_TAP_DEPLOY_KEY" ]]; then
+            echo "::notice::HOMEBREW_TAP_DEPLOY_KEY is not set. Commit space16x.rb from the release to $TAP_REPO/Casks by hand."
+            exit 0
+          fi
+          umask 077
+          ssh_dir="$(mktemp -d "$RUNNER_TEMP/space16x-tap-ssh.XXXXXX")"
+          trap 'rm -rf "$ssh_dir"' EXIT
+          printf '%s\n' "$HOMEBREW_TAP_DEPLOY_KEY" > "$ssh_dir/key"
+          unset HOMEBREW_TAP_DEPLOY_KEY
+          # GitHub's published Ed25519 host key.
+          echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$ssh_dir/known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o StrictHostKeyChecking=yes"
+
+          tap="$ssh_dir/tap"
+          git clone --depth 1 "git@github.com:$TAP_REPO.git" "$tap"
+          mkdir -p "$tap/Casks"
+          cp "$RELEASE_DIR/space16x.rb" "$tap/Casks/space16x.rb"
+          cd "$tap"
+          git add Casks/space16x.rb
+          if git diff --cached --quiet; then
+            echo "The tap already has this cask."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+            -c user.email='41898283+github-actions[bot]@users.noreply.github.com' \
+            commit -m "space16x ${GITHUB_REF_NAME#v}"
+          git push origin HEAD
