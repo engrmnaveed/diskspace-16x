@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.3
 
 - Stop double-counting the macOS startup disk. A scan of `/` reached each APFS firmlinked folder, such as `/Users`, both at its visible path and again under `/System/Volumes/Data`, which roughly doubled the total. Both scanners now count those folders once at their visible paths.
 - Spell out the first launch of the Mac app in the README, the installation guide, and the Homebrew caveats: click Done rather than Move to Trash, find Open Anyway under Security, and confirm with a password or Touch ID.
