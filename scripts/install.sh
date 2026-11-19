@@ -400,7 +400,9 @@ ENV
         fish)
             cat > "$state/env.fish" <<'ENV'
 if read -l space16x_bin < "$HOME/.local/share/space16x/receipt"
-    contains -- "$space16x_bin" $PATH; or set -gx PATH "$space16x_bin" $PATH
+    if not contains -- "$space16x_bin" $PATH
+        set -gx PATH "$space16x_bin" $PATH
+    end
 end
 ENV
             configure_profile fish "${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
