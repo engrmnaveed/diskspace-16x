@@ -9,15 +9,19 @@ import sys
 import tempfile
 
 
-def run(binary, *arguments, status=0):
+def run(binary, *arguments, status=0, cwd=None):
     result = subprocess.run(
-        [binary, *map(str, arguments)], capture_output=True, text=True, check=False
+        [binary, *map(str, arguments)], capture_output=True, text=True, check=False, cwd=cwd
     )
     assert result.returncode == status, (
         f"Expected exit {status} for {arguments}, got {result.returncode}: "
         f"{result.stderr}{result.stdout}"
     )
     return result
+
+
+def allocated_bytes(path):
+    return 512 * path.stat().st_blocks
 
 
 def check(binary, root):
@@ -30,44 +34,51 @@ def check(binary, root):
     second = data / "beta.dat"
     for path in (first, second):
         path.write_bytes(os.urandom(8192))
-    os.link(first, data / "copy.dat")
-
+    alias = data / "copy.dat"
+    os.link(first, alias)
     sparse = data / "sparse.dat"
     with sparse.open("wb") as stream:
         stream.truncate(32 * 1024 * 1024)
-    (root / "symlink").symlink_to(data, target_is_directory=True)
+    symlink = root / "symlink"
+    symlink.symlink_to(data, target_is_directory=True)
 
-    text = run(binary, "scan", root, "--top", 2).stdout
-    assert str(first) in text, text
+    text = run(binary, cwd=root).stdout
+    assert str(data) in text and str(first) not in text, text
+    assert str(first) in run(binary, "scan", root, "--top", 2).stdout
 
-    allocated = json.loads(run(binary, "scan", root, "--json", "--top", 2).stdout)
-    assert allocated["schemaVersion"] == 1
-    assert allocated["scope"] == str(root)
-    assert allocated["metric"] == "allocated"
-    assert allocated["topLimit"] == 2
-    assert allocated["logicalBytes"] == first.stat().st_size + second.stat().st_size + sparse.stat().st_size
-    assert allocated["allocatedBytes"] == 512 * sum(
-        path.stat().st_blocks for path in (first, second, sparse)
-    )
-    assert allocated["isPartial"] is False
-    assert allocated["issues"] == []
-    assert [entry["path"] for entry in allocated["topFiles"]] == [str(first), str(second)]
+    total_bytes = sum(map(allocated_bytes, (first, second, sparse)))
+    top = json.loads(run(binary, "scan", root, "--json", "--top", 2).stdout)
+    assert top["schemaVersion"] == 2
+    assert top["scope"] == str(root)
+    assert top["topLimit"] == 2
+    assert top["allocatedBytes"] == total_bytes
+    assert top["isPartial"] is False and top["issues"] == []
+    assert [entry["path"] for entry in top["topFiles"]] == [
+        str(path) for path in sorted((first, second), key=lambda path: (-allocated_bytes(path), os.fsencode(path)))
+    ]
+    assert "logicalBytes" not in top
 
-    logical = json.loads(
-        run(binary, "scan", "--metric", "logical", "--json", "--", root).stdout
-    )
-    assert logical["metric"] == "logical"
-    assert logical["topLimit"] == 20
-    assert logical["topFiles"][0]["path"] == str(sparse)
-    assert logical["topFiles"][0]["logicalBytes"] == sparse.stat().st_size
+    depth = json.loads(run(binary, "scan", "--json", cwd=root).stdout)
+    assert depth["schemaVersion"] == 2 and depth["scope"] == str(root)
+    assert depth["depth"] == 1
+    assert depth["entries"] == [{"path": str(data), "allocatedBytes": total_bytes, "kind": "directory"}]
 
-    zero = json.loads(run(binary, "scan", root, "--top", 0, "--json").stdout)
-    assert zero["topFiles"] == [] and zero["topLimit"] == 0
+    deeper = json.loads(run(binary, "scan", "--depth", 2, "--json", "--", root).stdout)
+    rows = {row["path"]: row for row in deeper["entries"]}
+    assert rows[str(first)]["allocatedBytes"] == allocated_bytes(first)
+    assert rows[str(alias)]["allocatedBytes"] == 0
+    assert rows[str(sparse)]["allocatedBytes"] == allocated_bytes(sparse)
 
-    for path in (root / "missing", first, root / "symlink"):
+    zero_depth = json.loads(run(binary, "scan", root, "--depth", 0, "--json").stdout)
+    assert zero_depth["entries"] == [] and zero_depth["allocatedBytes"] == total_bytes
+    zero_top = json.loads(run(binary, "scan", root, "--top", 0, "--json").stdout)
+    assert zero_top["topFiles"] == [] and zero_top["topLimit"] == 0
+
+    for path in (root / "missing", first, symlink):
         error = run(binary, "scan", path, "--json", status=1)
         assert not error.stdout and error.stderr
     assert run(binary, "scan", root, "--top", -1, status=1).stderr
+    assert run(binary, "scan", root, "--top", 2, "--depth", 1, status=1).stderr
 
     if os.geteuid() == 0:
         print("Permission checks skipped because the fixture runs as root.")
@@ -75,14 +86,13 @@ def check(binary, root):
 
     blocked = root / "blocked"
     blocked.mkdir()
-    (blocked / "hidden").write_text("not included", encoding="utf-8")
+    (blocked / "hidden").write_text("excluded by permissions", encoding="utf-8")
     blocked.chmod(0)
     try:
         partial = json.loads(run(binary, "scan", root, "--json", status=2).stdout)
         assert partial["isPartial"] is True
         assert partial["issues"] and partial["issues"][0]["path"] == str(blocked)
-        assert partial["logicalBytes"] == allocated["logicalBytes"]
-        assert partial["allocatedBytes"] == allocated["allocatedBytes"]
+        assert partial["allocatedBytes"] == total_bytes
         unreadable = run(binary, "scan", blocked, "--json", status=1)
         assert not unreadable.stdout and unreadable.stderr
     finally:

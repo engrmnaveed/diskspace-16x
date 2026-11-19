@@ -1,0 +1,200 @@
+mod explorer;
+mod ranker;
+mod view;
+
+use crate::scanner::{self, Event as ScanEvent, Report};
+use crossterm::{
+    cursor::Show,
+    event::{
+        self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEventKind,
+        KeyModifiers,
+    },
+    execute,
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+};
+use explorer::{Action, Explorer};
+use ranker::RankWorker;
+use ratatui::{Terminal, backend::CrosstermBackend};
+use std::{
+    io::{self, IsTerminal},
+    path::{Path, PathBuf},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread::{self, JoinHandle},
+    time::{Duration, Instant},
+};
+
+pub fn run(path: &Path) -> io::Result<()> {
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "explore requires an interactive terminal. Use space16x scan for reports and scripts.",
+        ));
+    }
+
+    let _mode = TerminalMode::enter()?;
+    let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
+    let worker = ScanWorker::start(path.to_path_buf())?;
+    let ranking = RankWorker::start()?;
+    let mut explorer = Explorer::new(path);
+    let started = Instant::now();
+    let mut last_tick = 0;
+    let mut dirty = true;
+
+    loop {
+        let worker_finished = worker.thread.is_finished();
+        dirty |= explorer.apply(worker.take());
+        if worker_finished && explorer.is_active() {
+            explorer.finish(Err(io::Error::other(
+                "The scan worker stopped unexpectedly.",
+            )));
+            dirty = true;
+        }
+        if let Some(result) = ranking.take() {
+            dirty |= explorer.accept_ranking(result);
+        }
+        if let Some(request) = explorer.ranking_request() {
+            ranking.submit(request)?;
+        }
+        let tick = started.elapsed().as_millis() / 150;
+        if dirty || (explorer.is_active() && tick != last_tick) {
+            terminal.draw(|frame| view::draw(frame, &mut explorer, (tick % 4) as usize))?;
+            last_tick = tick;
+            dirty = false;
+        }
+        if !event::poll(Duration::from_millis(75))? {
+            continue;
+        }
+        match event::read()? {
+            Event::Key(key) if key.kind != KeyEventKind::Release => {
+                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "Explorer interrupted.",
+                    ));
+                }
+                match explorer.key(key) {
+                    Action::Stay => {}
+                    Action::CancelScan => worker.cancel(),
+                    Action::Quit => return explorer.quit(),
+                }
+                dirty = true;
+            }
+            Event::Paste(text) => {
+                explorer.paste(&text);
+                dirty = true;
+            }
+            Event::Resize(_, _) => dirty = true,
+            _ => {}
+        }
+    }
+}
+
+struct TerminalMode;
+
+impl TerminalMode {
+    fn enter() -> io::Result<Self> {
+        enable_raw_mode()?;
+        let mode = Self;
+        execute!(io::stdout(), EnterAlternateScreen, EnableBracketedPaste)?;
+        Ok(mode)
+    }
+}
+
+impl Drop for TerminalMode {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(
+            io::stdout(),
+            DisableBracketedPaste,
+            LeaveAlternateScreen,
+            Show
+        );
+    }
+}
+
+struct Progress {
+    visited: u64,
+    path: PathBuf,
+}
+
+#[derive(Default)]
+struct ScanUpdate {
+    progress: Option<Progress>,
+    preview: Option<Report>,
+    finished: Option<io::Result<Report>>,
+}
+
+struct ScanWorker {
+    cancelled: Arc<AtomicBool>,
+    update: Arc<Mutex<ScanUpdate>>,
+    thread: JoinHandle<()>,
+}
+
+impl ScanWorker {
+    fn start(path: PathBuf) -> io::Result<Self> {
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let update = Arc::new(Mutex::new(ScanUpdate::default()));
+        let worker_cancelled = Arc::clone(&cancelled);
+        let worker_update = Arc::clone(&update);
+        let thread = thread::Builder::new()
+            .name("space16x-scan".into())
+            .spawn(move || {
+                let result = scanner::scan(&path, true, &worker_cancelled, |event| {
+                    let mut pending = worker_update
+                        .lock()
+                        .unwrap_or_else(|error| error.into_inner());
+                    let superseded = match event {
+                        ScanEvent::Progress { visited, path } => {
+                            pending.progress = Some(Progress { visited, path });
+                            None
+                        }
+                        ScanEvent::Snapshot(report) if report.is_preview => {
+                            pending.preview.replace(report)
+                        }
+                        ScanEvent::Snapshot(_) => None,
+                    };
+                    drop(pending);
+                    drop(superseded);
+                });
+                let mut pending = worker_update
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner());
+                let superseded = if result.is_ok() {
+                    pending.preview.take()
+                } else {
+                    None
+                };
+                pending.finished = Some(result);
+                drop(pending);
+                drop(superseded);
+            })?;
+        Ok(Self {
+            cancelled,
+            update,
+            thread,
+        })
+    }
+
+    fn take(&self) -> ScanUpdate {
+        let mut pending = self
+            .update
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        std::mem::take(&mut *pending)
+    }
+
+    fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
+}
+
+impl Drop for ScanWorker {
+    fn drop(&mut self) {
+        // A filesystem call can be waiting in the kernel. Let process exit restore the
+        // user's prompt without waiting on a potentially uninterruptible metadata call.
+        self.cancel();
+    }
+}

@@ -1,66 +1,84 @@
-# Install and run Space 16X
+# Install Space 16X
 
-## Build from source
+## Install the CLI from a release
 
-Use Swift 6 or later with a complete toolchain for your platform. Read permission is sufficient for ordinary local folders. On macOS, the app uses the system folder picker and standard Finder actions.
+Once the [GitHub Releases page](https://github.com/engrmnaveed/diskspace-16x/releases) has CLI archives and checksums, download and run the installer.
 
-### macOS
+```sh
+curl -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh -o space16x-install.sh
+sh ./space16x-install.sh
+"$HOME/.local/bin/space16x" --version
+```
 
-The deployment target is macOS 14. Run these commands from the checkout on a Mac with Xcode or the Xcode Command Line Tools installed:
+With GNU Wget, download the same installer with this command and run it as above.
+
+```sh
+wget -qO space16x-install.sh https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh
+```
+
+The installer selects the target for your OS and architecture, checks the SHA-256 digest, and installs to `$HOME/.local/bin` without sudo. It uses curl or GNU Wget and `sha256sum` or `shasum`. On a minimal Linux image with BusyBox wget, use curl or download and verify the archive manually. Add `$HOME/.local/bin` to your shell's `PATH` to run `space16x` by name.
+
+Use `sh ./space16x-install.sh --version 0.2.0` to choose a published version. Add `--bin-dir PATH` to install elsewhere or `--repo OWNER/REPO` to use a public mirror with the same asset layout. If GitHub returns a missing-asset error, check that the release includes your target or build from source.
+
+### Candidate CLI targets
+
+| System | Release target |
+| --- | --- |
+| macOS 14 or later, Apple silicon | `aarch64-apple-darwin` |
+| macOS 14 or later, Intel | `x86_64-apple-darwin` |
+| Linux, ARM64 | `aarch64-unknown-linux-musl` |
+| Linux, x86-64 | `x86_64-unknown-linux-musl` |
+
+Linux archives link musl statically and are built and tested on their respective Ubuntu 24.04 runners when hosted CI runs. Other Linux CPU architectures can try a native source build.
+
+### Install a CLI archive manually
+
+Download `space16x-<target>.tar.gz` and its companion `.sha256` file from the same release. The commands below use the Apple silicon archive.
+
+```sh
+archive=space16x-aarch64-apple-darwin.tar.gz
+shasum -a 256 -c "$archive.sha256"
+tar -xzf "$archive" space16x
+mkdir -p "$HOME/.local/bin"
+install -m 0755 space16x "$HOME/.local/bin/space16x"
+```
+
+On Linux, use `sha256sum -c "$archive.sha256"` and substitute your target. The [CLI reference](cli.md) has terminal key bindings and report examples.
+
+## Build the CLI from source
+
+Install [Rustup](https://rustup.rs/) and a native linker for your system. Run the build from a checkout of the repository.
+
+```sh
+(cd cli && cargo install --locked --path . --root "$HOME/.local")
+"$HOME/.local/bin/space16x" --help
+```
+
+The toolchain file under `cli/` selects the project compiler. To make a distributable package, use [the packaging instructions](release.md#package-the-cli-locally).
+
+## Build the Mac app from source
+
+The Mac app targets macOS 14. Build from the checkout on a Mac with Swift 6 or later and the Xcode Command Line Tools.
 
 ```sh
 scripts/package-macos.sh
 open "dist/Space 16X.app"
 ```
 
-The app in `dist` is built for the current Mac and ad hoc signed for local development. Use `scripts/package-macos.sh --universal` to build both arm64 and x86-64 slices. If you want the command line tool, install it separately:
+The app in `dist` is built for the current Mac and ad hoc signed for local development. Use `scripts/package-macos.sh --universal` to build both arm64 and x86-64 slices.
+
+## Install a Mac app release
+
+When the signed and notarized app release is available, download its universal ZIP and SHA-256 file. Verify and expand the archive from the download directory.
 
 ```sh
-swift build -c release --product space16x
-mkdir -p "$HOME/.local/bin"
-install -m 0755 "$(swift build -c release --show-bin-path)/space16x" "$HOME/.local/bin/space16x"
+shasum -a 256 -c space16x-0.2.0-macos-universal.zip.sha256
+ditto -x -k space16x-0.2.0-macos-universal.zip .
 ```
 
-### Linux
+Move **Space 16X.app** to Applications in Finder and open it.
 
-The first release target is Ubuntu 24.04 x86-64. With the Swift toolchain installed:
-
-```sh
-swift build -c release --product space16x
-mkdir -p "$HOME/.local/bin"
-install -m 0755 "$(swift build -c release --show-bin-path)/space16x" "$HOME/.local/bin/space16x"
-```
-
-Add `$HOME/.local/bin` to your shell's `PATH` to use the installed command by name. A default SwiftPM build on Linux uses runtime libraries from the build toolchain. For a transferable Ubuntu package, use `scripts/package-linux.sh` to link the Swift runtime statically and produce a checksummed archive.
-
-## Install a release bundle
-
-Use the following steps once release bundles are available.
-
-### macOS release
-
-Download the universal ZIP and its companion SHA-256 file. From the download directory, verify and expand the ZIP:
-
-```sh
-shasum -a 256 -c space16x-0.1.1-macos-universal.zip.sha256
-ditto -x -k space16x-0.1.1-macos-universal.zip .
-```
-
-Move **Space 16X.app** to Applications in Finder and open it. The release app uses Developer ID signing and Apple notarization.
-
-### Ubuntu release
-
-Download the CLI archive and its companion SHA-256 file. From the download directory:
-
-```sh
-sha256sum -c space16x-0.1.1-linux-x86_64.tar.gz.sha256
-tar -xzf space16x-0.1.1-linux-x86_64.tar.gz
-mkdir -p "$HOME/.local/bin"
-install -m 0755 space16x-0.1.1-linux-x86_64/space16x "$HOME/.local/bin/space16x"
-"$HOME/.local/bin/space16x" --version
-```
-
-## Mac keyboard shortcuts
+## Mac app keyboard shortcuts
 
 Focus the file table to use arrow keys for row selection. Core commands are available in the menu bar.
 

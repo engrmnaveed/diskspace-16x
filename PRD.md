@@ -1,7 +1,7 @@
 # Space 16X — Product requirements
 
 **Owner** 16X Brains  
-**Status** Initial draft · 18 November 2026  
+**Status** Updated for v0.2 · 19 November 2026\
 **Local project** Disk Space Analyzer 16X  
 **Working product name** Space 16X · CLI executable `space16x`  
 **Alternate names** DiskScope 16X, Disk Atlas 16X  
@@ -9,7 +9,7 @@
 
 ## Product
 
-Space 16X is a Mac-first disk space analyzer that helps someone find the file or folder responsible for a storage problem. The native macOS app is the primary product. The shared scanner and CLI also target Linux. Use the working product name and a simple 16X Brains credit from day one. Decide on the final name, identity, and company-site placement before public launch.
+Space 16X is a Mac-first disk space analyzer that helps someone find the file or folder responsible for a storage problem. The native macOS app is the primary product. The Rust CLI also targets Linux and provides a terminal explorer and scriptable reports. Use the working product name and a simple 16X Brains credit from day one. Decide on the final name, identity, and company-site placement before public launch.
 
 ## Users and their jobs
 
@@ -19,23 +19,23 @@ Space 16X is a Mac-first disk space analyzer that helps someone find the file or
 
 ## Free edition
 
-The core scanner, macOS Community app, and CLI are free and open source. The CLI stays free on both macOS and Linux. The proposed public source license is MIT, subject to owner confirmation before publication. Both desktop and CLI work offline without an account.
+The macOS Community app, CLI, and their scanners are free and open source. The CLI stays free on both macOS and Linux. The project uses the [MIT License](LICENSE). Both desktop and CLI work offline without an account.
 
-| Area | v0.1 requirement |
+| Area | v0.2 requirement |
 | --- | --- |
-| Start a scan | Choose a folder or mounted local drive using the Mac folder picker or Finder drag-and-drop. The CLI takes a folder path. Ordinary readable folders work with standard user permissions. |
-| Browse | Rank the Mac app's list, treemap, donut, and largest-files view by allocated size. Keep drill-down and breadcrumb navigation accessible by keyboard. |
+| Start a scan | Choose a folder or mounted local drive using the Mac folder picker or Finder drag-and-drop. The CLI accepts a directory path and defaults to the current directory. Ordinary readable folders work with standard user permissions. |
+| Browse | Rank the Mac app's list, treemap, donut, and largest-files view by allocated size. Keep drill-down and breadcrumb navigation accessible by keyboard. The terminal explorer opens in a TTY and offers folder navigation, search filtering, and largest files by allocated bytes. |
 | Inspect | Reveal an item in Finder and copy its path. Show the first two levels while deeper scanning continues, with overall progress, folder status, cancellation, and error details. |
-| Automate | Provide `space16x scan PATH --top N` and `--json`. JSON includes the scan scope, byte counts, the top-file limit, and whether errors made the results partial. |
+| Automate | Provide `space16x scan [PATH] [--depth N | --top N] [--json]`. Use one level by default and emit plain text when the terminal explorer is invoked with redirected input or output. JSON schema 2 carries the scope, allocated bytes, the requested depth or top limit, and scan issues. |
 | Scan correctly | Walk metadata only. Skip symbolic links and different-device mounts. Keep macOS cloud-only placeholders as references with zero counted bytes and leave their folder contents unexpanded. Count each hard-linked file's bytes once within the scan. Continue past unreadable descendants and fail clearly when the root itself is unreadable. |
 | Explain disk usage | Directory totals sum counted regular-file bytes. Allocated bytes are reported by the filesystem. APFS clones may share blocks, snapshots may retain blocks, and scan totals can differ from volume usage or space recovered after deletion. |
-| Preserve user control | The analyzer is read-only. v0.1 keeps scan results in memory, with JSON written by the CLI on request. File management happens in Finder. |
+| Preserve user control | The analyzer is read-only. The app and CLI keep scan results in memory, with JSON written by the CLI on request. File management happens in Finder. |
 
 Defer automatic cleanup, duplicate hashing, background monitoring, network scans, and full-volume storage reconciliation. Validate behavior with actual cloud providers before promising offline directory enumeration.
 
 ## macOS premium hypothesis
 
-Keep the ordinary scanning, browsing, and export workflow useful in the free edition. Test demand for a dedicated **Build Footprint** workflow in the Mac app:
+Keep the ordinary scanning, browsing, and export workflow useful in the free edition. Test demand for a dedicated **Build Footprint** workflow in the Mac app.
 
 1. Choose project and optional related output folders. Save a baseline and name the operation being measured, such as “first Xcode build” or “install JS dependencies.”
 2. Run the operation independently, then capture a second scan. Show gained and removed bytes per root, rank changed paths, and flag scope or permission differences that make comparisons unreliable.
@@ -51,22 +51,23 @@ Test **US$4.99 one-time** first. It is about half of DaisyDisk’s US$9.99 lifet
 
 ## Architecture and delivery
 
-Use SwiftPM with a shared scanner and a portable CLI. Keep SwiftUI and AppKit in a macOS-only target. Start with macOS 14 as the deployment floor and validate supported macOS versions before release. Confirm the first supported Linux distribution and architecture through CI before advertising downloads. Keep release packaging and any future premium entitlement code out of the scanner.
+Keep the SwiftPM scanner, SwiftUI, and AppKit in the native app. Build the portable CLI with Cargo and the pinned Rust toolchain. Apply the same allocated-size accounting rules in each scanner and compare stable fixtures across the products. Use macOS 14 as the deployment floor and validate supported versions before release. Prepare native CLI archives for macOS Apple silicon and Intel plus static musl archives for Linux x86-64 and ARM64. Provide a checksummed, per-user GitHub release installer and source instructions for other Linux architectures. Keep release packaging and any future premium entitlement code out of the scanners.
 
 | Milestone | Done when |
 | --- | --- |
-| Local prototype | A fixture can be scanned from the CLI and explored in a native Mac window. Both surfaces use the same scanner. Test known sizes, hard links, symlinks, sparse files, and partial results. |
-| Community preview | Drag-and-drop, navigation, accessibility, and cancellation pass manual checks. Linux CI runs the CLI and fixtures. Document scope and version support, record scan time and peak memory on a reproducible large tree, and publish source and build instructions after owner review. |
-| Public v0.1 | Ship a signed, notarized macOS build and a tested Linux CLI artifact. Publish an installation guide, an example report, and contribution issues. |
+| Local prototype | A fixture can be scanned from the CLI and explored in a native Mac window. Verify parity with known sizes, hard links, symlinks, sparse files, and partial results. |
+| Community preview | Drag-and-drop, navigation, accessibility, and cancellation pass manual checks. CI runs the Rust CLI, TUI, and fixtures on both macOS and Linux architectures. Document scope and version support, record scan time and peak memory on a reproducible large tree, and publish source and build instructions after owner review. |
+| Public release | Ship a signed, notarized macOS app and tested CLI artifacts for the release target matrix. Publish an installation guide, an example report, and contribution issues. |
 | Premium discovery | Observe at least three developers comparing real build or install footprints. Verify that the receipt changes an actual decision before building licensing or billing. |
 
-## v0.1 acceptance
+## v0.2 acceptance
 
 - A user can locate a known large file inside a nested fixture and reveal it in Finder using keyboard or pointer.
-- With identical scope and byte metric, stable fixture paths produce matching desktop and CLI sizes and rank consistently, including ties.
+- With identical scope, stable fixture paths produce matching allocated sizes in the desktop app and CLI and rank consistently, including ties.
 - A partial scan reports skipped paths and clearly qualifies its totals. The CLI distinguishes complete scans, partial results, and fatal errors.
+- The CLI can browse and filter a scanned directory in an interactive terminal. Plain text and JSON work in scripts. Verify release checksums and install without administrator privileges.
 - Report scan speed and peak memory using the same fixture on named hardware before making performance claims. Cancellation keeps the Mac interface responsive.
 
 ## Decisions before a public release
 
-Confirm the final name, open-source license, minimum macOS version and architectures, Linux support matrix, release channels, and the date to add the project to the 16X Brains site. No pricing, payment, or distribution commitments are needed for the prototype.
+Confirm the final name, runtime coverage for the candidate release matrix, release channels, and the date to add the project to the 16X Brains site. No pricing, payment, or distribution commitments are needed for the prototype.

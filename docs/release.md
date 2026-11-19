@@ -2,13 +2,13 @@
 
 ## Review before publication
 
-Confirm the product name, MIT license, macOS floor and architectures, first Linux target, distribution channels, and company-site placement with the project owner. Record the scan benchmark on named hardware. Exercise the [macOS manual checks](manual-qa.md), including the macOS 14 deployment floor, before claiming support. Hosted CI covers Apple silicon and Intel on macOS 15 and the CLI on Ubuntu 24.04 x86-64.
+Confirm the product name, runtime coverage for the release matrix, distribution channels, and company-site placement with the project owner. Record the scan benchmark on named hardware. Exercise the [macOS manual checks](manual-qa.md), including the macOS 14 deployment floor, before claiming support. Hosted CI is configured for Apple silicon and Intel on macOS 15, plus the CLI on Ubuntu 24.04 x86-64 and ARM64.
 
-Check the version in [scripts/release-version](../scripts/release-version) and the CLI's `--version` output. Update the [changelog](../CHANGELOG.md), the [installation guide](install.md) package examples, and the release notes as needed.
+Check that [scripts/release-version](../scripts/release-version), [cli/Cargo.toml](../cli/Cargo.toml), and the CLI's `--version` output agree. Update the [changelog](../CHANGELOG.md), the [installation guide](install.md) package examples, and the release notes as needed.
 
 ## Build release artifacts in GitHub Actions
 
-After connecting an approved remote, put the reviewed source on the default branch. Create a `release-signing` environment and configure its Developer ID and notarization credentials. Use the certificate's identity name from `security find-identity -v -p codesigning`.
+Push the reviewed source to the default branch. To sign the native Swift app, configure Developer ID and notarization credentials in the `release-signing` environment. Use the certificate's identity name from `security find-identity -v -p codesigning`.
 
 | Environment secret | Value |
 | --- | --- |
@@ -19,9 +19,11 @@ After connecting an approved remote, put the reviewed source on the default bran
 | `APPLE_API_KEY_ID` | Key ID. |
 | `APPLE_API_ISSUER` | Issuer UUID. |
 
-Tag the reviewed commit with the version prefixed by `v`. Run **Release artifacts** from that tag. The workflow runs the macOS and Linux checks, builds the universal app and x86-64 CLI, signs the app with hardened runtime, requests notarization, staples the ticket, and uploads checksummed archives for review.
+Tag the reviewed commit with the version prefixed by `v`. Run **Release artifacts** from that tag. The workflow runs the macOS and Linux checks and uploads the four tested CLI archives with their checksums and the installer script. Enable **Also sign and notarize the native Swift Mac app** to get a Developer ID-signed ZIP with a stapled notarization ticket.
 
-Review the Apple notary log and verify both checksums. Test the archived Mac app on a fresh Mac and the CLI in a clean Ubuntu 24.04 x86-64 environment. Publish the approved archives and corresponding checksum files with the release notes. The workflow leaves publication to the owner. The [contribution issue drafts](contribution-issues.md) are ready for the repository issue tracker.
+Review the Apple notary log and verify the checksums. Test the archived app on a fresh Mac and the CLI archives on their matching architectures. Publish the approved artifacts and release notes to the versioned GitHub Release. Upload each archive and matching `.sha256` file as a separate asset, keeping the exact generated filenames. The installer locates them through the release's stable asset names.
+
+The workflow produces review artifacts. The owner publishes them after review. The [contribution issue drafts](contribution-issues.md) are ready for the repository issue tracker.
 
 ## Sign and notarize on a Mac
 
@@ -40,8 +42,16 @@ The notarization script signs a copy of the app and places the distributable ZIP
 - [Apple packaging guide](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution)
 - [GitHub guide to importing signing identities on macOS runners](https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications)
 
-## Package Ubuntu locally
+## Package the CLI locally
 
-On Ubuntu 24.04 x86-64 with Swift 6.2.4, run `scripts/package-linux.sh`. This builds the CLI with the Swift runtime linked into the executable and saves a tarball and SHA-256 file in `dist`.
+Build on a host matching one of the [CLI release targets](install.md#candidate-cli-targets). Install the Rustup toolchain and the target's Rust standard library. On Linux, install the platform's musl development tools and binutils. Set the target string for your host and run the packaging script from the checkout.
 
-Run `python3 scripts/check-cli.py PATH-TO-EXTRACTED-CLI` as a standard user. Also run the extracted executable on a fresh Ubuntu 24.04 x86-64 system with no Swift toolchain installed.
+```sh
+target=x86_64-unknown-linux-musl
+(cd cli && rustup target add "$target")
+scripts/package-cli.sh "$target"
+```
+
+The script checks the executable's version, confirms its macOS architecture or Linux static linkage, and smoke-tests a scan before creating `dist/space16x-<target>.tar.gz` and its SHA-256 file. Mac CLI archives use an ad hoc signature. The universal native app follows the Developer ID and notarization procedure above.
+
+Run `scripts/check-cli.py` and `scripts/check-tui.py` against the executable extracted from the archive. Use a standard user account to exercise permission errors.

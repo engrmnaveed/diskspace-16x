@@ -1,5 +1,14 @@
 # Space 16X verification
 
+## 0.2.0
+
+- The Rust CLI passed 14 unit tests on Apple silicon and 13 each on Linux ARM64 and x86-64. The release archives for those three targets and Intel macOS passed the CLI and pseudo-terminal checks. Intel macOS ran through Rosetta. The terminal checks include directory navigation, largest files, resize, and terminal restoration after quit and Ctrl-C.
+- The Linux archives passed static-linkage and SHA-256 checks. Both Mac executables passed ad hoc signature verification and declare macOS 14 as their minimum. All four archives include the MIT license.
+- The installer fixture exercises curl and GNU Wget, all four platform routes, version selection, missing assets, checksum rejection, and refusal to follow HTTP redirects. GitHub installation uses the published release archives.
+- All 12 Swift tests passed. The Rust CLI also scanned the previously reported Books package on this Mac in 0.056 seconds with its cloud-related filesystem flags unchanged.
+
+The Rust release CLI benchmark used the 100,000-file fixture on the Apple M5 Pro MacBook Pro with macOS 27.2.1 and APFS. The three runs took 0.1893, 0.1848, and 0.1978 seconds. Peak resident memory ranged from 34,521,088 to 34,553,856 bytes. See [benchmark instructions](../CONTRIBUTING.md#benchmark-a-scanner-change).
+
 ## 0.1.1
 
 - Twelve macOS fixture tests and eleven Ubuntu x86-64 fixture tests passed. The new tests cover the depth cutoff, completed-folder updates, cancellation, hard-link attribution across the preview boundary, and macOS's bounded provider calls.
@@ -19,7 +28,7 @@ Local run on 18 November 2026. macOS testing used a MacBook Pro with an Apple M5
 | Desktop views | The packaged app launched. A local harness exercised the native folder list at its minimum width, the treemap, the largest-files table, and the partial-results sheet. It also verified navigation, cancellation, and recovery in the workspace model. |
 | Package integrity | The app passed strict ad-hoc signature verification. Both Mach-O slices declare macOS 14.0 as the minimum. The Ubuntu archive passed SHA-256 verification. |
 
-## Scan benchmark
+## Swift CLI benchmark (0.1.0)
 
 The release CLI scanned 100,000 files of 512 logical bytes each in 1,100 subdirectories on the Mac’s APFS data volume. Each timed run requested the 20 largest files by allocated size with JSON output. The harness generated the fixture and performed one warm-up before timing. Wall time includes starting the process and writing the report.
 
@@ -29,7 +38,7 @@ The release CLI scanned 100,000 files of 512 logical bytes each in 1,100 subdire
 | 2 | 0.2127 | 34,111,488 |
 | 3 | 0.2123 | 34,095,104 |
 
-Run `python3 scripts/benchmark.py PATH_TO_RELEASE_CLI` to repeat the measurement. Storage, directory shape, cache state, and other activity affect the result.
+The current Rust CLI can run the same fixture via `python3 scripts/benchmark.py PATH_TO_RELEASE_CLI`. Storage, directory shape, cache state, and other activity affect the result.
 
 ## Public release checks
 

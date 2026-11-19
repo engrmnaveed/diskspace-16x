@@ -4,7 +4,7 @@
 
 # Space 16X
 
-Find the file or folder using your disk space. Space 16X is a read-only analyzer with a native macOS app and a scriptable CLI for macOS and Linux. Both use the same metadata scanner and work offline without an account.
+Find the file or folder using your disk space. Space 16X is a read-only analyzer with a native macOS app and a Rust terminal explorer for macOS and Linux. Both rank by allocated size, use filesystem metadata, and work offline without an account.
 
 ## Analyze a folder on macOS
 
@@ -16,36 +16,47 @@ The Mac app uses allocated size for totals, rankings, and chart shares. On a lar
 
 The treemap shows the largest items with a positive size. Remaining bytes are grouped as **Other Items**. Switch back to **List** to inspect each item.
 
-## Use the CLI
+## Explore from the terminal
 
 ```sh
+space16x
+space16x "$HOME/Downloads"
+space16x scan "/Volumes/Work" --depth 2
 space16x scan "$HOME/Downloads" --top 20
-space16x scan "/Volumes/Work" --metric logical --top 5
-space16x scan ./fixtures --top 5 --json > report.json
+space16x scan --top 10 --json > report.json
 ```
+
+Use the arrow keys and Enter to drill into a folder, `/` to filter, `f` for the largest files, and `?` for help. The `scan` command provides plain text and JSON for scripts.
 
 Exit code `0` means the scan completed, `2` means it returned partial results, and `1` means the scan could not start or complete. A partial JSON report carries its issues and totals on standard output. See the [CLI reference](docs/cli.md) and [example report](docs/example-report.json).
 
 ## Build and install
 
-The app targets macOS 14 or later. The first Linux CLI release target is Ubuntu 24.04 x86-64. For a source checkout with Swift 6 installed:
+The candidate CLI targets are Apple silicon and Intel on macOS 14 or later, plus static Linux builds for x86-64 and ARM64. From a source checkout, install the CLI with Rustup and Cargo.
 
 ```sh
-swift build -c release --product space16x
-"$(swift build -c release --show-bin-path)/space16x" --help
+(cd cli && cargo install --locked --path . --root "$HOME/.local")
+"$HOME/.local/bin/space16x" --help
 ```
 
-On macOS, build and open the app:
+Build and open the native app on macOS with Swift 6 or later.
 
 ```sh
 open "$(scripts/package-macos.sh)"
 ```
 
-See the [installation guide](docs/install.md) for configuration, package verification, and keyboard shortcuts.
+Once a [GitHub release](https://github.com/engrmnaveed/diskspace-16x/releases) has the CLI archives, you can install a checksummed bundle without sudo.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh -o space16x-install.sh
+sh ./space16x-install.sh
+```
+
+Add `--version 0.2.0` to install a specific published version. See the [installation guide](docs/install.md) for target names and keyboard shortcuts.
 
 ## How totals are counted
 
-- Allocated bytes come from filesystem metadata. Logical bytes come from file length. Sparse files often have fewer allocated bytes than logical bytes.
+- Allocated bytes come from filesystem metadata. A sparse file can have a large reported length and use very few disk blocks.
 - Directory totals sum regular-file bytes within the scan. A hard-linked file contributes once. Symbolic links and mounts on other devices are skipped.
 - macOS scans keep cloud-only placeholders as references with zero counted bytes and leave cloud-only folders unexpanded. If a metadata call stalls in a known iCloud or File Provider directory, the scan skips the affected path and reports partial results.
 - If a descendant cannot be inspected, the scan continues and marks its result as partial. Open the scan details to see which paths were affected.
@@ -56,4 +67,4 @@ See the [installation guide](docs/install.md) for configuration, package verific
 
 Start with the [contributor guide](CONTRIBUTING.md) for the package layout, tests, and benchmark. See the [changelog](CHANGELOG.md) for release scope.
 
-Built by [16X Brains](https://16xbrains.com/).
+Built by [16X Brains](https://16xbrains.com/) and distributed under the [MIT License](LICENSE).

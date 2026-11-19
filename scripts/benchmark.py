@@ -18,6 +18,7 @@ PAYLOAD = bytes(512)
 
 
 def create_fixture(root):
+    allocated_bytes = 0
     for group_index in range(100):
         group = root / f"group-{group_index:03}"
         group.mkdir()
@@ -27,9 +28,11 @@ def create_fixture(root):
             for file_index in range(FILES_PER_DIRECTORY):
                 path = directory / f"file-{file_index:03}.bin"
                 path.write_bytes(PAYLOAD)
+                allocated_bytes += path.stat().st_blocks * 512
+    return allocated_bytes
 
 
-def measure(binary, root, os_name):
+def measure(binary, root, os_name, expected_bytes):
     scan = [binary, "scan", str(root), "--top", "20", "--json"]
     with tempfile.TemporaryFile() as output:
         started = time.perf_counter()
@@ -41,8 +44,7 @@ def measure(binary, root, os_name):
             raise RuntimeError("The timed scan failed.")
         output.seek(0)
         report = json.load(output)
-    expected_bytes = DIRECTORIES * FILES_PER_DIRECTORY * len(PAYLOAD)
-    if report["isPartial"] or report["logicalBytes"] != expected_bytes:
+    if report["isPartial"] or report["allocatedBytes"] != expected_bytes:
         raise RuntimeError("The scan did not include the full benchmark fixture.")
     # Darwin reports ru_maxrss in bytes. Linux reports it in KiB.
     peak_bytes = usage.ru_maxrss * (1 if os_name == "Darwin" else 1024)
@@ -67,9 +69,9 @@ def main():
         parser.error("The benchmark supports macOS and Linux.")
     with tempfile.TemporaryDirectory(prefix="space16x-bench-", dir=args.fixture_parent) as path:
         root = Path(path).resolve()
-        create_fixture(root)
+        allocated_bytes = create_fixture(root)
         run([binary, "scan", str(root), "--top", "20", "--json"], stdout=DEVNULL, check=True)
-        runs = [measure(binary, root, os_name) for _ in range(3)]
+        runs = [measure(binary, root, os_name, allocated_bytes) for _ in range(3)]
         if os_name == "Darwin":
             os_version = check_output(["sw_vers", "-productVersion"], text=True).strip()
         else:
@@ -83,7 +85,8 @@ def main():
                 "groupDirectories": 100,
                 "leafDirectories": DIRECTORIES,
                 "files": DIRECTORIES * FILES_PER_DIRECTORY,
-                "logicalBytesPerFile": len(PAYLOAD)
+                "payloadBytesPerFile": len(PAYLOAD),
+                "allocatedBytes": allocated_bytes,
             },
             "warmups": 1,
             "runs": runs

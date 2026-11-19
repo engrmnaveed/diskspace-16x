@@ -2,6 +2,11 @@ name: Release artifacts
 
 on:
   workflow_dispatch:
+    inputs:
+      sign_macos:
+        description: Also sign and notarize the native Swift Mac app
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -24,33 +29,12 @@ jobs:
   test:
     needs: verify
     uses: ./.github/workflows/ci.yml
-
-  linux:
-    needs: test
-    name: Package Linux CLI
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Build, verify and archive
-        run: |
-          docker run --rm --network none --user "$(id -u):$(id -g)" \
-            --volume "$PWD:/workspace" --workdir /workspace \
-            swift:6.2.4-noble@sha256:3459518b2e723a7c363d0f8cfa44fc796c77ecd8c18e92fd10e6f92dd78c0b12 \
-            scripts/package-linux.sh
-          (cd dist && sha256sum --check space16x-*.tar.gz.sha256)
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: space16x-linux-x86_64
-          path: |
-            dist/*.tar.gz
-            dist/*.tar.gz.sha256
-          if-no-files-found: error
+    with:
+      upload_cli: true
 
   macos:
     needs: test
+    if: inputs.sign_macos
     name: Sign and notarize Mac app
     runs-on: macos-15
     environment: release-signing

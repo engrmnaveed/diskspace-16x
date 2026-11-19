@@ -3,12 +3,10 @@ import PackageDescription
 
 var products: [Product] = [
     .library(name: "SpaceCore", targets: ["SpaceCore"]),
-    .executable(name: "space16x", targets: ["SpaceCLI"]),
 ]
 
 var targets: [Target] = [
     .target(name: "SpaceCore"),
-    .executableTarget(name: "SpaceCLI", dependencies: ["SpaceCore"]),
     .testTarget(name: "SpaceCoreTests", dependencies: ["SpaceCore"]),
 ]
 
