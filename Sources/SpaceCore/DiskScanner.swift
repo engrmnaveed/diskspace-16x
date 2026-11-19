@@ -129,6 +129,11 @@ private struct Traversal {
         }
 
         let rootDevice = expected.st_dev
+        #if os(macOS)
+        let canonicalScope = path == "/" ? "/" : try? canonicalDirectoryPath(parent: rootListing.directory.descriptor, name: ".")
+        let startupVolume = canonicalScope
+            .flatMap { StartupVolume(scope: path, canonicalScope: $0) }
+        #endif
         var ancestors = Set([FileIdentity(expected)])
         var stack = [DirectoryFrame(
             path: path,
@@ -186,6 +191,21 @@ private struct Traversal {
                     add(entry, to: &stack[level], parentDepth: level)
                     continue
                 }
+                #if os(macOS)
+                if let startupVolume, startupVolume.isBackingPath(childPath) {
+                    do {
+                        let canonical = try self.metadata.perform(at: childPath, isProvider: parent.isProvider) { _ in
+                            try canonicalDirectoryPath(parent: parent.descriptor, name: name.displayName)
+                        }
+                        if startupVolume.isAlias(canonical) { continue }
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        issues.append(ScanIssue(path: childPath, message: error.localizedDescription))
+                        continue
+                    }
+                }
+                #endif
                 if let depthLimit, level + 1 >= depthLimit {
                     stack[level].add(directoryEntry(path: childPath, name: name.displayName, pending: true))
                     continue
@@ -303,6 +323,63 @@ private struct Traversal {
         previewUpdates?.publishIfReady(issues: issues)
     }
 }
+
+#if os(macOS)
+struct StartupVolume {
+    private static let dataMount = "/System/Volumes/Data"
+    private static let dataPrefix = dataMount + "/"
+    private let canonicalScope: String
+    private let backingPrefix: String
+
+    init?(scope: String, canonicalScope: String) {
+        let prefix = canonicalScope == "/" ? "/" : canonicalScope + "/"
+        // A scan started at or inside the Data mount treats it as its own scope.
+        guard Self.dataMount.utf8.starts(with: prefix.utf8) else { return nil }
+        let relativeMount = Self.dataPrefix.dropFirst(prefix.count)
+        self.canonicalScope = prefix
+        self.backingPrefix = (scope == "/" ? "/" : scope + "/") + relativeMount
+    }
+
+    func isBackingPath(_ path: String) -> Bool {
+        path.utf8.starts(with: backingPrefix.utf8)
+    }
+
+    func isAlias(_ canonical: String) -> Bool {
+        // Keep firmlinks in their visible locations and retain Data-only directories.
+        canonical != "/"
+            && canonical.utf8.starts(with: canonicalScope.utf8)
+            && !canonical.utf8.starts(with: Self.dataPrefix.utf8)
+            && canonical != Self.dataMount
+    }
+}
+
+func canonicalDirectoryPath(parent: Int32, name: String) throws -> String {
+    let operation = "Checking for an APFS firmlink"
+    var attributes = attrlist()
+    attributes.bitmapcount = UInt16(ATTR_BIT_MAP_COUNT)
+    attributes.commonattr = attrgroup_t(ATTR_CMN_FULLPATH)
+    // ATTR_CMN_FULLPATH reports the visible path even when reached through the Data mount.
+    // The only requested attribute is a path reference immediately after the buffer length.
+    let referenceOffset = MemoryLayout<UInt32>.size
+    let pathOffset = referenceOffset + MemoryLayout<attrreference_t>.size
+    var buffer = [UInt8](repeating: 0, count: pathOffset + Int(MAXPATHLEN))
+    return try buffer.withUnsafeMutableBytes { bytes in
+        let result = name.withCString {
+            getattrlistat(parent, $0, &attributes, bytes.baseAddress, bytes.count, UInt(FSOPT_NOFOLLOW))
+        }
+        guard result == 0 else { throw DirectoryFailure(operation: operation, code: errno) }
+        let reference = bytes.loadUnaligned(fromByteOffset: referenceOffset, as: attrreference_t.self)
+        let length = Int(reference.attr_length)
+        guard reference.attr_dataoffset == pathOffset - referenceOffset,
+              length > 1, length <= Int(MAXPATHLEN), bytes[pathOffset + length - 1] == 0,
+              let path = String(bytes: bytes[pathOffset..<(pathOffset + length - 1)], encoding: .utf8),
+              path.utf8.first == 0x2F else {
+            throw DirectoryFailure(operation: operation, code: EIO)
+        }
+        return path
+    }
+}
+#endif
 
 private struct FileIdentity: Equatable, Hashable {
     let device: dev_t
