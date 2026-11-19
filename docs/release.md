@@ -8,7 +8,17 @@ Check that [scripts/release-version](../scripts/release-version), [cli/Cargo.tom
 
 ## Build release artifacts in GitHub Actions
 
-Pushing a new `vX.Y.Z` tag that matches `scripts/release-version` runs **Publish CLI**. The workflow tests the four Rust targets and publishes their checksummed archives to the tagged GitHub release. The Mac app signing workflow is separate.
+Pushing a new `vX.Y.Z` tag that matches `scripts/release-version` runs **Publish CLI**. The workflow tests the four Rust targets, then waits for approval on the `release` environment. After approval, it attests build provenance and publishes the checksummed archives, `install.sh`, and `install.sh.sha256` to the tagged GitHub release. The install one-liners fetch `install.sh` from the latest release, so every release must include it. The Mac app signing workflow is separate.
+
+### One-time repository settings
+
+These settings live on GitHub, not in the repository. Set them before the next tag:
+
+- **Environments → `release`:** add yourself, or the release owners, as required reviewers. Restrict deployments to tags matching `v*`. Without reviewers, a tag push publishes immediately.
+- **Rules → Rulesets:** protect tags matching `v*` from creation, update, and deletion by anyone outside the release owners. Protect `main` with required pull requests and the CI status checks.
+- **Settings → General → Releases:** enable immutable releases, so published assets and their tags can't be replaced.
+- **Security → Private vulnerability reporting:** enable it. [SECURITY.md](../SECURITY.md) directs reporters there.
+- **Security → Dependabot:** enable alerts and security updates. [.github/dependabot.yml](../.github/dependabot.yml) schedules weekly version updates for Cargo and GitHub Actions.
 
 Push the reviewed source to the default branch. To sign the native Swift app, configure Developer ID and notarization credentials in the `release-signing` environment. Use the certificate's identity name from `security find-identity -v -p codesigning`.
 

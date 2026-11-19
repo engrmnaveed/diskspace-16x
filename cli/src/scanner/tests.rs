@@ -134,6 +134,48 @@ fn reports_unreadable_descendants_and_fails_for_an_unreadable_root() -> io::Resu
     Ok(())
 }
 
+#[test]
+fn deep_trees_complete_when_the_open_file_limit_starts_at_the_launchd_default() -> io::Result<()> {
+    // Each traversal level keeps a directory open. Go deeper than the 256-descriptor
+    // soft limit that launchd gives macOS processes, while staying under PATH_MAX.
+    let fixture = Fixture::new()?;
+    let mut deepest = fixture.path().to_path_buf();
+    for _ in 0..300 {
+        deepest.push("d");
+    }
+    fs::create_dir_all(&deepest)?;
+    let leaf = deepest.join("leaf");
+    fs::write(&leaf, [0x2A; 4_096])?;
+    let leaf_bytes = fs::metadata(&leaf)?.blocks() * 512;
+
+    let mut original = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: getrlimit writes a complete rlimit struct into valid, writable memory.
+    assert_eq!(
+        unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut original) },
+        0
+    );
+    let launchd_default = libc::rlimit {
+        rlim_cur: original.rlim_cur.min(256),
+        rlim_max: original.rlim_max,
+    };
+    // SAFETY: setrlimit reads a valid struct. Lowering the soft limit needs no privilege.
+    assert_eq!(
+        unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &launchd_default) },
+        0
+    );
+    let report = fixture.report();
+    // SAFETY: restores the soft limit read above, which never exceeds the hard limit.
+    unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &original) };
+
+    let report = report?;
+    assert!(report.issues.is_empty(), "{:?}", report.issues.first());
+    assert_eq!(report.root.allocated_bytes, leaf_bytes);
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn retains_non_utf8_names_and_counts_their_bytes() -> io::Result<()> {

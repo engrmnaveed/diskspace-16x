@@ -103,6 +103,28 @@ pub(super) fn with_local_metadata<T>(operation: impl FnOnce() -> io::Result<T>) 
     operation()
 }
 
+/// The traversal keeps one directory descriptor open per level. Processes started by
+/// launchd on macOS get a soft limit of 256, so deep trees would otherwise fail with
+/// EMFILE. Raise the soft limit without exceeding the hard limit. This never lowers it.
+pub(super) fn raise_open_file_limit() {
+    // OPEN_MAX from the macOS SDK's <sys/syslimits.h>. It is also ample on Linux.
+    const TARGET: libc::rlim_t = 10_240;
+    let mut limit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: getrlimit writes a complete rlimit struct into valid, writable memory.
+    if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } != 0 {
+        return;
+    }
+    let target = TARGET.min(limit.rlim_max);
+    if limit.rlim_cur < target {
+        limit.rlim_cur = target;
+        // SAFETY: setrlimit reads a valid rlimit struct and changes only this process's limit.
+        let _ = unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &limit) };
+    }
+}
+
 pub(super) fn is_dataless(_metadata: &libc::stat) -> bool {
     #[cfg(target_os = "macos")]
     {

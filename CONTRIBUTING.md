@@ -2,6 +2,8 @@
 
 Open an issue with the exact command or app action, your OS and filesystem, and the results you expected. Use a small synthetic folder to reproduce scan issues. Remove local paths and names before sharing reports or screenshots.
 
+Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md), not in a public issue.
+
 ## Development
 
 The CLI uses Rust and the toolchain pinned in [cli/rust-toolchain.toml](cli/rust-toolchain.toml). The native app uses Swift 6 or later and builds on macOS.

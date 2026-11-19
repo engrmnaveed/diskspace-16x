@@ -50,17 +50,17 @@ open "$(scripts/package-macos.sh)"
 Install a checksummed CLI build from GitHub without sudo. Paste either line in Bash or Zsh.
 
 ```sh
-space16x_path=$(curl -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskspace-16x/releases/latest/download/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
 ```sh
-space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+space16x_path=$(wget -qO- https://github.com/engrmnaveed/diskspace-16x/releases/latest/download/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
 To uninstall and clean up this shell's PATH, run the same installer with `--uninstall`.
 
 ```sh
-space16x_path=$(curl -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskspace-16x/releases/latest/download/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
 See the [installation guide](docs/install.md) for Wget removal, Fish commands, version pinning, and platform support.

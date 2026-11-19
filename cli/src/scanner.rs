@@ -64,6 +64,7 @@ pub fn scan(
     cancelled: &AtomicBool,
     notify: impl FnMut(Event),
 ) -> io::Result<Report> {
+    fs::raise_open_file_limit();
     with_local_metadata(|| {
         check_cancelled(cancelled)?;
         let scope = scan_scope(path)?;
