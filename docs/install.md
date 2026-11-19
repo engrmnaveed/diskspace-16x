@@ -5,14 +5,14 @@
 In Bash, Zsh, or a POSIX shell, paste either one-liner.
 
 ```sh
-space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskspace-16x/releases/latest/download/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/f36f06107316d5a0312f9c52c4a4e96f2cb34597/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
 ```sh
-space16x_path=$(wget -qO- https://github.com/engrmnaveed/diskspace-16x/releases/latest/download/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/f36f06107316d5a0312f9c52c4a4e96f2cb34597/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
-The one-liner downloads `install.sh` from the latest GitHub release, so you run the same reviewed script that was published with the binaries. To read it before running it, download `install.sh` from the [releases page](https://github.com/engrmnaveed/diskspace-16x/releases) and run `sh install.sh --shell-path`.
+The one-liners download the installer from a fixed commit. To review the script first, download it from the URL above, read it, and run `sh install.sh`. Releases after 0.2.1 also provide an attested `install.sh` alongside the archives on the [releases page](https://github.com/engrmnaveed/diskspace-16x/releases).
 
 Run `space16x --version` or open the explorer with `space16x`. The installer checks the archive's SHA-256 digest and installs to `$HOME/.local/share/space16x/bin`. It sets up your shell's startup file when needed, and the one-liner updates the current shell's PATH. Use curl or GNU Wget for the asset download. On a BusyBox-only image, install curl or use the manual archive instructions.
 
@@ -23,11 +23,11 @@ Pass `--version 0.2.1` after `--shell-path` to select a published version. Use `
 Paste either line to remove the executable, installer files, and shell startup entries created by the installer. The command updates PATH in the current shell. It preserves pre-existing PATH entries and manually installed executables.
 
 ```sh
-space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskspace-16x/releases/latest/download/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/f36f06107316d5a0312f9c52c4a4e96f2cb34597/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
 ```sh
-space16x_path=$(wget -qO- https://github.com/engrmnaveed/diskspace-16x/releases/latest/download/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/f36f06107316d5a0312f9c52c4a4e96f2cb34597/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
 ## Fish shell
@@ -35,7 +35,7 @@ space16x_path=$(wget -qO- https://github.com/engrmnaveed/diskspace-16x/releases/
 Use Fish's list syntax to apply PATH immediately. Add `--uninstall` before `--shell-path` to remove the installation. The download can also use `wget -qO-`.
 
 ```fish
-set -l space16x_path (curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskspace-16x/releases/latest/download/install.sh | sh -s -- --shell-path); and test -n "$space16x_path"; and set -gx PATH (string split : -- "$space16x_path")
+set -l space16x_path (curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/f36f06107316d5a0312f9c52c4a4e96f2cb34597/scripts/install.sh | sh -s -- --shell-path); and test -n "$space16x_path"; and set -gx PATH (string split : -- "$space16x_path")
 ```
 
 ### Candidate CLI targets
@@ -68,10 +68,12 @@ On Linux, use `sha256sum -c "$archive.sha256"` and substitute your target. The [
 The SHA-256 file only proves the download wasn't corrupted, because it comes from the same place as the archive. Each release, starting after 0.2.1, also publishes a GitHub build-provenance attestation for every archive and for `install.sh`. The attestation shows that the file was built by this repository's release workflow from the tagged commit. Check it with the [GitHub CLI](https://cli.github.com/):
 
 ```sh
-gh attestation verify space16x-aarch64-apple-darwin.tar.gz --repo engrmnaveed/diskspace-16x
+gh attestation verify space16x-aarch64-apple-darwin.tar.gz \
+  --repo engrmnaveed/diskspace-16x \
+  --signer-workflow engrmnaveed/diskspace-16x/.github/workflows/publish-cli.yml
 ```
 
-The command exits with an error if the file was not produced by the repository's workflow.
+Use the same command with `install.sh` to verify the installer. Add `--source-ref` with the full tag ref, such as `refs/tags/vX.Y.Z`, to require a specific release tag.
 
 ## Build the CLI from source
 

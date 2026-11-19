@@ -5,7 +5,7 @@
 - Complete scans of very deep folder trees. Both scanners raise the open-file soft limit, which macOS sets to 256 for apps launched by launchd, so deep trees are no longer reported as partial with "Too many open files".
 - Escape Unicode bidirectional control characters in terminal paths and messages, so a crafted filename can't display as different text.
 - Restore the terminal before printing a panic message from the explorer.
-- Publish `install.sh` with each release and point the one-line installer at it instead of the `main` branch. Attest build provenance for release archives and the installer. Require approval on the `release` environment before publishing.
+- Publish `install.sh` with each CLI release and attest build provenance for the archives and installer. Pin the one-liners to a reviewed installer commit while the current release is available. Use the `release` environment to apply publication rules.
 - Add a security policy, Dependabot updates, and a cargo-deny check for advisories, licenses, and dependency sources.
 
 ## 0.2.1

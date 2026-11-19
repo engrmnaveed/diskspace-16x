@@ -4,14 +4,16 @@
 import json
 import os
 from pathlib import Path
+import resource
 import subprocess
 import sys
 import tempfile
 
 
-def run(binary, *arguments, status=0, cwd=None):
+def run(binary, *arguments, status=0, cwd=None, preexec_fn=None):
     result = subprocess.run(
-        [binary, *map(str, arguments)], capture_output=True, text=True, check=False, cwd=cwd
+        [binary, *map(str, arguments)], capture_output=True, text=True, check=False,
+        cwd=cwd, preexec_fn=preexec_fn,
     )
     assert result.returncode == status, (
         f"Expected exit {status} for {arguments}, got {result.returncode}: "
@@ -99,12 +101,31 @@ def check(binary, root):
         blocked.chmod(0o700)
 
 
+def check_deep_tree(binary, root):
+    # Each traversal level keeps a descriptor open. Start only the child at launchd's soft limit.
+    deepest = root.joinpath(*(["d"] * 300))
+    deepest.mkdir(parents=True)
+    leaf = deepest / "leaf.dat"
+    leaf.write_bytes(os.urandom(4096))
+
+    def set_launchd_limit():
+        _, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (256, hard_limit))
+
+    scan = run(binary, "scan", root, "--json", preexec_fn=set_launchd_limit)
+    report = json.loads(scan.stdout)
+    assert report["isPartial"] is False and report["issues"] == []
+    assert report["allocatedBytes"] == allocated_bytes(leaf)
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit(f"Usage: {sys.argv[0]} PATH-TO-SPACE16X")
     binary = str(Path(sys.argv[1]).resolve(strict=True))
     with tempfile.TemporaryDirectory(prefix="space16x-cli-") as directory:
         check(binary, Path(directory).resolve())
+    with tempfile.TemporaryDirectory(prefix="space16x-deep-") as directory:
+        check_deep_tree(binary, Path(directory).resolve())
     print("CLI acceptance checks passed.")
 
 

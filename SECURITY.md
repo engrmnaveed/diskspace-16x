@@ -6,7 +6,7 @@ Security fixes go into the latest published release of the CLI and the Mac app. 
 
 ## Report a vulnerability
 
-Report vulnerabilities privately. Do not open a public issue. Use GitHub's private vulnerability reporting: open the repository's **Security** tab and choose **Report a vulnerability**.
+Report vulnerabilities privately. Open the repository's **Security** tab and choose **Report a vulnerability** if available. If the button is unavailable, use the contact email listed on the 16X Brains site to request a private reporting channel before sharing vulnerability details. [16X Brains](https://16xbrains.com/)
 
 Include:
 
@@ -17,7 +17,7 @@ Include:
 
 Leave out personal paths, file names, and credentials.
 
-The maintainer acknowledges reports within 5 business days. A fix or mitigation plan follows within 30 days for confirmed issues. You'll be credited in the release notes unless you'd rather stay anonymous.
+Use the private report for follow-up. Let the maintainer know if you prefer to stay anonymous in the release notes.
 
 ## Scope
 
@@ -30,4 +30,4 @@ Space 16X reads filesystem metadata only. It never opens file contents, writes t
 
 ## Verify a download
 
-Each CLI release archive ships with a `.sha256` file and a GitHub build-provenance attestation. [docs/install.md](docs/install.md#verify-a-release-archive) explains how to check both.
+Each CLI release archive ships with a `.sha256` file. Releases after 0.2.1 also provide GitHub build-provenance attestations. [Verify a release archive](docs/install.md#verify-a-release-archive)
