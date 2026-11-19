@@ -53,7 +53,7 @@ Releases from 0.2.2 include the universal Mac app. Install it with Homebrew. Hom
 brew tap engrmnaveed/tap && brew trust engrmnaveed/tap && brew install --cask engrmnaveed/tap/space16x
 ```
 
-The app is free and open source, and it is not notarized by Apple. The first time you open it, macOS blocks it. To allow it, open **System Settings → Privacy & Security** and click **Open Anyway**. The [installation guide](docs/install.md#install-the-mac-app) covers the direct download, verification, and removal.
+The app is free and open source, and it is not notarized by Apple, so macOS blocks the first launch. In the warning, click **Done**, not **Move to Trash**. Then open **System Settings → Privacy & Security**, scroll to **Security**, and click **Open Anyway**. See [Allow the first launch](docs/install.md#allow-the-first-launch) for every step. The [installation guide](docs/install.md#install-the-mac-app) also covers the direct download, verification, and removal.
 
 Install a checksummed CLI build from GitHub without sudo. Paste either line in Bash or Zsh.
 
