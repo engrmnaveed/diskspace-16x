@@ -2,6 +2,8 @@ mod fs;
 mod preview;
 #[cfg(target_os = "macos")]
 mod provider;
+#[cfg(target_os = "macos")]
+mod startup_volume;
 
 use std::collections::HashSet;
 use std::io;
@@ -175,6 +177,8 @@ impl<F: FnMut(Event)> Walker<'_, F> {
         let mut issues = Vec::new();
         let mut links = HashSet::new();
         let mut ancestors = HashSet::from([identity]);
+        #[cfg(target_os = "macos")]
+        let startup_volume = startup_volume::StartupVolume::for_scope(scope, &directory.fd);
         let mut stack = vec![Frame::new(scope.to_path_buf(), identity, directory)];
         while !stack.is_empty() {
             check_cancelled(self.cancelled)?;
@@ -225,6 +229,25 @@ impl<F: FnMut(Event)> Walker<'_, F> {
                     add(frame, entry, level, preview);
                 }
                 libc::S_IFDIR => {
+                    #[cfg(target_os = "macos")]
+                    if let Some(volume) = &startup_volume
+                        && volume.is_backing_path(&path)
+                        && !fs::is_dataless(&metadata)
+                    {
+                        match self
+                            .metadata
+                            .canonical_directory_path(&path, &frame.fd, &name)
+                        {
+                            Ok(canonical) if volume.is_alias(&canonical) => continue,
+                            Ok(_) => {}
+                            Err(error) => {
+                                check_cancelled(self.cancelled)?;
+                                record_issue(&mut issues, &path, Operation::CanonicalPath, &error);
+                                frame.state = EntryState::Incomplete;
+                                continue;
+                            }
+                        }
+                    }
                     let identity = Identity::from(&metadata);
                     if fs::is_dataless(&metadata) {
                         add(

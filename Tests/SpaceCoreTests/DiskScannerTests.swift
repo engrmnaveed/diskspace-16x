@@ -9,6 +9,58 @@ import Glibc
 #endif
 
 final class DiskScannerTests: XCTestCase {
+    #if os(macOS)
+    func testStartupVolumeExcludesBackingPathsOnlyWhenVisibleWithinScanScope() throws {
+        let scope = "/test/System/.."
+        let volume = try XCTUnwrap(StartupVolume(scope: scope, canonicalScope: "/"))
+        XCTAssertTrue(volume.isBackingPath(scope + "/System/Volumes/Data/Users"))
+        XCTAssertTrue(volume.isBackingPath(scope + "/System/Volumes/Data/System/Library/Caches"))
+        XCTAssertFalse(volume.isBackingPath(scope + "/System/Volumes/Data"))
+        XCTAssertFalse(volume.isBackingPath(scope + "/System/Volumes/DataBackup/Users"))
+        XCTAssertFalse(volume.isBackingPath(scope + "/Users"))
+        XCTAssertTrue(volume.isAlias("/Users"))
+        XCTAssertTrue(volume.isAlias("/System/Library/Caches"))
+        XCTAssertFalse(volume.isAlias("/System/Volumes/Data/.fseventsd"))
+
+        let system = try XCTUnwrap(StartupVolume(scope: "/System", canonicalScope: "/System"))
+        XCTAssertTrue(system.isAlias("/System/Library/Caches"))
+        XCTAssertFalse(system.isAlias("/Users"))
+        XCTAssertFalse(system.isAlias("/SystemBackup/Library"))
+        let data = "/System/Volumes/Data"
+        XCTAssertNil(StartupVolume(scope: data, canonicalScope: data))
+    }
+
+    func testReportsVisiblePathsForFirmlinksOnTheStartupDisk() throws {
+        let data = "/System/Volumes/Data"
+        var visible = stat()
+        var backing = stat()
+        guard lstat("/Users", &visible) == 0, lstat(data + "/Users", &backing) == 0,
+              visible.st_dev == backing.st_dev, visible.st_ino == backing.st_ino else {
+            throw XCTSkip("The startup disk has no APFS firmlink for /Users.")
+        }
+        let mount = open(data, O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        guard mount >= 0 else { throw XCTSkip("The Data volume mount cannot be opened.") }
+        defer { close(mount) }
+        XCTAssertEqual(try canonicalDirectoryPath(parent: mount, name: "Users"), "/Users")
+        XCTAssertEqual(try canonicalDirectoryPath(parent: mount, name: "."), data)
+    }
+
+    func testOrdinaryDirectoryWithStartupVolumeLayoutCountsBothTrees() throws {
+        try withFixture { root in
+            let users = try makeDirectory("Users", under: root)
+            let dataUsers = root.appendingPathComponent("System/Volumes/Data/Users", isDirectory: true)
+            try FileManager.default.createDirectory(at: dataUsers, withIntermediateDirectories: true)
+            let visible = try makeFile("payload", bytes: 8_192, under: users)
+            let backing = try makeFile("payload", bytes: 8_192, under: dataUsers)
+
+            let report = try DiskScanner.scan(path: root.path, preview: { _ in })
+
+            XCTAssertFalse(report.isPartial)
+            XCTAssertEqual(report.root.allocatedBytes, try allocatedBytes(of: visible) + allocatedBytes(of: backing))
+        }
+    }
+    #endif
+
     func testCountsRegularFileMetadataAndKeepsHardLinkOwnershipAtFirstPath() throws {
         try withFixture { root in
             let firstDirectory = try makeDirectory("a-first", under: root)

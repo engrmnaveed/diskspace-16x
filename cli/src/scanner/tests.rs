@@ -88,6 +88,27 @@ fn does_not_count_sparse_file_length() -> io::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn ordinary_directory_with_startup_volume_layout_counts_both_trees() -> io::Result<()> {
+    let fixture = Fixture::new()?;
+    fs::create_dir(fixture.join("Users"))?;
+    fs::create_dir_all(fixture.join("System/Volumes/Data/Users"))?;
+    let visible = fixture.join("Users/payload");
+    let backing = fixture.join("System/Volumes/Data/Users/payload");
+    fs::write(&visible, [0x21; 8_192])?;
+    fs::write(&backing, [0x21; 8_192])?;
+
+    let report = scan(fixture.path(), true, &AtomicBool::new(false), |_| {})?;
+
+    assert!(report.issues.is_empty());
+    assert_eq!(
+        report.root.allocated_bytes,
+        (fs::metadata(visible)?.blocks() + fs::metadata(backing)?.blocks()) * 512
+    );
+    Ok(())
+}
+
 #[test]
 fn rejects_non_directory_roots_and_root_symlinks_with_trailing_slash() -> io::Result<()> {
     let fixture = Fixture::new()?;

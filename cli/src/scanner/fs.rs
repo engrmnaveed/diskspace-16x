@@ -34,6 +34,8 @@ pub(super) struct Directory {
 pub(super) enum Operation {
     Stat,
     List,
+    #[cfg(target_os = "macos")]
+    CanonicalPath,
 }
 
 impl std::fmt::Display for Operation {
@@ -41,6 +43,8 @@ impl std::fmt::Display for Operation {
         f.write_str(match self {
             Self::Stat => "Reading filesystem metadata",
             Self::List => "Listing directory",
+            #[cfg(target_os = "macos")]
+            Self::CanonicalPath => "Checking for an APFS firmlink",
         })
     }
 }
@@ -94,6 +98,25 @@ impl<'a> MetadataAccess<'a> {
             });
         }
         list_at(parent.map(Arc::as_ref), name, expected, self.cancelled)
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(super) fn canonical_directory_path(
+        &mut self,
+        path: &Path,
+        parent: &Arc<OwnedFd>,
+        name: &OsStr,
+    ) -> io::Result<std::path::PathBuf> {
+        use super::startup_volume::canonical_path_at;
+
+        if super::provider::is_provider_path(path) {
+            let parent = Arc::clone(parent);
+            let name = name.to_owned();
+            return self
+                .provider
+                .run(path, move |_| canonical_path_at(&parent, &name));
+        }
+        canonical_path_at(parent, name)
     }
 }
 
@@ -218,7 +241,7 @@ fn directory_fd(parent: Option<&OwnedFd>) -> libc::c_int {
     parent.map_or(libc::AT_FDCWD, AsRawFd::as_raw_fd)
 }
 
-fn posix_path(path: &OsStr) -> io::Result<CString> {
+pub(super) fn posix_path(path: &OsStr) -> io::Result<CString> {
     CString::new(path.as_bytes()).map_err(|_| {
         io::Error::new(
             io::ErrorKind::InvalidInput,

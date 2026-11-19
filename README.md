@@ -81,6 +81,7 @@ See the [installation guide](docs/install.md) for Wget removal, Fish commands, v
 
 - Allocated bytes come from filesystem metadata. A sparse file can have a large reported length and use very few disk blocks.
 - Directory totals sum regular-file bytes within the scan. A hard-linked file contributes once. Symbolic links and mounts on other devices are skipped.
+- On the macOS startup disk, both scanners count APFS firmlinked folders such as `/Users` at their visible paths and skip their duplicate paths under `/System/Volumes/Data`. A direct scan of the Data volume includes those folders.
 - macOS scans keep cloud-only placeholders as references with zero counted bytes and leave cloud-only folders unexpanded. If a metadata call stalls in a known iCloud or File Provider directory, the scan skips the affected path and reports partial results.
 - If a descendant cannot be inspected, the scan continues and marks its result as partial. Open the scan details to see which paths were affected.
 - APFS clones can share blocks and snapshots can retain blocks. Scan totals can differ from volume usage and the amount of space reclaimed after deleting a file.
