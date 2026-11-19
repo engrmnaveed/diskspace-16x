@@ -10,12 +10,17 @@ on:
         description: Upload the tested CLI release archives
         type: boolean
         default: false
+      cli_only:
+        description: Run the Rust CLI matrix only
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   macos:
+    if: ${{ !inputs.cli_only }}
     name: Swift app • ${{ matrix.runner }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15

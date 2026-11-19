@@ -58,7 +58,8 @@ def setup(root, *, os_name, arch, target, transport, release="latest/download",
     downloads = root / "download"
     tools.mkdir()
     downloads.mkdir()
-    commands = ("awk", "cat", "chmod", "cp", "grep", "gzip", "mkdir", "mktemp", "mv", "rm", "tar", "tr")
+    commands = ("awk", "cat", "chmod", "cp", "grep", "gzip", "mkdir", "mktemp", "mv",
+                "od", "readlink", "rm", "rmdir", "tail", "tar", "tr")
     for name in commands:
         source = shutil.which(name)
         assert source, f"{name} is required for installer tests"
@@ -88,6 +89,7 @@ def setup(root, *, os_name, arch, target, transport, release="latest/download",
     env = os.environ | {
         "PATH": str(tools),
         "HOME": str(root / "home"),
+        "SHELL": "/bin/bash",
         "TEST_ASSETS": str(downloads),
         "TEST_ASSET": asset,
         "TEST_ROUTE_LOG": str(root / "requests"),
@@ -111,13 +113,15 @@ def accept(root, platform, version=None):
     else:
         repo = "engrmnaveed/diskspace-16x"
         args = []
-        bin_dir = root / "home/.local/bin"
+        bin_dir = root / "home/.local/share/space16x/bin"
     env, archive, checksum = setup(root, **platform, release=release, repo=repo)
-    result = run(root, env, *args)
+    result = run(root, env, *args, "--shell-path")
     assert result.returncode == 0, result.stderr
     installed = bin_dir / "space16x"
     assert installed.read_bytes() == BINARY and os.access(installed, os.X_OK)
     assert not list(bin_dir.glob(".space16x-install.*"))
+    assert result.stdout.strip() == f"{bin_dir}:{env['PATH']}"
+    assert "Space 16X installer" in (root / "home/.bashrc").read_text()
     return env, archive, checksum, args, installed
 
 
@@ -158,6 +162,41 @@ def main():
 
             result = run(root, env, "--repo", "owner/repo/extra")
             assert result.returncode == 1 and "Invalid GitHub repository" in result.stderr
+
+            active = env | {"PATH": f"{installed.parent}:{env['PATH']}"}
+            result = run(root, active, "--uninstall", "--shell-path")
+            assert result.returncode == 0, result.stderr
+            assert result.stdout.strip() == env["PATH"]
+            assert not installed.exists()
+            assert not (root / "home/.bashrc").exists()
+            assert not (root / "home/.profile").exists()
+            assert not (root / "home/.local/share/space16x").exists()
+
+    with tempfile.TemporaryDirectory(prefix="space16x-install-qa-") as directory:
+        root = Path(directory).resolve()
+        env, _, _ = setup(root, **platforms[0])
+        home = Path(env["HOME"])
+        home.mkdir()
+        profile = home / "shell-settings"
+        original = b"# Personal settings\nexport PERSONAL=yes"
+        profile.write_bytes(original)
+        profile.chmod(0o640)
+        (home / ".zshrc").symlink_to(profile.name)
+        env["SHELL"] = "/bin/zsh"
+        result = run(root, env, "--shell-path")
+        assert result.returncode == 0, result.stderr
+        active = env | {"PATH": result.stdout.strip()}
+        result = run(root, active, "--shell-path")
+        assert result.returncode == 0, result.stderr
+        assert profile.read_text().count("# Space 16X installer") == 1
+        binary = home / ".local/share/space16x/bin/space16x"
+        binary.write_bytes(b"a user's replacement")
+        result = run(root, active, "--uninstall", "--shell-path")
+        assert result.returncode == 0 and "Kept the replacement" in result.stderr
+        assert result.stdout.strip() == env["PATH"]
+        assert (home / ".zshrc").is_symlink()
+        assert profile.read_bytes() == original and profile.stat().st_mode & 0o777 == 0o640
+        assert binary.read_bytes() == b"a user's replacement"
 
     with tempfile.TemporaryDirectory(prefix="space16x-install-qa-") as directory:
         root = Path(directory).resolve()

@@ -1,0 +1,55 @@
+name: Publish CLI
+
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: test "$GITHUB_REF_NAME" = "v$(cat scripts/release-version)"
+
+  test:
+    needs: version
+    uses: ./.github/workflows/ci.yml
+    with:
+      cli_only: true
+      upload_cli: true
+
+  publish:
+    needs: test
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Publish the verified CLI archives
+        shell: bash
+        run: |
+          downloads="$RUNNER_TEMP/space16x-cli"
+          gh run download "$GITHUB_RUN_ID" --repo "$GH_REPO" --pattern 'space16x-cli-*' --dir "$downloads"
+          assets=()
+          for target in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
+            folder="$downloads/space16x-cli-$target"
+            archive="space16x-$target.tar.gz"
+            (cd "$folder" && sha256sum -c "$archive.sha256")
+            assets+=("$folder/$archive" "$folder/$archive.sha256")
+          done
+          gh release create "$GITHUB_REF_NAME" --verify-tag \
+            --title "Space 16X $GITHUB_REF_NAME CLI" \
+            --notes "Space 16X CLI archives for macOS and Linux. See docs/install.md for one-line installation and removal." \
+            "${assets[@]}"

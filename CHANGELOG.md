@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Install or remove the CLI with a single curl or GNU Wget command, including setup and cleanup for PATH.
+- Publish checksummed CLI binaries for macOS and Linux from version tags.
+
 ## 0.2.0 · Local release candidate
 
 - Rust CLI with an interactive Ratatui explorer on macOS and Linux, including allocated-size browsing, filter, largest files, scan details, and cancellation.

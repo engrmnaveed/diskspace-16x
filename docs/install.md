@@ -2,23 +2,39 @@
 
 ## Install the CLI from a release
 
-Once the [GitHub Releases page](https://github.com/engrmnaveed/diskspace-16x/releases) has CLI archives and checksums, download and run the installer.
+In Bash, Zsh, or a POSIX shell, paste either one-liner.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh -o space16x-install.sh
-sh ./space16x-install.sh
-"$HOME/.local/bin/space16x" --version
+space16x_path=$(curl -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
-
-With GNU Wget, download the same installer with this command and run it as above.
 
 ```sh
-wget -qO space16x-install.sh https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh
+space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
-The installer selects the target for your OS and architecture, checks the SHA-256 digest, and installs to `$HOME/.local/bin` without sudo. It uses curl or GNU Wget and `sha256sum` or `shasum`. On a minimal Linux image with BusyBox wget, use curl or download and verify the archive manually. Add `$HOME/.local/bin` to your shell's `PATH` to run `space16x` by name.
+Run `space16x --version` or open the explorer with `space16x`. The installer checks the archive's SHA-256 digest and installs to `$HOME/.local/share/space16x/bin`. It sets up your shell's startup file when needed, and the one-liner updates the current shell's PATH. Use curl or GNU Wget for the asset download. On a BusyBox-only image, install curl or use the manual archive instructions.
 
-Use `sh ./space16x-install.sh --version 0.2.0` to choose a published version. Add `--bin-dir PATH` to install elsewhere or `--repo OWNER/REPO` to use a public mirror with the same asset layout. If GitHub returns a missing-asset error, check that the release includes your target or build from source.
+Pass `--version 0.2.1` after `--shell-path` to select a published version. Use `--bin-dir PATH` to choose another directory or `--repo OWNER/REPO` for a public mirror with the same asset names. [GitHub Releases](https://github.com/engrmnaveed/diskspace-16x/releases)
+
+## Uninstall the managed CLI
+
+Paste either line to remove the executable, installer files, and shell startup entries created by the installer. The command updates PATH in the current shell. It preserves pre-existing PATH entries and manually installed executables.
+
+```sh
+space16x_path=$(curl -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+```
+
+```sh
+space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+```
+
+## Fish shell
+
+Use Fish's list syntax to apply PATH immediately. Add `--uninstall` before `--shell-path` to remove the installation. The download can also use `wget -qO-`.
+
+```fish
+set -l space16x_path (curl -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh | sh -s -- --shell-path); and test -n "$space16x_path"; and set -gx PATH (string split : -- "$space16x_path")
+```
 
 ### Candidate CLI targets
 
@@ -72,8 +88,8 @@ The app in `dist` is built for the current Mac and ad hoc signed for local devel
 When the signed and notarized app release is available, download its universal ZIP and SHA-256 file. Verify and expand the archive from the download directory.
 
 ```sh
-shasum -a 256 -c space16x-0.2.0-macos-universal.zip.sha256
-ditto -x -k space16x-0.2.0-macos-universal.zip .
+shasum -a 256 -c space16x-0.2.1-macos-universal.zip.sha256
+ditto -x -k space16x-0.2.1-macos-universal.zip .
 ```
 
 Move **Space 16X.app** to Applications in Finder and open it.

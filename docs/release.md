@@ -8,6 +8,8 @@ Check that [scripts/release-version](../scripts/release-version), [cli/Cargo.tom
 
 ## Build release artifacts in GitHub Actions
 
+Pushing a new `vX.Y.Z` tag that matches `scripts/release-version` runs **Publish CLI**. The workflow tests the four Rust targets and publishes their checksummed archives to the tagged GitHub release. The Mac app signing workflow is separate.
+
 Push the reviewed source to the default branch. To sign the native Swift app, configure Developer ID and notarization credentials in the `release-signing` environment. Use the certificate's identity name from `security find-identity -v -p codesigning`.
 
 | Environment secret | Value |

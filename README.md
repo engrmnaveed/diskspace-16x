@@ -47,14 +47,23 @@ Build and open the native app on macOS with Swift 6 or later.
 open "$(scripts/package-macos.sh)"
 ```
 
-Once a [GitHub release](https://github.com/engrmnaveed/diskspace-16x/releases) has the CLI archives, you can install a checksummed bundle without sudo.
+Install a checksummed CLI build from GitHub without sudo. Paste either line in Bash or Zsh.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh -o space16x-install.sh
-sh ./space16x-install.sh
+space16x_path=$(curl -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
-Add `--version 0.2.0` to install a specific published version. See the [installation guide](docs/install.md) for target names and keyboard shortcuts.
+```sh
+space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+```
+
+To uninstall and clean up this shell's PATH, run the same installer with `--uninstall`.
+
+```sh
+space16x_path=$(curl -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/main/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+```
+
+See the [installation guide](docs/install.md) for Wget removal, Fish commands, version pinning, and platform support.
 
 ## How totals are counted
 
