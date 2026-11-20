@@ -12,9 +12,23 @@ mod freedesktop;
 mod macos;
 
 use std::{
+    env,
+    ffi::OsStr,
     io,
     path::{Path, PathBuf},
 };
+
+/// Set to `1` to turn trashing off in the explorer, as `--read-only` does.
+pub const READ_ONLY_VARIABLE: &str = "SPACE16X_READ_ONLY";
+
+/// True when `SPACE16X_READ_ONLY` holds any value except an empty one or `0`.
+pub fn read_only_requested() -> bool {
+    read_only_value(env::var_os(READ_ONLY_VARIABLE).as_deref())
+}
+
+fn read_only_value(value: Option<&OsStr>) -> bool {
+    value.is_some_and(|value| !value.is_empty() && value != "0")
+}
 
 /// Moves `path` to the Trash on its disk and returns where it went. The last path
 /// component itself is moved, never a symbolic link's target.
@@ -28,8 +42,8 @@ pub fn move_to_trash(path: &Path) -> io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::{env, fs};
 
     static NEXT_FOLDER: AtomicU64 = AtomicU64::new(0);
 
@@ -56,6 +70,15 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn read_only_variable_accepts_any_value_but_empty_or_zero() {
+        assert!(!read_only_value(None));
+        assert!(!read_only_value(Some(OsStr::new(""))));
+        assert!(!read_only_value(Some(OsStr::new("0"))));
+        assert!(read_only_value(Some(OsStr::new("1"))));
+        assert!(read_only_value(Some(OsStr::new("yes"))));
     }
 
     #[test]

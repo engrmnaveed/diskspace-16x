@@ -21,6 +21,8 @@ const STICKY: u32 = 0o1000;
 /// How many numbered names to try when the Trash already holds items with this name.
 const NAME_ATTEMPTS: u32 = 1_000;
 
+// macOS builds this module only to test it, without its environment-based entry points.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub fn move_to_trash(path: &Path) -> io::Result<PathBuf> {
     let home_trash = home_trash().ok_or_else(|| {
         io::Error::new(
@@ -32,6 +34,7 @@ pub fn move_to_trash(path: &Path) -> io::Result<PathBuf> {
 }
 
 /// `$XDG_DATA_HOME/Trash`, which defaults to `~/.local/share/Trash`.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn home_trash() -> Option<PathBuf> {
     let absolute = |name| {
         env::var_os(name)

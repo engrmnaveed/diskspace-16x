@@ -1,7 +1,5 @@
 mod report;
 mod scanner;
-// The explorer starts moving marked items to the Trash in roadmap item M2.2.
-#[allow(dead_code)]
 mod trash;
 mod tui;
 
@@ -15,7 +13,7 @@ use std::sync::atomic::AtomicBool;
 use report::{Metric, Selection};
 
 const HELP: &str = "\
-Usage: space16x [--no-color] [EXCLUDES] [PATH]
+Usage: space16x [--no-color] [--read-only] [EXCLUDES] [PATH]
        space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [EXCLUDES]
 
 Open the disk explorer in an interactive terminal. PATH defaults to the current directory.
@@ -26,6 +24,7 @@ The scan command prints a plain directory summary and works in scripts.
   --apparent Show and rank apparent sizes (file lengths) instead of disk usage
   --json     Print a report in JSON schema 3
   --no-color Show the explorer without colors, as does setting NO_COLOR
+  --read-only Turn off Move to Trash in the explorer, as does SPACE16X_READ_ONLY=1
   --         Treat the following argument as a path, even if it starts with a dash
   --version  Show the installed version
   -h, --help Show this help
@@ -53,6 +52,7 @@ struct ExploreOptions {
     path: PathBuf,
     excludes: ExcludeOptions,
     no_color: bool,
+    read_only: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -141,7 +141,8 @@ fn run(command: Command) -> io::Result<u8> {
         {
             // https://no-color.org: any nonempty NO_COLOR value turns colors off.
             let plain = options.no_color || env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
-            tui::run(&options.path, options.excludes.load()?, plain)?;
+            let read_only = options.read_only || trash::read_only_requested();
+            tui::run(&options.path, options.excludes.load()?, plain, read_only)?;
         }
         Command::Explore(options) => {
             return run_scan(ScanOptions {
@@ -266,6 +267,7 @@ fn parse_explore(mut arguments: impl Iterator<Item = OsString>) -> Result<Comman
     let mut path = None;
     let mut excludes = ExcludeOptions::default();
     let mut no_color = false;
+    let mut read_only = false;
     while let Some(argument) = arguments.next() {
         match argument.to_str() {
             Some("--") => {
@@ -274,6 +276,7 @@ fn parse_explore(mut arguments: impl Iterator<Item = OsString>) -> Result<Comman
             }
             Some(flag @ ("--exclude" | "--exclude-from")) => excludes.take(flag, &mut arguments)?,
             Some("--no-color") if !no_color => no_color = true,
+            Some("--read-only") if !read_only => read_only = true,
             _ if is_option(&argument) => return Err(format!("Unknown option {argument:?}.")),
             _ => set_path(&mut path, checked_path(argument)?)?,
         }
@@ -282,6 +285,7 @@ fn parse_explore(mut arguments: impl Iterator<Item = OsString>) -> Result<Comman
         path: path.unwrap_or_else(|| PathBuf::from(".")),
         excludes,
         no_color,
+        read_only,
     }))
 }
 
@@ -407,6 +411,7 @@ mod tests {
                 path: path.into(),
                 excludes: ExcludeOptions::default(),
                 no_color: false,
+                read_only: false,
             }))
         };
         assert_eq!(args(&[]), explore("."));
@@ -453,12 +458,21 @@ mod tests {
                 path: "data".into(),
                 excludes,
                 no_color: false,
+                read_only: false,
             }))
         );
         assert!(matches!(
             args(&["--no-color", "data"]),
             Ok(Command::Explore(ExploreOptions { no_color: true, .. }))
         ));
+        assert!(matches!(
+            args(&["--read-only", "data"]),
+            Ok(Command::Explore(ExploreOptions {
+                read_only: true,
+                ..
+            }))
+        ));
+        assert!(args(&["--read-only", "--read-only"]).is_err());
         let Ok(Command::Scan(scan)) = args(&["scan", "--exclude", "target", "--json"]) else {
             panic!("scan with excludes should parse");
         };
