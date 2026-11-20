@@ -23,7 +23,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** —
 - [x] M2.3 Mac: multi-select, ⌘⌫ Move to Trash, a confirmation sheet with the item count and size, `FileManager.trashItem`, cloud-only and protected items blocked, the tree updated in place
 - [ ] M2.4 Rescan folder: TUI `r` and Mac **Rescan Folder**, replacing one subtree in place
 - [ ] M2.5 Mac: Quick Look on Space
-- [ ] M2.6 Docs (`docs/cli.md`, README, CHANGELOG, manual QA rows for Trash and Put Back) and the promo refresh showing Move to Trash
+- [ ] M2.6 Docs (`docs/cli.md`, README, CHANGELOG, manual QA rows for Trash; check on a Mac whether Finder offers Put Back for items moved with `trashItem` and document the answer) and the promo refresh showing Move to Trash
 - [ ] M2.7 Release v0.4.0
 
 ### Later milestones
