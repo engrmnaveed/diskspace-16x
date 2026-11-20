@@ -1,5 +1,8 @@
 use super::explorer::{LARGEST_LIMIT, Mode};
-use crate::{report::largest_files, scanner::Entry};
+use crate::{
+    report::{Metric, largest_files},
+    scanner::Entry,
+};
 use std::{
     io,
     path::PathBuf,
@@ -109,7 +112,7 @@ pub(super) fn rank(request: RankRequest) -> Ranked {
             });
             items
         }
-        Mode::Largest => largest_files(&request.source, LARGEST_LIMIT)
+        Mode::Largest => largest_files(&request.source, LARGEST_LIMIT, Metric::Allocated)
             .into_iter()
             .cloned()
             .collect(),

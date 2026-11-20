@@ -49,11 +49,16 @@ def check(binary, root):
     assert str(first) in run(binary, "scan", root, "--top", 2).stdout
 
     total_bytes = sum(map(allocated_bytes, (first, second, sparse)))
+    apparent_total = sum(path.stat().st_size for path in (first, second, sparse))
     top = json.loads(run(binary, "scan", root, "--json", "--top", 2).stdout)
-    assert top["schemaVersion"] == 2
+    assert top["schemaVersion"] == 3
+    assert top["edition"] == "basic" and top["rankedBy"] == "allocated"
     assert top["scope"] == str(root)
     assert top["topLimit"] == 2
     assert top["allocatedBytes"] == total_bytes
+    assert top["apparentBytes"] == apparent_total
+    # The folder and three counted files. The second hard link and the symlink aren't items.
+    assert top["itemCount"] == 4
     assert top["isPartial"] is False and top["issues"] == []
     assert [entry["path"] for entry in top["topFiles"]] == [
         str(path) for path in sorted((first, second), key=lambda path: (-allocated_bytes(path), os.fsencode(path)))
@@ -61,14 +66,26 @@ def check(binary, root):
     assert "logicalBytes" not in top
 
     depth = json.loads(run(binary, "scan", "--json", cwd=root).stdout)
-    assert depth["schemaVersion"] == 2 and depth["scope"] == str(root)
+    assert depth["schemaVersion"] == 3 and depth["scope"] == str(root)
     assert depth["depth"] == 1
-    assert depth["entries"] == [{"path": str(data), "allocatedBytes": total_bytes, "kind": "directory"}]
+    assert depth["entries"] == [{
+        "path": str(data), "allocatedBytes": total_bytes, "apparentBytes": apparent_total,
+        "kind": "directory", "itemCount": 3,
+    }]
+
+    # --apparent ranks by file length, so the sparse file leads despite its small allocation.
+    apparent = json.loads(run(binary, "scan", root, "--top", 2, "--apparent", "--json").stdout)
+    assert apparent["rankedBy"] == "apparent"
+    assert [entry["path"] for entry in apparent["topFiles"]] == [str(sparse), str(first)]
+    assert apparent["topFiles"][0]["apparentBytes"] == sparse.stat().st_size
+    plain_apparent = run(binary, "scan", root, "--top", 1, "--apparent").stdout
+    assert plain_apparent.splitlines()[0].endswith(str(sparse)), plain_apparent
 
     deeper = json.loads(run(binary, "scan", "--depth", 2, "--json", "--", root).stdout)
     rows = {row["path"]: row for row in deeper["entries"]}
     assert rows[str(first)]["allocatedBytes"] == allocated_bytes(first)
-    assert rows[str(alias)]["allocatedBytes"] == 0
+    assert rows[str(alias)]["allocatedBytes"] == 0 and rows[str(alias)]["apparentBytes"] == 0
+    assert "itemCount" not in rows[str(first)]
     assert rows[str(sparse)]["allocatedBytes"] == allocated_bytes(sparse)
 
     zero_depth = json.loads(run(binary, "scan", root, "--depth", 0, "--json").stdout)

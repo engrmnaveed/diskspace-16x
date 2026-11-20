@@ -9,23 +9,24 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 
-use report::Selection;
+use report::{Metric, Selection};
 
 const HELP: &str = "\
 Usage: space16x [PATH]
-       space16x scan [PATH] [--depth N | --top N] [--json]
+       space16x scan [PATH] [--depth N | --top N] [--apparent] [--json]
 
 Open the disk explorer in an interactive terminal. PATH defaults to the current directory.
 The scan command prints a plain directory summary and works in scripts.
 
   --depth N  List entries through N levels (default: 1, 0 for the root total)
   --top N    List the N largest files in the scan instead of directory entries
-  --json     Print an allocated-size report in JSON schema 2
+  --apparent Show and rank apparent sizes (file lengths) instead of disk usage
+  --json     Print a report in JSON schema 3
   --         Treat the following argument as a path, even if it starts with a dash
   --version  Show the installed version
   -h, --help Show this help
 
-Sizes are allocated bytes in decimal units (1 KB = 1,000 bytes), as in Finder.
+Sizes are allocated bytes (disk usage) in decimal units (1 KB = 1,000 bytes), as in Finder.
 Scan exit codes: 0 complete, 1 error, 2 partial.
 ";
 
@@ -41,6 +42,7 @@ enum Command {
 struct ScanOptions {
     path: PathBuf,
     selection: Selection,
+    metric: Metric,
     json: bool,
 }
 
@@ -78,6 +80,7 @@ fn run(command: Command) -> io::Result<u8> {
             return run_scan(ScanOptions {
                 path,
                 selection: Selection::Depth(1),
+                metric: Metric::Allocated,
                 json: false,
             });
         }
@@ -96,9 +99,9 @@ fn run_scan(options: ScanOptions) -> io::Result<u8> {
         })?;
     let stdout = io::stdout().lock();
     if options.json {
-        report::write_json(stdout, &scan, options.selection)?;
+        report::write_json(stdout, &scan, options.selection, options.metric)?;
     } else {
-        report::write_plain(stdout, &scan, options.selection)?;
+        report::write_plain(stdout, &scan, options.selection, options.metric)?;
         report_issues(&scan.issues);
     }
     Ok(if scan.issues.is_empty() { 0 } else { 2 })
@@ -204,10 +207,13 @@ fn single_path(
 fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, String> {
     let mut path = None;
     let mut selection = None;
+    let mut metric = None;
     let mut json = false;
     while let Some(argument) = arguments.next() {
         match argument.to_str() {
-            Some("-h" | "--help") if path.is_none() && selection.is_none() && !json => {
+            Some("-h" | "--help")
+                if path.is_none() && selection.is_none() && metric.is_none() && !json =>
+            {
                 return only_argument(arguments.count() + 1, Command::Help);
             }
             Some("--") => {
@@ -235,6 +241,7 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
                 });
             }
             Some("--json") if !json => json = true,
+            Some("--apparent") if metric.is_none() => metric = Some(Metric::Apparent),
             _ if is_option(&argument) => {
                 return Err(format!("Unknown or repeated option {argument:?}."));
             }
@@ -244,6 +251,7 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
     Ok(Command::Scan(ScanOptions {
         path: path.unwrap_or_else(|| PathBuf::from(".")),
         selection: selection.unwrap_or(Selection::Depth(1)),
+        metric: metric.unwrap_or_default(),
         json,
     }))
 }
@@ -288,7 +296,17 @@ mod tests {
             Ok(Command::Scan(ScanOptions {
                 path: ".".into(),
                 selection: Selection::Top(0),
+                metric: Metric::Allocated,
                 json: true,
+            }))
+        );
+        assert_eq!(
+            args(&["scan", "--apparent", "data"]),
+            Ok(Command::Scan(ScanOptions {
+                path: "data".into(),
+                selection: Selection::Depth(1),
+                metric: Metric::Apparent,
+                json: false,
             }))
         );
     }
@@ -298,6 +316,7 @@ mod tests {
         for invalid in [
             &["scan", "--depth", "2", "--top", "3"][..],
             &["scan", "--metric", "logical"],
+            &["scan", "--apparent", "--apparent"],
             &["scan", "--depth", "-1"],
             &["scan", "./one", "--", "-two"],
             &["scan", "--"],

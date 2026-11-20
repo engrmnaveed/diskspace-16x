@@ -19,6 +19,10 @@ use preview::Preview;
 pub struct Entry {
     pub path: PathBuf,
     pub allocated_bytes: u64,
+    /// File lengths (`st_size`), counted under the same rules as allocated bytes.
+    pub apparent_bytes: u64,
+    /// Files and folders below this entry, counting each hard-linked file once.
+    pub item_count: u64,
     pub kind: EntryKind,
     pub state: EntryState,
     pub children: Vec<Arc<Entry>>,
@@ -479,7 +483,9 @@ fn file_entry(
         EntryState::Local
     };
     let mut allocated = 0;
+    let mut apparent = 0;
     if state == EntryState::Local {
+        apparent = metadata.st_size.max(0) as u64;
         // POSIX st_blocks describes 512-byte units, regardless of the filesystem block size.
         let blocks = metadata.st_blocks.max(0) as u64;
         allocated = match blocks.checked_mul(512) {
@@ -497,6 +503,8 @@ fn file_entry(
     Arc::new(Entry {
         path,
         allocated_bytes: allocated,
+        apparent_bytes: apparent,
+        item_count: 0,
         kind: EntryKind::File,
         state,
         children: Vec::new(),
@@ -513,14 +521,24 @@ fn directory_entry(
     children: Vec<Arc<Entry>>,
 ) -> (Arc<Entry>, bool) {
     let mut bytes = 0_u64;
+    let mut apparent = 0_u64;
+    let mut items = 0_u64;
     let mut overflow = false;
     for entry in &children {
-        match bytes.checked_add(entry.allocated_bytes) {
-            Some(total) => bytes = total,
-            None => {
-                bytes = u64::MAX;
-                overflow = true;
+        for (total, amount) in [
+            (&mut bytes, entry.allocated_bytes),
+            (&mut apparent, entry.apparent_bytes),
+        ] {
+            match total.checked_add(amount) {
+                Some(sum) => *total = sum,
+                None => {
+                    *total = u64::MAX;
+                    overflow = true;
+                }
             }
+        }
+        if entry.state != EntryState::HardLinkAlias {
+            items = items.saturating_add(entry.item_count.saturating_add(1));
         }
         if entry.state == EntryState::Pending {
             state = EntryState::Pending;
@@ -535,6 +553,8 @@ fn directory_entry(
         Arc::new(Entry {
             path,
             allocated_bytes: bytes,
+            apparent_bytes: apparent,
+            item_count: items,
             kind: EntryKind::Directory,
             state,
             children,

@@ -1,18 +1,24 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
+  "edition": "basic",
   "scope": "/demo/Photo Archive",
+  "rankedBy": "allocated",
   "allocatedBytes": 8392704,
+  "apparentBytes": 8389890,
+  "itemCount": 3,
   "isPartial": false,
   "issues": [],
   "topLimit": 2,
   "topFiles": [
     {
       "path": "/demo/Photo Archive/2026/contact-sheet.tiff",
-      "allocatedBytes": 8388608
+      "allocatedBytes": 8388608,
+      "apparentBytes": 8388608
     },
     {
       "path": "/demo/Photo Archive/2026/index.txt",
-      "allocatedBytes": 4096
+      "allocatedBytes": 4096,
+      "apparentBytes": 1282
     }
   ]
 }
