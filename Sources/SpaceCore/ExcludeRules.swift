@@ -44,6 +44,14 @@ public struct ExcludeRules: Sendable, Equatable {
         self.patterns = compiled
     }
 
+    /// Splits a patterns file or settings text into patterns, one per line. Blank lines and
+    /// lines starting with `#` are skipped, as `space16x --exclude-from` does.
+    public static func patterns(fromLines text: String) -> [String] {
+        text.split(whereSeparator: \.isNewline)
+            .map { String($0.reversed().drop(while: \.isWhitespace).reversed()) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+    }
+
     /// Whether a pattern that applies to any entry type matches. Check this before
     /// reading metadata, so excluded paths cost nothing and report no errors.
     func matchesAnyType(relative: [UInt8], name: [UInt8]) -> Bool {

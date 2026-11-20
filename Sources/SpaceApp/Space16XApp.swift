@@ -1,4 +1,5 @@
 import AppKit
+import SpaceCore
 import SwiftUI
 
 // Some Command Line Tools SDKs expose the State macro without its compiler plugin.
@@ -17,6 +18,17 @@ struct Space16XApp: App {
         .defaultSize(width: 1040, height: 700)
         .windowResizability(.contentMinSize)
         .commands {
+            CommandGroup(before: .toolbar) {
+                Picker("Size", selection: Binding(
+                    get: { workspace.sizeMetric },
+                    set: { workspace.sizeMetric = $0 }
+                )) {
+                    Text("Allocated Size").tag(SizeMetric.allocated)
+                    Text("Apparent Size").tag(SizeMetric.logical)
+                }
+                .pickerStyle(.inline)
+                Divider()
+            }
             CommandGroup(replacing: .newItem) {
                 Button("Choose Folder…", action: workspace.chooseFolder)
                     .keyboardShortcut("o")
@@ -71,6 +83,10 @@ struct Space16XApp: App {
                     .keyboardShortcut("c", modifiers: [.command, .option])
                     .disabled(workspace.selectedEntry == nil || !workspace.canBrowse)
             }
+        }
+
+        Settings {
+            SettingsView()
         }
     }
 }

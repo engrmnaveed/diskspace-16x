@@ -20,6 +20,40 @@ enum FolderPresentation: String, CaseIterable {
     case donut = "Donut"
 }
 
+/// A sortable table column. `.reverse` means largest first for sizes and counts, Z–A for names.
+struct EntrySort: SortComparator, Hashable {
+    var key: EntryOrder
+    var order: SortOrder
+
+    static let largestFirst = EntrySort(key: .size, order: .reverse)
+
+    /// The workspace sorts rows itself with the current size metric. This serves other callers.
+    func compare(_ lhs: ScanEntry, _ rhs: ScanEntry) -> ComparisonResult {
+        guard lhs.path != rhs.path else { return .orderedSame }
+        let first = [lhs, rhs].ordered(by: key, ascending: order == .forward, metric: .allocated)[0]
+        return first.path == lhs.path ? .orderedAscending : .orderedDescending
+    }
+}
+
+extension SizeMetric {
+    /// The word for this size in labels, matching the CLI's allocated and apparent sizes.
+    var title: String {
+        switch self {
+        case .allocated: "Allocated"
+        case .logical: "Apparent"
+        }
+    }
+}
+
+/// Exclude patterns from Settings, one per line, applied when a scan starts.
+enum ExcludeSettings {
+    static let key = "excludePatterns"
+
+    static var patterns: [String] {
+        ExcludeRules.patterns(fromLines: UserDefaults.standard.string(forKey: key) ?? "")
+    }
+}
+
 @MainActor
 @Observable
 final class ScanWorkspace {
@@ -47,6 +81,25 @@ final class ScanWorkspace {
     private(set) var selectedEntry: ScanEntry?
     var showsDetails = false
     var folderPresentation: FolderPresentation = .list
+    /// Up to 32 entries of the current folder, largest first, for the treemap and donut.
+    private(set) var chartRows: [ScanEntry] = []
+
+    var sizeMetric: SizeMetric = SizeMetric(rawValue: UserDefaults.standard.string(forKey: "sizeMetric") ?? "")
+        ?? .allocated
+    {
+        didSet {
+            guard sizeMetric != oldValue else { return }
+            UserDefaults.standard.set(sizeMetric.rawValue, forKey: "sizeMetric")
+            loadRows(keepingRows: true)
+        }
+    }
+
+    var sortOrder: [EntrySort] = [.largestFirst] {
+        didSet {
+            guard sortOrder != oldValue else { return }
+            loadRows(keepingRows: true)
+        }
+    }
 
     var selection: String? {
         didSet {
@@ -143,6 +196,17 @@ final class ScanWorkspace {
 
     func startScan(_ url: URL) {
         guard canChooseFolder else { return }
+        let excludes: ExcludeRules
+        do {
+            excludes = try ExcludeRules(patterns: ExcludeSettings.patterns)
+        } catch {
+            notice = Notice(
+                title: "Check your exclude patterns",
+                message: (error.localizedDescription) + " Fix it in Settings, then scan again.",
+                isError: true
+            )
+            return
+        }
         let didAccess = url.startAccessingSecurityScopedResource()
         let path = url.path(percentEncoded: false)
         scanPath = path
@@ -169,6 +233,7 @@ final class ScanWorkspace {
             }
             return try DiskScanner.scan(
                 path: path,
+                excludes: excludes,
                 progress: { continuation.yield($0) },
                 preview: { snapshotContinuation.yield($0) },
                 isCancelled: { Task.isCancelled }
@@ -318,6 +383,7 @@ final class ScanWorkspace {
         previousTask?.cancel()
         if !keepingRows {
             rows = []
+            chartRows = []
             rankedScope = nil
             selectedEntry = nil
         }
@@ -327,17 +393,21 @@ final class ScanWorkspace {
         }
         isLoadingRows = true
         let mode = mode
+        let metric = sizeMetric
+        let sort = sortOrder.first ?? .largestFirst
         rowsTask = Task { [weak self] in
             // Let a running sort release its buffers before allocating for a newer ranking.
             await previousTask?.value
             guard !Task.isCancelled else { return }
             let worker = Task.detached(priority: .userInitiated) {
-                switch mode {
-                case .folders:
-                    folder.rankedChildren(by: .allocated)
-                case .largestFiles:
-                    report.largestFiles(limit: Self.largestFileLimit, by: .allocated)
+                let ranked = switch mode {
+                case .folders: folder.rankedChildren(by: metric)
+                case .largestFiles: report.largestFiles(limit: Self.largestFileLimit, by: metric)
                 }
+                let rows = sort == .largestFirst
+                    ? ranked
+                    : ranked.ordered(by: sort.key, ascending: sort.order == .forward, metric: metric)
+                return (rows: rows, chart: Array(ranked.prefix(32)))
             }
             let result = await withTaskCancellationHandler {
                 await worker.value
@@ -346,7 +416,8 @@ final class ScanWorkspace {
             }
             guard !Task.isCancelled, let self else { return }
             rankedScope = mode == .folders ? folder : report.root
-            rows = result
+            rows = result.rows
+            chartRows = result.chart
             if let selection, entry(withPath: selection) == nil { self.selection = nil }
             selectedEntry = selection.flatMap(entry(withPath:))
             isLoadingRows = false

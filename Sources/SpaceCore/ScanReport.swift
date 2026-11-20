@@ -1,3 +1,5 @@
+import Foundation
+
 public enum SizeMetric: String, CaseIterable, Sendable, Codable {
     case allocated
     case logical
@@ -38,6 +40,39 @@ public struct ScanEntry: Identifiable, Sendable {
         }
         return left > right
     }
+}
+
+/// How a list of entries is ordered for display.
+public enum EntryOrder: String, CaseIterable, Sendable {
+    case size
+    case items
+    case name
+}
+
+extension Array where Element == ScanEntry {
+    /// Orders entries by size, item count, or name. Ties keep a stable order by path bytes,
+    /// as the CLI does. Names compare like Finder, ignoring case and treating digits as numbers.
+    public func ordered(by order: EntryOrder, ascending: Bool, metric: SizeMetric) -> [ScanEntry] {
+        sorted { left, right in
+            let comparison: ComparisonResult
+            switch order {
+            case .size:
+                comparison = threeWay(left.bytes(for: metric), right.bytes(for: metric))
+            case .items:
+                comparison = threeWay(left.itemCount, right.itemCount)
+            case .name:
+                comparison = left.name.localizedStandardCompare(right.name)
+            }
+            if comparison == .orderedSame {
+                return left.path.utf8.lexicographicallyPrecedes(right.path.utf8)
+            }
+            return (comparison == .orderedAscending) == ascending
+        }
+    }
+}
+
+private func threeWay(_ left: UInt64, _ right: UInt64) -> ComparisonResult {
+    left == right ? .orderedSame : (left < right ? .orderedAscending : .orderedDescending)
 }
 
 public struct ScanIssue: Identifiable, Sendable, Encodable {

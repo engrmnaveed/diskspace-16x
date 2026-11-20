@@ -49,6 +49,14 @@ enum ScanFormat {
         count == 1 ? "1 item" : "\(count.formatted()) items"
     }
 
+    static func items(_ count: UInt64) -> String {
+        count == 1 ? "1 item" : "\(count.formatted()) items"
+    }
+
+    static func excluded(_ count: UInt64) -> String {
+        "\(count.formatted()) excluded"
+    }
+
     static func protectedItems(_ count: Int) -> String {
         count == 1 ? "One protected item" : "\(count.formatted()) protected items"
     }

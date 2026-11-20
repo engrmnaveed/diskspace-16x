@@ -74,19 +74,22 @@ struct ResultsView: View {
     }
 
     private func scopeCaption(_ scope: ScanEntry) -> String {
+        let excluded = workspace.report?.excludedCount ?? 0
+        let suffix = excluded == 0 ? "" : " · \(ScanFormat.excluded(excluded))"
         if workspace.mode == .folders {
             if scope.isCloudOnly { return "Cloud only" }
             let count = ScanFormat.items(scope.children.count)
-            if scope.isPending { return "\(count) found so far" }
-            return count
+            if scope.isPending { return "\(count) found so far" + suffix }
+            return count + suffix
         }
-        if workspace.report?.isPreview == true { return "Largest files found so far" }
-        return "Top \(ScanWorkspace.largestFileLimit) files across the scan root"
+        if workspace.report?.isPreview == true { return "Largest files found so far" + suffix }
+        return "Top \(ScanWorkspace.largestFileLimit) files across the scan root" + suffix
     }
 
     private func sizeSummary(_ scope: ScanEntry) -> some View {
-        let bytes = scope.allocatedBytes
-        let title = scope.isPending ? "Allocated so far" : "Allocated"
+        let bytes = scope.bytes(for: workspace.sizeMetric)
+        let word = workspace.sizeMetric.title
+        let title = scope.isPending ? "\(word) so far" : word
         return VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(.caption)
@@ -226,16 +229,21 @@ struct ResultsView: View {
     }
 
     private func resultsTable(scope: ScanEntry) -> some View {
-        Table(workspace.rows, selection: $workspace.selection) {
-            TableColumn("Name") { entry in
+        Table(workspace.rows, selection: $workspace.selection, sortOrder: $workspace.sortOrder) {
+            TableColumn("Name", sortUsing: EntrySort(key: .name, order: .forward)) { entry in
                 nameCell(entry, scope: scope)
             }
             .width(min: 190, ideal: 280)
 
-            TableColumn("Allocated") { entry in
+            TableColumn(workspace.sizeMetric.title, sortUsing: EntrySort.largestFirst) { entry in
                 sizeCell(entry)
             }
             .width(min: 88, ideal: 108, max: 164)
+
+            TableColumn("Items", sortUsing: EntrySort(key: .items, order: .reverse)) { entry in
+                itemsCell(entry)
+            }
+            .width(min: 52, ideal: 72, max: 110)
 
             TableColumn("Share") { entry in
                 shareCell(entry, of: scope)
@@ -354,11 +362,26 @@ struct ResultsView: View {
         return String(path[..<separator])
     }
 
+    @ViewBuilder
+    private func itemsCell(_ entry: ScanEntry) -> some View {
+        if entry.isDirectory && !entry.isCloudOnly {
+            let unknown = entry.isPending || workspace.issuePaths.contains(entry.path)
+            Text(unknown && entry.itemCount == 0 ? "—" : entry.itemCount.formatted())
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .help("Files and folders inside, counting each hard-linked file once")
+                .accessibilityLabel(unknown && entry.itemCount == 0 ? "Items unknown" : ScanFormat.items(entry.itemCount))
+        } else {
+            Text("")
+        }
+    }
+
     private func sizeCell(_ entry: ScanEntry) -> some View {
-        let bytes = entry.allocatedBytes
+        let bytes = entry.bytes(for: workspace.sizeMetric)
         let unknown = bytes == 0 && (entry.isPending || workspace.issuePaths.contains(entry.path))
         let exact = unknown
-            ? (workspace.isScanning ? "Allocation pending" : "Allocation unknown")
+            ? (workspace.isScanning ? "Size pending" : "Size unknown")
             : ScanFormat.exactSize(bytes)
         return Text(unknown ? "—" : ScanFormat.size(bytes))
             .monospacedDigit()
@@ -371,7 +394,8 @@ struct ResultsView: View {
 
     @ViewBuilder
     private func shareCell(_ entry: ScanEntry, of scope: ScanEntry) -> some View {
-        if entry.allocatedBytes == 0 && (entry.isPending || workspace.issuePaths.contains(entry.path)) {
+        let bytes = entry.bytes(for: workspace.sizeMetric)
+        if bytes == 0 && (entry.isPending || workspace.issuePaths.contains(entry.path)) {
             Text("—")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -383,8 +407,8 @@ struct ResultsView: View {
     }
 
     private func knownShare(_ entry: ScanEntry, of scope: ScanEntry) -> some View {
-        let total = scope.allocatedBytes
-        let ratio = total == 0 ? 0 : min(Double(entry.allocatedBytes) / Double(total), 1)
+        let total = scope.bytes(for: workspace.sizeMetric)
+        let ratio = total == 0 ? 0 : min(Double(entry.bytes(for: workspace.sizeMetric)) / Double(total), 1)
         let formatted = ratio.formatted(.percent.precision(.fractionLength(0...1)))
         return HStack(spacing: 5) {
             GeometryReader { proxy in
@@ -404,7 +428,7 @@ struct ResultsView: View {
                 .frame(minWidth: 44, alignment: .trailing)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(formatted) of counted allocated bytes")
+        .accessibilityLabel("\(formatted) of counted \(workspace.sizeMetric.title.lowercased()) bytes")
     }
 
     private var selectionBar: some View {
