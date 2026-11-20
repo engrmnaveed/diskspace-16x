@@ -387,6 +387,63 @@ final class DiskScannerTests: XCTestCase {
     }
     #endif
 
+    func testCountsNestedItemsAndLogicalBytesOncePerHardLink() throws {
+        try withFixture { root in
+            let one = try makeDirectory("one", under: root)
+            let two = try makeDirectory("two", under: one)
+            let three = try makeDirectory("three", under: two)
+            _ = try makeFile("a", bytes: 10, under: one)
+            _ = try makeFile("b", bytes: 20, under: two)
+            let c = try makeFile("c", bytes: 30, under: three)
+            _ = try makeDirectory("empty", under: root)
+            XCTAssertEqual(link(c.path, root.appendingPathComponent("zlink").path), 0)
+
+            let report = try DiskScanner.scan(path: root.path)
+
+            let oneEntry = try XCTUnwrap(report.root.children.first { $0.name == "one" })
+            XCTAssertEqual(oneEntry.itemCount, 5)
+            XCTAssertEqual(oneEntry.logicalBytes, 60)
+            XCTAssertEqual(report.root.children.first { $0.name == "empty" }?.itemCount, 0)
+            // empty, one and its five items. zlink sorts after one, so it is the second link to c
+            // and adds no item and no bytes.
+            XCTAssertEqual(report.root.itemCount, 7)
+            XCTAssertEqual(report.root.logicalBytes, 60)
+        }
+    }
+
+    /// Mirrors `skips_excluded_entries_without_reading_them` in the Rust scanner tests.
+    func testSkipsExcludedEntriesWithoutReadingThem() throws {
+        try withFixture { root in
+            let app = try makeDirectory("app", under: root)
+            let package = root.appendingPathComponent("app/node_modules/pkg", isDirectory: true)
+            try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+            _ = try makeFile("index.js", bytes: 100, under: package)
+            _ = try makeFile("main.rs", bytes: 10, under: app)
+            _ = try makeFile("debug.log", bytes: 50, under: app)
+            let cache = try makeDirectory("cache", under: root)
+            _ = try makeFile("blob", bytes: 70, under: cache)
+            _ = try makeFile("cache", bytes: 7, under: app)
+            let blocked = try makeDirectory("private", under: root)
+            XCTAssertEqual(chmod(blocked.path, 0), 0)
+            defer { chmod(blocked.path, 0o700) }
+            let excludes = try ExcludeRules(patterns: ["node_modules", "*.log", "/cache/", "/private"])
+
+            let report = try DiskScanner.scan(path: root.path, excludes: excludes)
+
+            XCTAssertTrue(report.issues.isEmpty, "\(report.issues)")
+            XCTAssertEqual(report.excludedCount, 4)
+            XCTAssertEqual(report.root.itemCount, 3)
+            XCTAssertEqual(report.root.logicalBytes, 17)
+            XCTAssertEqual(report.root.children.first { $0.name == "app" }?.children.count, 2)
+
+            let previews = ScanRecorder<UInt64>()
+            let progressive = try DiskScanner.scan(
+                path: root.path, excludes: excludes, preview: { previews.record($0.excludedCount) }
+            )
+            XCTAssertEqual(progressive.excludedCount, 4)
+        }
+    }
+
     private func withFixture(_ body: (URL) throws -> Void) throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("space16x-tests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)

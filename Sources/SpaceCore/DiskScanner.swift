@@ -20,6 +20,7 @@ public struct ScanFailure: LocalizedError, Sendable {
 public enum DiskScanner {
     public static func scan(
         path: String,
+        excludes: ExcludeRules = ExcludeRules(),
         progress: (@Sendable (ScanProgress) -> Void)? = nil,
         preview: (@Sendable (ScanReport) -> Void)? = nil,
         isCancelled: @escaping @Sendable () -> Bool = { false }
@@ -43,14 +44,20 @@ public enum DiskScanner {
                 let metadata = MetadataAccess(isCancelled: isCancelled)
                 var updates: PreviewUpdates?
                 if let preview {
-                    var discovery = Traversal(depthLimit: 2, metadata: metadata, isCancelled: isCancelled)
+                    var discovery = Traversal(
+                        depthLimit: 2, excludes: excludes, metadata: metadata, isCancelled: isCancelled
+                    )
                     let initial = try discovery.scan(path: scope, rootName: rootName)
                     guard initial.root.isPending else { return initial }
-                    preview(ScanReport(root: initial.root, issues: initial.issues, isPreview: true))
+                    preview(ScanReport(
+                        root: initial.root, issues: initial.issues, isPreview: true,
+                        excludedCount: initial.excludedCount
+                    ))
                     updates = PreviewUpdates(root: initial.root, callback: preview)
                 }
                 var scan = Traversal(
-                    progress: progress, previewUpdates: updates, metadata: metadata, isCancelled: isCancelled
+                    progress: progress, previewUpdates: updates, excludes: excludes,
+                    metadata: metadata, isCancelled: isCancelled
                 )
                 return try scan.scan(path: scope, rootName: rootName)
             }
@@ -64,9 +71,11 @@ private struct Traversal {
     let progress: (@Sendable (ScanProgress) -> Void)?
     let isCancelled: @Sendable () -> Bool
     let depthLimit: Int?
+    let excludes: ExcludeRules
     let metadata: MetadataAccess
     private var previewUpdates: PreviewUpdates?
     private var issues: [ScanIssue] = []
+    private var excludedCount: UInt64 = 0
     private var hardLinks: Set<FileIdentity> = []
     private var visited: UInt64 = 0
     private var lastProgress: UInt64 = 0
@@ -75,11 +84,13 @@ private struct Traversal {
         progress: (@Sendable (ScanProgress) -> Void)? = nil,
         depthLimit: Int? = nil,
         previewUpdates: PreviewUpdates? = nil,
+        excludes: ExcludeRules,
         metadata: MetadataAccess,
         isCancelled: @escaping @Sendable () -> Bool
     ) {
         self.progress = progress
         self.depthLimit = depthLimit
+        self.excludes = excludes
         self.previewUpdates = previewUpdates
         self.metadata = metadata
         self.isCancelled = isCancelled
@@ -154,7 +165,7 @@ private struct Traversal {
                 guard let parent = stack.indices.last else {
                     reportProgress(at: path, force: true)
                     try checkCancellation()
-                    return ScanReport(root: entry, issues: issues)
+                    return ScanReport(root: entry, issues: issues, excludedCount: excludedCount)
                 }
                 ancestors.remove(finished.directory.identity)
                 add(entry, to: &stack[parent], parentDepth: parent)
@@ -163,6 +174,13 @@ private struct Traversal {
 
             let parentPath = stack[level].path
             let childPath = parentPath == "/" ? "/" + name.displayName : parentPath + "/" + name.displayName
+            let relative: [UInt8]? = excludes.isEmpty || !name.isUTF8
+                ? nil
+                : Array(childPath.utf8.dropFirst(path == "/" ? 1 : path.utf8.count + 1))
+            if let relative, excludes.matchesAnyType(relative: relative, name: Array(name.displayName.utf8)) {
+                excludedCount += 1
+                continue
+            }
             visited += 1
             reportProgress(at: childPath)
             guard name.isUTF8 else {
@@ -186,6 +204,10 @@ private struct Traversal {
 
             switch metadata.st_mode & mode_t(S_IFMT) {
             case mode_t(S_IFDIR):
+                if let relative, excludes.matchesDirectory(relative: relative, name: Array(name.displayName.utf8)) {
+                    excludedCount += 1
+                    continue
+                }
                 if isCloudReference(metadata) {
                     let entry = directoryEntry(path: childPath, name: name.displayName, cloudOnly: true)
                     add(entry, to: &stack[level], parentDepth: level)
@@ -297,14 +319,14 @@ private struct Traversal {
         return ScanEntry(
             path: path, name: name, isDirectory: false, isHardLinkAlias: isAlias,
             isCloudOnly: cloudOnly, isPending: pending,
-            logicalBytes: logical, allocatedBytes: overflow ? .max : allocated, children: []
+            logicalBytes: logical, allocatedBytes: overflow ? .max : allocated, itemCount: 0, children: []
         )
     }
 
     private mutating func add(_ entry: ScanEntry, to parent: inout DirectoryFrame, parentDepth: Int) {
         parent.add(entry)
         if parentDepth < 2, previewUpdates?.record(entry, in: parent.path) == true {
-            previewUpdates?.publishIfReady(issues: issues)
+            previewUpdates?.publishIfReady(issues: issues, excludedCount: excludedCount)
         }
     }
 
@@ -320,7 +342,7 @@ private struct Traversal {
         guard force || now - lastProgress >= 100_000_000 else { return }
         lastProgress = now
         progress?(ScanProgress(visitedEntries: visited, currentPath: path))
-        previewUpdates?.publishIfReady(issues: issues)
+        previewUpdates?.publishIfReady(issues: issues, excludedCount: excludedCount)
     }
 }
 
@@ -528,7 +550,7 @@ private struct PreviewUpdates {
         return true
     }
 
-    mutating func publishIfReady(issues: [ScanIssue]) {
+    mutating func publishIfReady(issues: [ScanIssue], excludedCount: UInt64) {
         guard !replacements.isEmpty else { return }
         let now = DispatchTime.now().uptimeNanoseconds
         guard now - lastPublication >= 400_000_000 else { return }
@@ -541,7 +563,7 @@ private struct PreviewUpdates {
         root = root.withChildren(children)
         replacements.removeAll(keepingCapacity: true)
         lastPublication = now
-        callback(ScanReport(root: root, issues: issues, isPreview: true))
+        callback(ScanReport(root: root, issues: issues, isPreview: true, excludedCount: excludedCount))
     }
 }
 
@@ -549,18 +571,20 @@ private extension ScanEntry {
     func withChildren(_ children: [ScanEntry]) -> ScanEntry {
         var logical: UInt64 = 0
         var allocated: UInt64 = 0
+        var items: UInt64 = 0
         var pending = false
         for entry in children {
             let (nextLogical, logicalOverflow) = logical.addingReportingOverflow(entry.logicalBytes)
             let (nextAllocated, allocatedOverflow) = allocated.addingReportingOverflow(entry.allocatedBytes)
             logical = logicalOverflow ? .max : nextLogical
             allocated = allocatedOverflow ? .max : nextAllocated
+            items = items.addingCounted(entry)
             pending = pending || entry.isPending
         }
         return ScanEntry(
             path: path, name: name, isDirectory: true, isHardLinkAlias: false,
             isCloudOnly: false, isPending: pending, logicalBytes: logical,
-            allocatedBytes: allocated, children: children
+            allocatedBytes: allocated, itemCount: items, children: children
         )
     }
 }
@@ -573,6 +597,7 @@ private struct DirectoryFrame {
     private var nextIndex = 0
     private var logical: UInt64 = 0
     private var allocated: UInt64 = 0
+    private var items: UInt64 = 0
     private var children: [ScanEntry] = []
     private(set) var didOverflow = false
     private var isPending = false
@@ -581,7 +606,7 @@ private struct DirectoryFrame {
         ScanEntry(
             path: path, name: name, isDirectory: true, isHardLinkAlias: false,
             isCloudOnly: false, isPending: isPending,
-            logicalBytes: logical, allocatedBytes: allocated, children: children
+            logicalBytes: logical, allocatedBytes: allocated, itemCount: items, children: children
         )
     }
 
@@ -605,6 +630,7 @@ private struct DirectoryFrame {
         logical = logicalOverflow ? .max : newLogical
         allocated = allocatedOverflow ? .max : newAllocated
         didOverflow = didOverflow || logicalOverflow || allocatedOverflow
+        items = items.addingCounted(entry)
         children.append(entry)
     }
 }
@@ -613,8 +639,17 @@ private func directoryEntry(path: String, name: String, cloudOnly: Bool = false,
     ScanEntry(
         path: path, name: name, isDirectory: true, isHardLinkAlias: false,
         isCloudOnly: cloudOnly, isPending: pending,
-        logicalBytes: 0, allocatedBytes: 0, children: []
+        logicalBytes: 0, allocatedBytes: 0, itemCount: 0, children: []
     )
+}
+
+private extension UInt64 {
+    /// Adds an entry and the items below it. A second hard link to a file isn't an item.
+    func addingCounted(_ entry: ScanEntry) -> UInt64 {
+        guard !entry.isHardLinkAlias else { return self }
+        let (sum, overflow) = addingReportingOverflow(entry.itemCount == .max ? .max : entry.itemCount + 1)
+        return overflow ? .max : sum
+    }
 }
 
 /// The traversal keeps one directory descriptor open per level. launchd starts GUI apps

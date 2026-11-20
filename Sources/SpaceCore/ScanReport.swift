@@ -15,6 +15,8 @@ public struct ScanEntry: Identifiable, Sendable {
     public let isPending: Bool
     public let logicalBytes: UInt64
     public let allocatedBytes: UInt64
+    /// Files and folders below this entry, counting each hard-linked file once.
+    public let itemCount: UInt64
     public let children: [ScanEntry]
 
     public func bytes(for metric: SizeMetric) -> UInt64 {
@@ -73,6 +75,8 @@ public struct ScanReport: Sendable {
     public let root: ScanEntry
     public let issues: [ScanIssue]
     public let isPreview: Bool
+    /// Entries skipped by exclude patterns. Their contents aren't visited or counted.
+    public let excludedCount: UInt64
     /// Any skipped path leaves the totals incomplete, including protected ones.
     public var isPartial: Bool { !issues.isEmpty }
     /// Failures other than access refusals. These warrant a warning.
@@ -80,10 +84,11 @@ public struct ScanReport: Sendable {
     /// Paths the OS refused to let this scan read.
     public var protectedIssues: [ScanIssue] { issues.filter(\.isProtected) }
 
-    init(root: ScanEntry, issues: [ScanIssue], isPreview: Bool = false) {
+    init(root: ScanEntry, issues: [ScanIssue], isPreview: Bool = false, excludedCount: UInt64 = 0) {
         self.root = root
         self.issues = issues
         self.isPreview = isPreview
+        self.excludedCount = excludedCount
     }
 
     /// Ranks each counted regular file in the selected subtree. Hard-link ownership
