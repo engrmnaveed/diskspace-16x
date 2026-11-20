@@ -4,7 +4,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — v0.3.0 is published; M2.1 landed. M2.2 is PR #21: merge it once CI is green. M2.3 (Mac Trash) is committed on `feature/m2-mac-trash`, branched before M2.2: merge `main` into it (keep both CHANGELOG `Unreleased` entries and every roadmap tick), run `swift test`, then open its PR. Then M2.4, rescan one folder.
 
 **Resume here** — v0.3.0 is published; M2.1 (Trash backends) and M2.2 (Trash in the explorer) landed. Next: M2.3, Move to Trash in the Mac app (multi-select in `ResultsView`, ⌘⌫, a confirmation sheet, `FileManager.trashItem`, the tree updated in place like `without()` in `cli/src/tui/explorer.rs`).
 
