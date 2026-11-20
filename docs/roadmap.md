@@ -34,6 +34,9 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 
 ## How to resume
 
+A scheduled task (`space16x-roadmap` in the Claude desktop app) starts a session every 6 hours to continue this roadmap. An interactive session follows the same steps.
+
+0. **Lock.** If `.git/space16x-roadmap.lock` was modified less than 120 minutes ago, another session is working: stop. Otherwise write the current date into it, refresh it after every commit, and delete it when you stop. A session cut off by a usage limit leaves a lock that goes stale on its own.
 1. `git fetch` and read this file's **Progress** and **Resume here**.
 2. Look for unfinished work: open PRs (`gh pr list`), local and remote `feature/*` branches, and uncommitted changes. Continue that before starting the next item.
 3. If a PR's CI failed, fix it first. If it passed, merge it and tick the item.
