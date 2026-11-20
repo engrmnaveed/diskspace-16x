@@ -66,9 +66,9 @@ struct Cards {
                   detail: "Switch to the donut chart.", progress: 4) { canvas in
             appPanel("donut", on: canvas, top: 646)
         }
-        try short("largest", section: "DESKTOP  /  macOS", title: ["Find the files", "behind the total."],
-                  detail: "Open the Largest Files view.", progress: 5) { canvas in
-            appPanel("files", on: canvas, top: 646)
+        try short("sort", section: "DESKTOP  /  macOS", title: ["Sort by size,", "items, or name."],
+                  detail: "Click a column to re-sort.", progress: 5) { canvas in
+            appPanel("list", on: canvas, top: 646)
         }
         try short("end", section: "DISK SPACE ANALYZER", title: ["Find the", "space hogs."],
                   detail: "Free and open source.", progress: 6) { canvas in
@@ -78,7 +78,7 @@ struct Cards {
             canvas.text("engrmnaveed/diskspace-16x", x: 104, y: 1297, size: 32, ink: mint, mono: true)
         }
 
-        for (index, (terminal, screenshot)) in [("folders", "treemap"), ("drill", "donut"), ("rank", "files")].enumerated() {
+        for (index, (terminal, screenshot)) in [("folders", "treemap"), ("drill", "donut"), ("rank", "list")].enumerated() {
             let canvas = PromoCanvas(width: 900, height: 500)
             canvas.background()
             canvas.image(icon, in: CGRect(x: 21, y: 14, width: 66, height: 66))

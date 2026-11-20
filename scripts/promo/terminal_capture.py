@@ -106,7 +106,7 @@ def capture_explorer(binary, fixture):
         terminal.send(b"\x7f")
         wait_for(terminal, stream, screen, "Exports", "Media", "4 items")
         terminal.send(b"f")
-        wait_for(terminal, stream, screen, "Largest files", "7 shown", "interview.wav")
+        wait_for(terminal, stream, screen, "Largest files", "55 shown", "interview.wav")
         frames["rank"] = snapshot(screen, fixture)
 
         terminal.send(b"q")

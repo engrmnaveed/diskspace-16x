@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROMO = ROOT / "scripts" / "promo"
 SHOTS = [
     ("opening", 75), ("launch", 30), ("folders", 105), ("drill", 90), ("rank", 105),
-    ("report", 90), ("map", 105), ("share", 90), ("largest", 75), ("end", 120),
+    ("report", 90), ("map", 105), ("share", 90), ("sort", 75), ("end", 120),
 ]
 FPS = 30
 FIXTURE = {
@@ -34,6 +34,9 @@ FIXTURE = {
 }
 
 
+ICONS = 48
+
+
 def create_fixture(root):
     for relative, mib in FIXTURE.items():
         path = root / relative
@@ -41,6 +44,11 @@ def create_fixture(root):
         with path.open("wb") as file:
             for _ in range(mib):
                 file.write(os.urandom(1024 * 1024))
+    # Many small files give the item-count sort something to show.
+    icons = root / "Assets" / "icons"
+    icons.mkdir()
+    for index in range(ICONS):
+        (icons / f"icon-{index:02}.png").write_bytes(os.urandom(2048))
 
 
 def capture(binary, work):
@@ -123,7 +131,7 @@ def encode(work):
     for index, (name, frames) in enumerate(SHOTS):
         inputs.extend(["-i", work / f"{name}.png"])
         # Scale up first to keep the small vertical pan smooth at 30 fps.
-        zoom = f"1+0.035*on/{frames - 1}" if name in ("opening", "map", "share", "largest", "end") else "1"
+        zoom = f"1+0.035*on/{frames - 1}" if name in ("opening", "map", "share", "sort", "end") else "1"
         filters.append(
             f"[{index}:v]scale=2160:3840:out_color_matrix=bt709,format=yuv420p,"
             f"zoompan=z='{zoom}':x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':"

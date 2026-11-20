@@ -53,13 +53,14 @@ struct Capture {
         }
 
         var desktop: [String: CGImage] = [:]
-        for (name, mode, presentation) in [
-            ("treemap", BrowseMode.folders, FolderPresentation.treemap),
-            ("donut", .folders, .donut),
-            ("files", .largestFiles, .list),
+        for (name, mode, presentation, sort) in [
+            ("treemap", BrowseMode.folders, FolderPresentation.treemap, EntrySort.largestFirst),
+            ("donut", .folders, .donut, .largestFirst),
+            ("list", .folders, .list, EntrySort(key: .items, order: .reverse)),
         ] {
             workspace.mode = mode
             workspace.folderPresentation = presentation
+            workspace.sortOrder = [sort]
             try await waitUntil { !workspace.isLoadingRows }
             try await Task.sleep(for: .milliseconds(350))
             host.layoutSubtreeIfNeeded()
