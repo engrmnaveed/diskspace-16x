@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Move files and folders to the Trash from the Mac app. Select one or more rows with ⌘-click or ⇧-click, then press ⌘⌫, choose **Browse → Move to Trash…**, use the row's context menu, or click **Move to Trash** in the selection bar. An alert confirms the item count and allocated size. The list, charts, and totals update in place without a rescan. Cloud-only, protected, unscanned, and incompletely read items stay where they are, as in the CLI explorer.
+
 ## 0.3.0
 
 - Add apparent sizes and item counts to the CLI. `space16x scan --apparent` shows and ranks file lengths, as `ls -l` reports them, instead of allocated bytes, which helps with sparse and compressed files. JSON reports move to schema 3, which keeps every schema 2 field and adds `apparentBytes`, `itemCount` (files and folders below an entry, counting each hard-linked file once), `rankedBy` and `edition`. Exit codes are unchanged.

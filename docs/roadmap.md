@@ -4,7 +4,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — v0.3.0 is published; M2.1–M2.3 landed (Trash backends, Trash in the explorer, Trash in the Mac app). Next: M2.4, rescan one folder (TUI `r` and Mac **Rescan Folder**), replacing one subtree in place.
 
 **Resume here** — M1 is released as v0.3.0. M2.1 (Trash backends and the rules update) is on `feature/m2-trash-backends`: the backends and their tests are committed; next, update the rules in `AGENTS.md`, `SECURITY.md`, `PRD.md` and `README.md`, tick M2.1 and open its PR. Then M2.2.
 
@@ -20,7 +20,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 ### M2 (v0.4.0) Act [Basic]
 - [~] M2.1 Rust: Trash backends, macOS `trashItemAtURL` through a minimal Objective-C binding (no new crate) and an in-house Linux FreeDesktop Trash (home Trash, else `$topdir/.Trash/$uid` or `$topdir/.Trash-$uid`, `.trashinfo` written first, never across devices), plus the write rule in `AGENTS.md`, `SECURITY.md`, `PRD.md` and `README.md`
 - [ ] M2.2 TUI: Space marks items, `d` moves them to the Trash after a `y/N` prompt, the tree updates in place, "Space is freed when you empty the Trash", cloud-only and protected items blocked, `--read-only` and `SPACE16X_READ_ONLY=1`, a pty check in `scripts/check-tui.py`
-- [ ] M2.3 Mac: multi-select, ⌘⌫ Move to Trash, a confirmation sheet with the item count and size, `FileManager.trashItem`, cloud-only and protected items blocked, the tree updated in place
+- [x] M2.3 Mac: multi-select, ⌘⌫ Move to Trash, a confirmation sheet with the item count and size, `FileManager.trashItem`, cloud-only and protected items blocked, the tree updated in place
 - [ ] M2.4 Rescan folder: TUI `r` and Mac **Rescan Folder**, replacing one subtree in place
 - [ ] M2.5 Mac: Quick Look on Space
 - [ ] M2.6 Docs (`docs/cli.md`, README, CHANGELOG, manual QA rows for Trash and Put Back) and the promo refresh showing Move to Trash
