@@ -40,6 +40,11 @@ enum ScanFormat {
         bytes == 1 ? "1 byte" : "\(bytes.formatted()) bytes"
     }
 
+    /// Exact bytes plus the binary size, for tooltips beside a decimal size.
+    static func sizeDetail(_ bytes: UInt64) -> String {
+        bytes < 1024 ? exactSize(bytes) : "\(exactSize(bytes)) (\(ByteFormat.binary(bytes)))"
+    }
+
     static func items(_ count: Int) -> String {
         count == 1 ? "1 item" : "\(count.formatted()) items"
     }

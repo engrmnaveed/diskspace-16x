@@ -25,7 +25,8 @@ The scan command prints a plain directory summary and works in scripts.
   --version  Show the installed version
   -h, --help Show this help
 
-All sizes are allocated bytes. Scan exit codes: 0 complete, 1 error, 2 partial.
+Sizes are allocated bytes in decimal units (1 KB = 1,000 bytes), as in Finder.
+Scan exit codes: 0 complete, 1 error, 2 partial.
 ";
 
 #[derive(Debug, PartialEq, Eq)]

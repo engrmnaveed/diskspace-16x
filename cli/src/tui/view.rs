@@ -1,6 +1,6 @@
 use super::explorer::{Explorer, LARGEST_LIMIT, Mode, Panel, Status};
 use crate::{
-    report::{format_bytes, terminal_path, terminal_text},
+    report::{format_binary_bytes, format_bytes, terminal_path, terminal_text},
     scanner::{Entry, EntryKind, EntryState},
 };
 use ratatui::{
@@ -595,14 +595,17 @@ fn draw_details(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         EntryState::Incomplete => "Incomplete scan data",
         EntryState::HardLinkAlias => "Hard link counted at another path",
     };
+    let bytes = entry.allocated_bytes;
+    // The binary size adds detail only once it differs from the byte count.
+    let binary = if bytes < 1024 {
+        String::new()
+    } else {
+        format!("{} · ", format_binary_bytes(bytes))
+    };
     frame.render_widget(
         Paragraph::new(vec![
             Line::styled(
-                format!(
-                    "{} allocated ({} bytes)",
-                    format_bytes(entry.allocated_bytes),
-                    entry.allocated_bytes
-                ),
+                format!("{} allocated ({binary}{bytes} bytes)", format_bytes(bytes)),
                 ACCENT,
             ),
             Line::styled(state, MUTED),

@@ -102,7 +102,7 @@ struct DiskTreemapView: View {
                     .accessibilityValue(ScanFormat.exactSize(bytes))
                     .accessibilityHint(entry.isDirectory ? "Open folder" : "Select file")
                     .accessibilityAddTraits(entry.id == workspace.selection ? .isSelected : [])
-                    .help("\(entry.path) • \(ScanFormat.size(bytes))")
+                    .help("\(entry.path) • \(ScanFormat.size(bytes)) · \(ScanFormat.sizeDetail(bytes))")
                     .contextMenu {
                         if entry.isDirectory {
                             Button("Open Folder") { workspace.browse(entry) }

@@ -67,7 +67,7 @@ struct DiskDonutView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Folder allocation")
             .accessibilityValue(ScanFormat.exactSize(folder.allocatedBytes))
-            .help(ScanFormat.exactSize(folder.allocatedBytes))
+            .help(ScanFormat.sizeDetail(folder.allocatedBytes))
         }
         .padding(5)
         .frame(width: diameter, height: diameter)
@@ -157,7 +157,7 @@ struct DiskDonutView: View {
         .accessibilityValue("\(ScanFormat.exactSize(slice.bytes)), \(percent)")
         .accessibilityHint(slice.action)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .help("\(slice.title) · \(ScanFormat.exactSize(slice.bytes)) · \(percent)")
+        .help("\(slice.title) · \(ScanFormat.sizeDetail(slice.bytes)) · \(percent)")
     }
 
     private var emptyState: some View {
