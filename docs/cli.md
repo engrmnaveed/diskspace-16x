@@ -55,6 +55,8 @@ On macOS, a startup-disk scan counts firmlinked directories such as `/Users` at 
 
 Expected exclusions such as symlinks and different-device mounts are part of a complete scan. Read errors and skipped provider metadata due to a timeout make a scan partial.
 
+Paths the operating system refuses to open are protected paths. These include folders readable only by root, and on macOS, folders guarded by privacy controls or System Integrity Protection. They also make a scan partial with exit code `2`, because their contents aren't counted, but they are reported calmly. Standard error lists each other issue and summarizes protected paths in one line, and JSON output lists every path in `issues`. Text reports mark them `[protected]`, and the explorer shows a protected state instead of a warning. On macOS, granting your terminal app Full Disk Access lets the CLI read privacy-protected folders. See [Full Disk Access](install.md#full-disk-access).
+
 ## JSON schema 2
 
 | Field | Meaning |
@@ -62,7 +64,7 @@ Expected exclusions such as symlinks and different-device mounts are part of a c
 | `schemaVersion` | The integer `2`. |
 | `scope` | Absolute path to the scan root. |
 | `allocatedBytes` | Counted regular-file allocation in bytes. |
-| `isPartial` | Boolean. If true, errors qualify the totals. |
+| `isPartial` | Boolean. If true, skipped paths qualify the totals: errors, protected paths, or both. |
 | `issues` | Array of objects with a `path` and human-readable `message`. |
 | `depth`, `entries` | Depth report only. The selected depth and a flattened list of entries with `path`, `allocatedBytes`, and `kind` (`directory` or `file`). |
 | `topLimit`, `topFiles` | Top report only. The requested limit and a ranked list of files with `path` and `allocatedBytes`. |

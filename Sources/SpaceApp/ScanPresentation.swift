@@ -48,6 +48,10 @@ enum ScanFormat {
     static func items(_ count: Int) -> String {
         count == 1 ? "1 item" : "\(count.formatted()) items"
     }
+
+    static func protectedItems(_ count: Int) -> String {
+        count == 1 ? "One protected item" : "\(count.formatted()) protected items"
+    }
 }
 
 struct SpaceMark: View {

@@ -152,6 +152,20 @@ To skip the prompt entirely, remove the quarantine attribute from a copy you hav
 xattr -dr com.apple.quarantine "/Applications/Space 16X.app"
 ```
 
+### Full Disk Access
+
+macOS keeps some folders, such as other apps' containers, Mail, and Safari data, private to the apps that own them. A scan of your home folder or the startup disk lists them as protected items. Their contents aren't counted. To include them, give Space 16X Full Disk Access. The app only reads file metadata, and it never opens or changes file contents.
+
+1. In Space 16X, click **Allow Full Disk Access…** in the protected-items notice, or open **System Settings → Privacy & Security → Full Disk Access**.
+2. Turn on **Space 16X**. If it isn't listed, click **+** and choose it from Applications.
+3. Return to Space 16X and click **Scan Again**. If items are still skipped, quit and reopen the app.
+
+For the CLI, give Full Disk Access to the terminal app you run it from, such as Terminal or iTerm.
+
+Some folders remain protected even with Full Disk Access. System Integrity Protection guards parts of the system, and some folders are readable only by root. Both apps list these items so the totals stay accurate about what they exclude.
+
+Because the app is ad hoc signed rather than notarized, macOS may stop applying the setting after an update. If protected folders reappear after you upgrade, turn **Space 16X** off and on again in Full Disk Access.
+
 ## Mac app keyboard shortcuts
 
 Focus the file table to use arrow keys for row selection. Core commands are available in the menu bar.

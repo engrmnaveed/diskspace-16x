@@ -46,6 +46,7 @@ pub(crate) fn write_plain(
 fn write_entry(mut out: impl Write, entry: &Entry, annotation: &str) -> io::Result<()> {
     let state = match entry.state {
         EntryState::CloudOnly => "  [cloud only]",
+        EntryState::Protected => "  [protected]",
         EntryState::Incomplete => "  [incomplete]",
         EntryState::HardLinkAlias => "  [hard link counted elsewhere]",
         _ => "",

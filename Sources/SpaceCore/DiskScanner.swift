@@ -179,7 +179,7 @@ private struct Traversal {
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                issues.append(ScanIssue(path: childPath, message: error.localizedDescription))
+                issues.append(ScanIssue(path: childPath, error: error))
                 continue
             }
             guard metadata.st_dev == rootDevice else { continue }
@@ -201,7 +201,7 @@ private struct Traversal {
                     } catch is CancellationError {
                         throw CancellationError()
                     } catch {
-                        issues.append(ScanIssue(path: childPath, message: error.localizedDescription))
+                        issues.append(ScanIssue(path: childPath, error: error))
                         continue
                     }
                 }
@@ -221,7 +221,7 @@ private struct Traversal {
                     )
                     if let error = listing.error {
                         if error.isCloudOnly { throw error }
-                        issues.append(ScanIssue(path: childPath, message: error.message))
+                        issues.append(ScanIssue(path: childPath, error: error))
                     }
                     ancestors.insert(identity)
                     stack.append(DirectoryFrame(
@@ -232,7 +232,7 @@ private struct Traversal {
                 } catch {
                     let cloudOnly = (error as? DirectoryFailure)?.isCloudOnly == true
                     if !cloudOnly {
-                        issues.append(ScanIssue(path: childPath, message: error.localizedDescription))
+                        issues.append(ScanIssue(path: childPath, error: error))
                     }
                     let entry = directoryEntry(path: childPath, name: name.displayName, cloudOnly: cloudOnly)
                     add(entry, to: &stack[level], parentDepth: level)
@@ -416,6 +416,19 @@ private struct DirectoryFailure: LocalizedError {
 
     var message: String { directoryError(operation, code) }
     var errorDescription: String? { message }
+}
+
+extension ScanIssue {
+    /// Records a failure, separating access refusals from other errors.
+    fileprivate init(path: String, error: Error) {
+        let kind: Kind
+        switch (error as? DirectoryFailure)?.code {
+        case EACCES?: kind = .permissionDenied
+        case EPERM?: kind = .notPermitted
+        default: kind = .error
+        }
+        self.init(path: path, message: error.localizedDescription, kind: kind)
+    }
 }
 
 // The stream is enumerated on its opening thread before publishing the handle.
