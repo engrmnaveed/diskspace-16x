@@ -1,5 +1,8 @@
 mod report;
 mod scanner;
+// The explorer starts moving marked items to the Trash in roadmap item M2.2.
+#[allow(dead_code)]
+mod trash;
 mod tui;
 
 use std::env;
