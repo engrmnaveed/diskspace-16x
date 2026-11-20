@@ -85,6 +85,7 @@ See the [installation guide](docs/install.md) for Wget removal, Fish commands, v
 - On the macOS startup disk, both scanners count APFS firmlinked folders such as `/Users` at their visible paths and skip their duplicate paths under `/System/Volumes/Data`. A direct scan of the Data volume includes those folders.
 - macOS scans keep cloud-only placeholders as references with zero counted bytes and leave cloud-only folders unexpanded. If a metadata call stalls in a known iCloud or File Provider directory, the scan skips the affected path and reports partial results.
 - If a descendant cannot be inspected, the scan continues and marks its result as partial. Open the scan details to see which paths were affected.
+- Folders the system won't let any app read, such as other apps' data or root-only system folders, are listed as protected rather than as errors. Their contents aren't counted. On macOS, [Full Disk Access](docs/install.md#full-disk-access) lets both apps read folders protected by privacy settings. Folders protected by System Integrity Protection stay unreadable.
 - APFS clones can share blocks and snapshots can retain blocks. Scan totals can differ from volume usage and the amount of space reclaimed after deleting a file.
 - Scan results reflect metadata observed during the traversal. Activity in the scanned folders can change results between runs.
 

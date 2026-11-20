@@ -8,9 +8,7 @@ struct ResultsView: View {
         if let scope = workspace.visibleScope {
             VStack(spacing: 0) {
                 scopeHeader(scope)
-                if let report = workspace.report, report.isPartial {
-                    partialWarning(report.issues.count)
-                }
+                scanNotice
                 if workspace.mode == .folders {
                     presentationBar
                 }
@@ -151,22 +149,60 @@ struct ResultsView: View {
         .accessibilityLabel("Folder path")
     }
 
-    private func partialWarning(_ count: Int) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+    /// Real scan errors get a warning. Protected items alone get a quieter notice.
+    @ViewBuilder
+    private var scanNotice: some View {
+        let errors = workspace.errorIssueCount
+        let protected = workspace.protectedIssueCount
+        if errors > 0 {
+            noticeBar(
+                symbol: "exclamationmark.triangle.fill",
+                isWarning: true,
+                message: (errors == 1
+                    ? "Partial scan. One scan error affects these totals."
+                    : "Partial scan. \(errors.formatted()) scan errors affect these totals.")
+                    + (protected > 0 ? " \(ScanFormat.protectedItems(protected)) weren't counted." : "")
+            )
+        } else if protected > 0 {
+            noticeBar(
+                symbol: "lock.fill",
+                isWarning: false,
+                message: protected == 1
+                    ? "One protected item wasn't counted. macOS doesn't let apps read it."
+                    : "\(ScanFormat.protectedItems(protected)) weren't counted. macOS doesn't let apps read them."
+            )
+        }
+    }
+
+    private func noticeBar(symbol: String, isWarning: Bool, message: String) -> some View {
+        let tint: Color = isWarning ? .orange : .secondary
+        return HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .foregroundStyle(tint)
                 .accessibilityHidden(true)
-            Text(count == 1
-                ? "Partial scan. One scan issue affects these totals."
-                : "Partial scan. \(count.formatted()) scan issues affect these totals.")
+            Text(message)
                 .font(.subheadline)
+                .foregroundStyle(isWarning ? .primary : .secondary)
             Spacer()
+            switch workspace.accessAdvice {
+            case .grant:
+                Button("Allow Full Disk Access…", action: FullDiskAccess.openSettings)
+                    .buttonStyle(.borderless)
+                    .help("Open Privacy & Security settings to let Space 16X read privacy-protected folders")
+            case .rescan:
+                Button("Scan Again", action: workspace.rescan)
+                    .buttonStyle(.borderless)
+                    .disabled(!workspace.canRescan)
+                    .help("Full Disk Access is on. Scan again to include the folders it unlocks.")
+            case .none:
+                EmptyView()
+            }
             Button("View Details") { workspace.showsDetails = true }
                 .buttonStyle(.borderless)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 9)
-        .background(.orange.opacity(0.11))
+        .background(tint.opacity(isWarning ? 0.11 : 0.08))
     }
 
     private var presentationBar: some View {
@@ -243,6 +279,7 @@ struct ResultsView: View {
 
     private func emptyMessage(for scope: ScanEntry) -> String {
         if scope.isCloudOnly { return "Contents are available in the cloud" }
+        if workspace.protectedPaths.contains(scope.path) { return "macOS doesn't allow apps to read this folder" }
         if workspace.issuePaths.contains(scope.path) { return "Folder metadata is unavailable" }
         if scope.isPending {
             return workspace.isScanning ? "Waiting for scanned items…" : "Contents were not scanned"
@@ -256,6 +293,11 @@ struct ResultsView: View {
             Label("Cloud only", systemImage: "cloud")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        } else if workspace.protectedPaths.contains(entry.path) {
+            Label("Protected", systemImage: "lock")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help("macOS doesn't let apps read this item, so its contents aren't counted")
         } else if workspace.issuePaths.contains(entry.path) {
             Label("Incomplete", systemImage: "exclamationmark.triangle")
                 .font(.caption)

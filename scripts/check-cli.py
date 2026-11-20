@@ -95,6 +95,11 @@ def check(binary, root):
         assert partial["isPartial"] is True
         assert partial["issues"] and partial["issues"][0]["path"] == str(blocked)
         assert partial["allocatedBytes"] == total_bytes
+        # Plain output summarizes protected paths instead of listing each one.
+        plain = run(binary, "scan", root, status=2)
+        assert "[protected]" in plain.stdout and "[partial total]" in plain.stdout
+        assert "skipped 1 protected path (permission denied" in plain.stderr
+        assert f"{blocked}:" not in plain.stderr
         unreadable = run(binary, "scan", blocked, "--json", status=1)
         assert not unreadable.stdout and unreadable.stderr
     finally:

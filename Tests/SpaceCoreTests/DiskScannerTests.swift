@@ -184,6 +184,10 @@ final class DiskScannerTests: XCTestCase {
             XCTAssertTrue(report.isPartial)
             XCTAssertEqual(report.root.logicalBytes, 11)
             XCTAssertEqual(report.issues.map(\.path), [restricted.path])
+            // A permission refusal is an expected, protected path rather than a scan error.
+            XCTAssertEqual(report.issues.map(\.kind), [.permissionDenied])
+            XCTAssertEqual(report.protectedIssues.count, 1)
+            XCTAssertTrue(report.errorIssues.isEmpty)
             XCTAssertThrowsError(try DiskScanner.scan(path: restricted.path)) { error in
                 XCTAssertTrue(error is ScanFailure)
             }
@@ -212,6 +216,7 @@ final class DiskScannerTests: XCTestCase {
             XCTAssertEqual(report.root.children.map(\.name), ["visible"])
             XCTAssertEqual(report.root.logicalBytes, 11)
             XCTAssertEqual(report.issues.map(\.path), [root.path + "/%FF"])
+            XCTAssertEqual(report.issues.map(\.kind), [.error])
         }
     }
     #endif

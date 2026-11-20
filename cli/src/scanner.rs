@@ -35,14 +35,72 @@ pub enum EntryState {
     Local,
     Pending,
     CloudOnly,
+    /// The OS refused access to this entry or a descendant, and nothing failed otherwise.
+    Protected,
     Incomplete,
     HardLinkAlias,
+}
+
+impl EntryState {
+    /// Adds a skipped descendant's state to a directory's, keeping the more serious one.
+    fn degrade(self, problem: Self) -> Self {
+        match (self, problem) {
+            (Self::Local, Self::Protected | Self::Incomplete) => problem,
+            (Self::Protected, Self::Incomplete) => Self::Incomplete,
+            _ => self,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct Issue {
     pub path: PathBuf,
     pub message: String,
+    pub kind: IssueKind,
+}
+
+impl Issue {
+    fn error(path: PathBuf, message: impl Into<String>) -> Self {
+        Self {
+            path,
+            message: message.into(),
+            kind: IssueKind::Error,
+        }
+    }
+}
+
+/// Why a path was skipped. Access refusals are expected when scanning system locations.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IssueKind {
+    /// File permissions don't let this user read the path (EACCES).
+    PermissionDenied,
+    /// macOS privacy controls or System Integrity Protection refused access (EPERM).
+    NotPermitted,
+    /// Any other failure, such as an I/O error or an unresponsive cloud provider.
+    Error,
+}
+
+impl IssueKind {
+    fn of(error: &io::Error) -> Self {
+        match error.raw_os_error() {
+            Some(libc::EACCES) => Self::PermissionDenied,
+            Some(libc::EPERM) => Self::NotPermitted,
+            _ => Self::Error,
+        }
+    }
+
+    /// The OS refused access, so the path is protected rather than failed.
+    pub fn is_protected(self) -> bool {
+        self != Self::Error
+    }
+
+    fn entry_state(self) -> EntryState {
+        if self.is_protected() {
+            EntryState::Protected
+        } else {
+            EntryState::Incomplete
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -208,8 +266,8 @@ impl<F: FnMut(Event)> Walker<'_, F> {
                 Ok(metadata) => metadata,
                 Err(error) => {
                     check_cancelled(self.cancelled)?;
-                    record_issue(&mut issues, &path, Operation::Stat, &error);
-                    frame.state = EntryState::Incomplete;
+                    let kind = record_issue(&mut issues, &path, Operation::Stat, &error);
+                    frame.state = frame.state.degrade(kind.entry_state());
                     continue;
                 }
             };
@@ -242,8 +300,13 @@ impl<F: FnMut(Event)> Walker<'_, F> {
                             Ok(_) => {}
                             Err(error) => {
                                 check_cancelled(self.cancelled)?;
-                                record_issue(&mut issues, &path, Operation::CanonicalPath, &error);
-                                frame.state = EntryState::Incomplete;
+                                let kind = record_issue(
+                                    &mut issues,
+                                    &path,
+                                    Operation::CanonicalPath,
+                                    &error,
+                                );
+                                frame.state = frame.state.degrade(kind.entry_state());
                                 continue;
                             }
                         }
@@ -257,10 +320,10 @@ impl<F: FnMut(Event)> Walker<'_, F> {
                             preview,
                         );
                     } else if ancestors.contains(&identity) {
-                        issues.push(Issue {
-                            path: path.clone(),
-                            message: "Skipped a directory that points back to an ancestor.".into(),
-                        });
+                        issues.push(Issue::error(
+                            path.clone(),
+                            "Skipped a directory that points back to an ancestor.",
+                        ));
                         add(
                             frame,
                             empty_directory(path, EntryState::Incomplete),
@@ -303,10 +366,11 @@ impl<F: FnMut(Event)> Walker<'_, F> {
                             }
                             Err(error) => {
                                 check_cancelled(self.cancelled)?;
-                                record_issue(&mut issues, &path, Operation::List, &error);
+                                let kind =
+                                    record_issue(&mut issues, &path, Operation::List, &error);
                                 add(
                                     frame,
-                                    empty_directory(path, EntryState::Incomplete),
+                                    empty_directory(path, kind.entry_state()),
                                     level,
                                     preview,
                                 );
@@ -362,11 +426,9 @@ struct Frame {
 
 impl Frame {
     fn new(path: PathBuf, identity: Identity, listing: Directory) -> Self {
-        let state = if listing.error.is_some() {
-            EntryState::Incomplete
-        } else {
-            EntryState::Local
-        };
+        let state = listing.error.as_ref().map_or(EntryState::Local, |error| {
+            IssueKind::of(error).entry_state()
+        });
         Self {
             path,
             identity,
@@ -380,10 +442,10 @@ impl Frame {
     fn finish(self, issues: &mut Vec<Issue>) -> Arc<Entry> {
         let (entry, overflow) = directory_entry(self.path, self.state, self.children);
         if overflow {
-            issues.push(Issue {
-                path: entry.path.clone(),
-                message: "Directory totals exceed the supported byte range.".into(),
-            });
+            issues.push(Issue::error(
+                entry.path.clone(),
+                "Directory totals exceed the supported byte range.",
+            ));
         }
         entry
     }
@@ -423,10 +485,10 @@ fn file_entry(
         allocated = match blocks.checked_mul(512) {
             Some(bytes) => bytes,
             None => {
-                issues.push(Issue {
-                    path: path.clone(),
-                    message: "Allocated size exceeds the supported byte range.".into(),
-                });
+                issues.push(Issue::error(
+                    path.clone(),
+                    "Allocated size exceeds the supported byte range.",
+                ));
                 state = EntryState::Incomplete;
                 u64::MAX
             }
@@ -462,12 +524,12 @@ fn directory_entry(
         }
         if entry.state == EntryState::Pending {
             state = EntryState::Pending;
-        } else if entry.state == EntryState::Incomplete && state == EntryState::Local {
-            state = EntryState::Incomplete;
+        } else {
+            state = state.degrade(entry.state);
         }
     }
-    if overflow && state == EntryState::Local {
-        state = EntryState::Incomplete;
+    if overflow {
+        state = state.degrade(EntryState::Incomplete);
     }
     (
         Arc::new(Entry {
@@ -484,10 +546,7 @@ fn directory_entry(
 fn unavailable_root(path: &Path, error: &io::Error) -> Report {
     Report {
         root: empty_directory(path.to_path_buf(), EntryState::Incomplete),
-        issues: vec![Issue {
-            path: path.to_path_buf(),
-            message: error.to_string(),
-        }],
+        issues: vec![Issue::error(path.to_path_buf(), error.to_string())],
         is_preview: false,
     }
 }
@@ -507,11 +566,19 @@ fn contextual_error(path: &Path, operation: Operation, error: &io::Error) -> io:
     )
 }
 
-fn record_issue(issues: &mut Vec<Issue>, path: &Path, operation: Operation, error: &io::Error) {
+fn record_issue(
+    issues: &mut Vec<Issue>,
+    path: &Path,
+    operation: Operation,
+    error: &io::Error,
+) -> IssueKind {
+    let kind = IssueKind::of(error);
     issues.push(Issue {
         path: path.to_path_buf(),
         message: format!("{operation}: {}", metadata_error_message(error)),
+        kind,
     });
+    kind
 }
 
 fn metadata_error_message(error: &io::Error) -> String {

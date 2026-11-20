@@ -77,10 +77,9 @@ impl Preview {
 }
 
 fn rebuild(previous: &Entry, children: Vec<Arc<Entry>>) -> Arc<Entry> {
-    let state = if previous.state == EntryState::Incomplete {
-        EntryState::Incomplete
-    } else {
-        EntryState::Local
+    let state = match previous.state {
+        EntryState::Protected | EntryState::Incomplete => previous.state,
+        _ => EntryState::Local,
     };
     directory_entry(previous.path.clone(), state, children).0
 }

@@ -27,6 +27,13 @@ final class ScanWorkspace {
 
     private(set) var report: ScanReport?
     private(set) var issuePaths: Set<String> = []
+    /// Paths the OS refused to let the scan read. They are a subset of `issuePaths`.
+    private(set) var protectedPaths: Set<String> = []
+    private(set) var errorIssueCount = 0
+    private(set) var protectedIssueCount = 0
+    private(set) var hasFullDiskAccess = FullDiskAccess.isGranted
+    private var scanHadFullDiskAccess = false
+    private var hasPrivacyRefusals = false
     private(set) var scope: [ScanEntry] = []
     private(set) var rows: [ScanEntry] = []
     private(set) var rankedScope: ScanEntry?
@@ -64,6 +71,18 @@ final class ScanWorkspace {
     var canChooseFolder: Bool { !isScanning && !isPresentingPicker }
     var canBrowse: Bool { report != nil && (!isScanning || scanHasResults) }
     var canRescan: Bool { report != nil && canChooseFolder }
+
+    /// Suggests Full Disk Access only when macOS privacy controls kept items out of this scan.
+    var accessAdvice: AccessAdvice {
+        guard hasPrivacyRefusals else { return .none }
+        if !hasFullDiskAccess { return .grant }
+        return scanHadFullDiskAccess ? .none : .rescan
+    }
+
+    func refreshFullDiskAccess() {
+        let granted = FullDiskAccess.isGranted
+        if granted != hasFullDiskAccess { hasFullDiskAccess = granted }
+    }
     var canBrowseParent: Bool { canBrowse && mode == .folders && scope.count > 1 }
 
     struct Notice {
@@ -128,6 +147,8 @@ final class ScanWorkspace {
         let path = url.path(percentEncoded: false)
         scanPath = path
         scanHasResults = false
+        refreshFullDiskAccess()
+        scanHadFullDiskAccess = hasFullDiskAccess
         progress = nil
         notice = nil
         showsDetails = false
@@ -269,6 +290,11 @@ final class ScanWorkspace {
         scanHasResults = true
         report = result
         issuePaths = Set(result.issues.map(\.path))
+        let protectedIssues = result.protectedIssues
+        protectedPaths = Set(protectedIssues.map(\.path))
+        protectedIssueCount = protectedIssues.count
+        errorIssueCount = result.issues.count - protectedIssues.count
+        hasPrivacyRefusals = protectedIssues.contains { $0.kind == .notPermitted }
         let oldScope = scope
         scope = [result.root]
         if continuing {

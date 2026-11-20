@@ -1,3 +1,4 @@
+import AppKit
 import SpaceCore
 import SwiftUI
 
@@ -57,8 +58,12 @@ struct WorkspaceView: View {
         }
         .sheet(isPresented: $workspace.showsDetails) {
             if let report = workspace.report {
-                ScanDetailsView(report: report)
+                ScanDetailsView(report: report, workspace: workspace)
             }
+        }
+        // Returning from System Settings may have changed Full Disk Access.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            workspace.refreshFullDiskAccess()
         }
     }
 
@@ -150,9 +155,12 @@ struct WorkspaceView: View {
             Button {
                 workspace.showsDetails = true
             } label: {
-                if report.isPartial {
+                if workspace.errorIssueCount > 0 {
                     Label("Partial scan", systemImage: "exclamationmark.triangle")
                         .symbolRenderingMode(.hierarchical)
+                } else if report.isPartial {
+                    Label("Protected items skipped", systemImage: "lock")
+                        .foregroundStyle(.secondary)
                 } else {
                     Label("Scan Details", systemImage: "info.circle")
                 }

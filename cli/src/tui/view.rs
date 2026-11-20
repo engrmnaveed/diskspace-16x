@@ -91,23 +91,26 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer, tick: usi
         Status::Cancelling => ("Cancelling…".into(), WARNING),
         Status::Cancelled => ("Scan cancelled".into(), WARNING),
         Status::Failed(_) => ("Scan failed".into(), WARNING),
-        Status::Complete => {
-            let count = explorer
-                .report
-                .as_ref()
-                .map_or(0, |report| report.issues.len());
-            if count == 0 {
-                ("Scan complete".into(), MUTED)
-            } else {
-                (
-                    format!(
-                        "Partial scan  ·  {count} {}",
-                        if count == 1 { "issue" } else { "issues" }
-                    ),
-                    WARNING,
-                )
+        Status::Complete => match issue_counts(explorer) {
+            (0, 0) => ("Scan complete".into(), MUTED),
+            (0, protected) => (
+                format!(
+                    "{protected} protected {} skipped",
+                    if protected == 1 { "path" } else { "paths" }
+                ),
+                MUTED,
+            ),
+            (errors, protected) => {
+                let mut status = format!(
+                    "Partial scan  ·  {errors} {}",
+                    if errors == 1 { "error" } else { "errors" }
+                );
+                if protected > 0 {
+                    status.push_str(&format!("  ·  {protected} protected"));
+                }
+                (status, WARNING)
             }
-        }
+        },
     };
     let mode = match (explorer.mode, area.width) {
         (Mode::Folders, 50..) => " Folders ",
@@ -184,22 +187,21 @@ fn draw_summary(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
     let Some(scope) = explorer.scope() else {
         return;
     };
-    let qualifier = if matches!(explorer.status, Status::Cancelled) {
-        "  ·  cancelled preview"
+    let (errors, protected) = issue_counts(explorer);
+    let (qualifier, qualifier_style) = if matches!(explorer.status, Status::Cancelled) {
+        ("  ·  cancelled preview", WARNING)
     } else if explorer
         .report
         .as_ref()
         .is_some_and(|report| report.is_preview)
     {
-        "  ·  provisional totals"
-    } else if explorer
-        .report
-        .as_ref()
-        .is_some_and(|report| !report.issues.is_empty())
-    {
-        "  ·  partial totals"
+        ("  ·  provisional totals", WARNING)
+    } else if errors > 0 {
+        ("  ·  partial totals", WARNING)
+    } else if protected > 0 {
+        ("  ·  excludes protected paths", MUTED)
     } else {
-        ""
+        ("", MUTED)
     };
     let count = explorer.rows.len();
     let quantity = if explorer.is_ranking() {
@@ -220,7 +222,7 @@ fn draw_summary(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
                 format!("{} allocated", format_bytes(scope.allocated_bytes)),
                 ACCENT,
             ),
-            Span::styled(qualifier, WARNING),
+            Span::styled(qualifier, qualifier_style),
             Span::styled(quantity, MUTED),
         ]),
     );
@@ -246,6 +248,9 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
                     "This folder is waiting to be scanned."
                 }
                 EntryState::Pending => "This folder was not scanned.",
+                EntryState::Protected => {
+                    "This folder is protected and can't be read. Press e for details."
+                }
                 EntryState::Incomplete => "No readable items here. Press e for scan issues.",
                 _ if explorer.mode == Mode::Largest && explorer.is_active() => {
                     "Waiting for local files to rank…"
@@ -346,6 +351,7 @@ impl Columns {
             EntryState::Local => "",
             EntryState::Pending => "Pending",
             EntryState::CloudOnly => "Cloud only",
+            EntryState::Protected => "Protected",
             EntryState::Incomplete => "Incomplete",
             EntryState::HardLinkAlias => "Hard link",
         };
@@ -358,6 +364,7 @@ impl Columns {
         let kind = match (entry.kind, entry.state, self.state) {
             (_, EntryState::CloudOnly, 0) => "○",
             (_, EntryState::Pending, 0) => "~",
+            (_, EntryState::Protected, 0) => "×",
             (_, EntryState::Incomplete, 0) => "!",
             (_, EntryState::HardLinkAlias, 0) => "=",
             (EntryKind::Directory, _, _) => "▸",
@@ -518,7 +525,8 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         ("Esc", "Go back or clear the filter"),
         ("q / Ctrl+C", "Quit and restore the terminal"),
         ("○ / ~", "Cloud only / pending"),
-        ("! / =", "Incomplete / hard link"),
+        ("× / !", "Protected / incomplete"),
+        ("=", "Hard link"),
         ("16X Brains", "Read-only metadata"),
     ];
     explorer.set_panel_page(lines.len(), usize::from(area.height));
@@ -540,6 +548,18 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
     }
 }
 
+/// Counts scan errors and protected paths separately, since only errors warrant a warning.
+fn issue_counts(explorer: &Explorer) -> (usize, usize) {
+    explorer.report.as_ref().map_or((0, 0), |report| {
+        let protected = report
+            .issues
+            .iter()
+            .filter(|issue| issue.kind.is_protected())
+            .count();
+        (report.issues.len() - protected, protected)
+    })
+}
+
 fn draw_issues(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
     let count = explorer
         .report
@@ -557,22 +577,37 @@ fn draw_issues(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         return;
     }
     if let Some(report) = &explorer.report {
-        for (i, issue) in report
+        // Errors come first. Protected paths follow in a muted style, since the OS refused them.
+        let (protected, errors): (Vec<_>, Vec<_>) = report
             .issues
             .iter()
+            .partition(|issue| issue.kind.is_protected());
+        for (i, issue) in errors
+            .into_iter()
+            .chain(protected)
             .skip(explorer.panel_offset)
             .take(explorer.panel_page)
             .enumerate()
         {
             let y = i as u16 * item_height;
             let path = terminal_path(&issue.path);
+            let style = if issue.kind.is_protected() {
+                MUTED
+            } else {
+                WARNING
+            };
             paint(
                 frame,
                 line_at(area, y),
-                Line::styled(shorten(&path, area.width as usize, true), WARNING),
+                Line::styled(shorten(&path, area.width as usize, true), style),
             );
             if item_height > 1 {
                 let message = terminal_text(&issue.message);
+                let message = if issue.kind.is_protected() {
+                    format!("Protected · {message}")
+                } else {
+                    message.into_owned()
+                };
                 paint(
                     frame,
                     line_at(area, y + 1),
@@ -592,6 +627,7 @@ fn draw_details(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         EntryState::Local => "Local file",
         EntryState::Pending => "Pending",
         EntryState::CloudOnly => "Cloud-only reference",
+        EntryState::Protected => "Protected: the OS refused access",
         EntryState::Incomplete => "Incomplete scan data",
         EntryState::HardLinkAlias => "Hard link counted at another path",
     };

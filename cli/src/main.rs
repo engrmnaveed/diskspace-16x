@@ -99,15 +99,59 @@ fn run_scan(options: ScanOptions) -> io::Result<u8> {
         report::write_json(stdout, &scan, options.selection)?;
     } else {
         report::write_plain(stdout, &scan, options.selection)?;
-        for issue in &scan.issues {
-            eprintln!(
-                "space16x: {}: {}",
-                report::terminal_path(&issue.path),
-                report::terminal_text(&issue.message)
-            );
-        }
+        report_issues(&scan.issues);
     }
     Ok(if scan.issues.is_empty() { 0 } else { 2 })
+}
+
+/// Lists each scan error, then summarizes paths the OS refused in one line.
+/// System locations hold hundreds of these, and JSON output still lists every one.
+fn report_issues(issues: &[scanner::Issue]) {
+    let mut protected = 0;
+    let mut privacy_refusals = false;
+    for issue in issues {
+        if issue.kind.is_protected() {
+            protected += 1;
+            privacy_refusals |= issue.kind == scanner::IssueKind::NotPermitted;
+            continue;
+        }
+        eprintln!(
+            "space16x: {}: {}",
+            report::terminal_path(&issue.path),
+            report::terminal_text(&issue.message)
+        );
+    }
+    if protected == 0 {
+        return;
+    }
+    let os = if cfg!(target_os = "macos") {
+        "macOS"
+    } else {
+        "the system"
+    };
+    eprintln!(
+        "space16x: skipped {protected} protected {} (permission denied or blocked by {os}); use --json to list them",
+        if protected == 1 { "path" } else { "paths" }
+    );
+    if privacy_refusals && !has_full_disk_access() {
+        eprintln!(
+            "space16x: give your terminal app Full Disk Access in System Settings to include privacy-protected folders"
+        );
+    }
+}
+
+/// macOS opens this folder only for processes with Full Disk Access. Opening it reads no contents.
+#[cfg(target_os = "macos")]
+fn has_full_disk_access() -> bool {
+    match std::fs::File::open("/Library/Application Support/com.apple.TCC") {
+        Ok(_) => true,
+        Err(error) => error.raw_os_error() != Some(libc::EPERM),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn has_full_disk_access() -> bool {
+    true
 }
 
 fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Command, String> {

@@ -145,8 +145,10 @@ fn reports_unreadable_descendants_and_fails_for_an_unreadable_root() -> io::Resu
     let report = report?;
     assert_eq!(report.issues.len(), 1);
     assert_eq!(report.issues[0].path, private);
-    assert_eq!(report.root.state, EntryState::Incomplete);
-    assert_eq!(child(&report.root, "private").state, EntryState::Incomplete);
+    // A permission refusal is an expected, protected path rather than a scan error.
+    assert_eq!(report.issues[0].kind, IssueKind::PermissionDenied);
+    assert_eq!(report.root.state, EntryState::Protected);
+    assert_eq!(child(&report.root, "private").state, EntryState::Protected);
     assert_eq!(
         report.root.allocated_bytes,
         fs::metadata(fixture.join("visible"))?.blocks() * 512
@@ -252,4 +254,37 @@ fn cancellation_preserves_the_emitted_preview_without_a_final_snapshot() -> io::
     assert_eq!(snapshots.len(), 1);
     assert!(snapshots[0].is_preview);
     Ok(())
+}
+
+#[test]
+fn keeps_the_most_serious_state_when_merging_skipped_descendants() {
+    use EntryState::{Incomplete, Local, Pending, Protected};
+    assert_eq!(Local.degrade(Protected), Protected);
+    assert_eq!(Local.degrade(Incomplete), Incomplete);
+    assert_eq!(Protected.degrade(Incomplete), Incomplete);
+    assert_eq!(Incomplete.degrade(Protected), Incomplete);
+    assert_eq!(Protected.degrade(Local), Protected);
+    assert_eq!(Pending.degrade(Incomplete), Pending);
+
+    let protected = empty_directory(PathBuf::from("/a/protected"), Protected);
+    let failed = empty_directory(PathBuf::from("/a/failed"), Incomplete);
+    let (calm, _) = directory_entry(PathBuf::from("/a"), Local, vec![Arc::clone(&protected)]);
+    assert_eq!(calm.state, Protected);
+    let (mixed, _) = directory_entry(PathBuf::from("/a"), Local, vec![protected, failed]);
+    assert_eq!(mixed.state, Incomplete);
+}
+
+#[test]
+fn classifies_access_refusals_as_protected() {
+    let kind = |code| IssueKind::of(&io::Error::from_raw_os_error(code));
+    assert_eq!(kind(libc::EACCES), IssueKind::PermissionDenied);
+    assert_eq!(kind(libc::EPERM), IssueKind::NotPermitted);
+    assert_eq!(kind(libc::EIO), IssueKind::Error);
+    assert_eq!(
+        IssueKind::of(&io::Error::from(io::ErrorKind::TimedOut)),
+        IssueKind::Error
+    );
+    assert!(IssueKind::PermissionDenied.is_protected());
+    assert!(IssueKind::NotPermitted.is_protected());
+    assert!(!IssueKind::Error.is_protected());
 }

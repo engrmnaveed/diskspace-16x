@@ -39,9 +39,29 @@ public struct ScanEntry: Identifiable, Sendable {
 }
 
 public struct ScanIssue: Identifiable, Sendable, Encodable {
+    /// Why a path was skipped. Access refusals are expected when scanning system locations.
+    public enum Kind: String, Sendable, Encodable {
+        /// File permissions don't let this user read the path (EACCES).
+        case permissionDenied
+        /// macOS privacy controls or System Integrity Protection refused access (EPERM).
+        case notPermitted
+        /// Any other failure, such as an I/O error or an unresponsive cloud provider.
+        case error
+    }
+
     public var id: String { path + "\0" + message }
     public let path: String
     public let message: String
+    public let kind: Kind
+
+    /// The OS refused access, so the path is protected rather than failed.
+    public var isProtected: Bool { kind != .error }
+
+    init(path: String, message: String, kind: Kind = .error) {
+        self.path = path
+        self.message = message
+        self.kind = kind
+    }
 }
 
 public struct ScanProgress: Sendable {
@@ -53,7 +73,12 @@ public struct ScanReport: Sendable {
     public let root: ScanEntry
     public let issues: [ScanIssue]
     public let isPreview: Bool
+    /// Any skipped path leaves the totals incomplete, including protected ones.
     public var isPartial: Bool { !issues.isEmpty }
+    /// Failures other than access refusals. These warrant a warning.
+    public var errorIssues: [ScanIssue] { issues.filter { !$0.isProtected } }
+    /// Paths the OS refused to let this scan read.
+    public var protectedIssues: [ScanIssue] { issues.filter(\.isProtected) }
 
     init(root: ScanEntry, issues: [ScanIssue], isPreview: Bool = false) {
         self.root = root
