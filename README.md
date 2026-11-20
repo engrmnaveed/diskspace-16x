@@ -80,6 +80,7 @@ See the [installation guide](docs/install.md) for Wget removal, Fish commands, v
 ## How totals are counted
 
 - Allocated bytes come from filesystem metadata. A sparse file can have a large reported length and use very few disk blocks.
+- Sizes use decimal units, as Finder and System Settings do: 1 GB is 1,000,000,000 bytes. The Mac app's size tooltips and the CLI explorer's file details also show the exact byte count and the binary size in GiB, where 1 GiB is 1,073,741,824 bytes.
 - Directory totals sum regular-file bytes within the scan. A hard-linked file contributes once. Symbolic links and mounts on other devices are skipped.
 - On the macOS startup disk, both scanners count APFS firmlinked folders such as `/Users` at their visible paths and skip their duplicate paths under `/System/Volumes/Data`. A direct scan of the Data volume includes those folders.
 - macOS scans keep cloud-only placeholders as references with zero counted bytes and leave cloud-only folders unexpanded. If a metadata call stalls in a known iCloud or File Provider directory, the scan skips the affected path and reports partial results.

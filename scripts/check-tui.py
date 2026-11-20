@@ -18,6 +18,16 @@ def check(binary, fixture):
         terminal.send(b"\r")
         terminal.expect(b"payload.bin", start)
 
+        # File details pair the decimal size with the binary size and exact bytes.
+        start = len(terminal.output)
+        terminal.send(b"\r")
+        terminal.expect(" KiB · ".encode(), start)
+        terminal.expect(b" bytes)", start)
+
+        start = len(terminal.output)
+        terminal.send(b"\x7f")
+        terminal.expect(b"payload.bin", start)
+
         start = len(terminal.output)
         terminal.send(b"\x7f")
         terminal.expect(b"nested-alpha", start)

@@ -100,7 +100,7 @@ struct ResultsView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(ScanFormat.exactSize(bytes))
-        .help(ScanFormat.exactSize(bytes))
+        .help(ScanFormat.sizeDetail(bytes))
     }
 
     private var breadcrumbs: some View {
@@ -323,7 +323,7 @@ struct ResultsView: View {
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .trailing)
             .foregroundStyle(unknown ? .secondary : .primary)
-            .help(exact)
+            .help(unknown ? exact : ScanFormat.sizeDetail(bytes))
             .accessibilityLabel(exact)
     }
 

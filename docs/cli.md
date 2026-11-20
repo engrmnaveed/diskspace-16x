@@ -39,7 +39,7 @@ space16x scan --top 10 --json > report.json
 | `--top N` | List up to N largest files in the scan by allocated size. Use zero for the root total alone. |
 | `--json` | Write a machine-readable report on standard output. |
 
-Use either `--depth` or `--top` once per command. Reports use allocated bytes. Entries within a folder and the top files are ranked descending by allocated bytes, with ties ordered by original path bytes.
+Use either `--depth` or `--top` once per command. Reports use allocated bytes. Text reports and the explorer show sizes in decimal units, matching Finder and the Mac app: 1 KB is 1,000 bytes and 1 GB is 1,000,000,000 bytes. The explorer's file details add the binary size, such as GiB, and the exact byte count. JSON reports exact byte counts. Entries within a folder and the top files are ranked descending by allocated bytes, with ties ordered by original path bytes.
 
 The scanner reads filesystem metadata, skips symbolic links and mounts on other devices, and counts each hard-linked file once. A later alias can appear as a zero-byte entry. In the top-files report only the counted path appears. Cloud-only entries detected on macOS contribute zero bytes, and their directory contents are left unexpanded.
 

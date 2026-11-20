@@ -58,18 +58,38 @@ fn write_entry(mut out: impl Write, entry: &Entry, annotation: &str) -> io::Resu
     )
 }
 
+/// Formats a size in decimal units, as Finder and the Mac app's `ByteCountFormatter` do.
 pub(crate) fn format_bytes(bytes: u64) -> String {
-    if bytes < 1024 {
+    scaled(bytes, 1000, ["KB", "MB", "GB", "TB", "PB", "EB"])
+}
+
+/// Formats a size in binary units for detail views beside the decimal size.
+pub(crate) fn format_binary_bytes(bytes: u64) -> String {
+    scaled(bytes, 1024, ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB"])
+}
+
+fn scaled(bytes: u64, base: u128, units: [&str; 6]) -> String {
+    if u128::from(bytes) < base {
         return format!("{bytes} B");
     }
-    let mut value = bytes as f64;
-    for unit in ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB"] {
-        value /= 1024.0;
-        if value < 1024.0 || unit == "EiB" {
-            return format!("{value:.1} {unit}");
+    // Kilo units show whole numbers, mega units one decimal, and larger units two.
+    const DIGITS: [u32; 6] = [0, 1, 2, 2, 2, 2];
+    let mut divisor = base;
+    for (index, (unit, digits)) in units.into_iter().zip(DIGITS).enumerate() {
+        let scale = 10_u128.pow(digits);
+        // Integer arithmetic rounds ties up, matching ByteCountFormatter.
+        let rounded = (u128::from(bytes) * scale * 2 + divisor) / (divisor * 2);
+        if rounded < base * scale || index == units.len() - 1 {
+            let (whole, fraction) = (rounded / scale, rounded % scale);
+            return if digits == 0 {
+                format!("{whole} {unit}")
+            } else {
+                format!("{whole}.{fraction:0width$} {unit}", width = digits as usize)
+            };
         }
+        divisor *= base;
     }
-    unreachable!("there is a unit for every u64 byte count")
+    unreachable!("the largest unit accepts every u64 byte count")
 }
 
 pub(crate) fn terminal_path(path: &Path) -> String {
@@ -349,5 +369,57 @@ mod tests {
         );
         assert_eq!(terminal_path(Path::new("/données/👨‍👩‍👧")), "/données/👨‍👩‍👧");
         assert_eq!(terminal_path(Path::new("/a\\b")), "/a\\\\b");
+    }
+
+    #[test]
+    fn formats_decimal_sizes_like_byte_count_formatter() {
+        // Expected strings are ByteCountFormatter's .file output on macOS.
+        for (bytes, expected) in [
+            (0, "0 B"),
+            (999, "999 B"),
+            (1_000, "1 KB"),
+            (1_499, "1 KB"),
+            (1_500, "2 KB"),
+            (2_500, "3 KB"),
+            (999_499, "999 KB"),
+            (999_500, "1.0 MB"),
+            (1_250_000, "1.3 MB"),
+            (999_949_999, "999.9 MB"),
+            (999_950_000, "1.00 GB"),
+            (2_005_000_000, "2.01 GB"),
+            (45_888_520_192, "45.89 GB"),
+            (999_994_999_999, "999.99 GB"),
+            (999_995_000_000, "1.00 TB"),
+            (1_234_567_890_123, "1.23 TB"),
+            (9_223_372_036_854_775_807, "9.22 EB"),
+            (u64::MAX, "18.45 EB"),
+        ] {
+            assert_eq!(format_bytes(bytes), expected, "{bytes} bytes");
+        }
+    }
+
+    #[test]
+    fn formats_binary_sizes_with_iec_units() {
+        // Keep in sync with ByteFormatTests in the Swift package.
+        for (bytes, expected) in [
+            (1_023, "1023 B"),
+            (1_024, "1 KiB"),
+            (1_535, "1 KiB"),
+            (1_536, "2 KiB"),
+            (2_560, "3 KiB"),
+            (1_048_063, "1023 KiB"),
+            (1_048_064, "1.0 MiB"),
+            (1_101_004, "1.0 MiB"),
+            (1_101_005, "1.1 MiB"),
+            (1_073_689_395, "1023.9 MiB"),
+            (1_073_689_396, "1.00 GiB"),
+            (45_888_520_192, "42.74 GiB"),
+            (245_349_000_000, "228.50 GiB"),
+            (1_099_506_259_066, "1023.99 GiB"),
+            (1_099_506_259_067, "1.00 TiB"),
+            (u64::MAX, "16.00 EiB"),
+        ] {
+            assert_eq!(format_binary_bytes(bytes), expected, "{bytes} bytes");
+        }
     }
 }

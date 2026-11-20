@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Show CLI sizes in decimal units (KB, MB, GB), the way Finder, System Settings, and the Mac app do, instead of binary KiB, MiB, and GiB. The same folder now shows the same number everywhere, for example 245.33 GB rather than 228.5 GiB. The CLI explorer's file details and the Mac app's size tooltips also show the binary size next to the exact byte count. JSON reports are unchanged and still give exact bytes.
+
 ## 0.2.3
 
 - Stop double-counting the macOS startup disk. A scan of `/` reached each APFS firmlinked folder, such as `/Users`, both at its visible path and again under `/System/Volumes/Data`, which roughly doubled the total. Both scanners now count those folders once at their visible paths.
