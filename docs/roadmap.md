@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — M1.1–M1.5 landed once their PRs merge (M1.4 is PR #15). M1.6 (PRD and AGENTS edition model, benchmark notes in `docs/qa.md`, `scripts/benchmark.py --files`) is on `feature/m1-docs-benchmark`. Then M1.7: release v0.3.0.
+**Resume here** — M1.1–M1.6 landed. Next: M1.7, release v0.3.0 (rename the changelog's Unreleased section, bump versions, tag).
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -14,7 +14,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 - [x] M1.3 TUI: `s` sort (size → items → name), Items column, `a` apparent toggle, `NO_COLOR` / `--no-color`
 - [x] M1.4 Swift: apparent size, item counts, exclude rules in `SpaceCore`, shared parity fixture
 - [x] M1.5 Mac: Items column, sortable columns, View → Size menu, Settings scene with exclude patterns, plus the promo refresh covering the TUI and Mac changes (`AGENTS.md` wants it in the same change)
-- [ ] M1.6 Docs (`docs/cli.md`, README, CHANGELOG, manual QA, PRD/AGENTS edition model), benchmark in `docs/qa.md`, CI parity checks
+- [x] M1.6 Docs (`docs/cli.md`, README, CHANGELOG, manual QA, PRD/AGENTS edition model), benchmark in `docs/qa.md`, CI parity checks
 - [ ] M1.7 Release v0.3.0
 
 ### Later milestones
@@ -27,7 +27,8 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 ## Working agreement
 
 - **Small PRs.** Each roadmap item lands as its own branch and pull request (`feature/m1-…`). Commit and push often, so work survives an interrupted session. Tick the item here in the same PR.
-- **Merge** only after CI passes, locally with `git merge --no-ff` and a push, never the GitHub merge button or `gh pr merge`. Commits use the identity `muhammad-naveed <m.naveed.ch@gmail.com>`. The admin-bypass notice on pushes to `main` is expected.
+- **Merge** only after CI passes, locally with `git merge --no-ff` and a push, never the GitHub merge button or `gh pr merge`. Commits use the identity `muhammad-naveed <m.naveed.ch@gmail.com>`. The admin-bypass notice on pushes to `main` is expected. Run the merge, the push and the branch deletion as one `set -e` sequence, and delete the branch only after `gh pr view N --json state` says `MERGED`. A failed merge followed by a branch deletion closes the PR unmerged.
+- **Parallel branches** that tick neighboring checkboxes here conflict on merge. Keep every tick when resolving.
 - **Release** when a milestone's last item lands and CI on `main` is green: a `release/vX.Y.0` PR that bumps `scripts/release-version`, `cli/Cargo.toml`, `cli/Cargo.lock`, `CHANGELOG.md` and `docs/install.md` (as in commit `chore: release 0.2.4`), merged the same way, then push the `vX.Y.0` tag. **Publish release** builds and publishes it. Check that run succeeds.
 - **CI** grows with the feature set but stays simple: extend `scripts/check-cli.py`, `scripts/check-tui.py` and the unit tests before adding jobs. Add a job only for something the existing jobs can't cover. If a CI job is renamed or added, update the required checks in the **Review and CI for main** ruleset too.
 - **Rules from `AGENTS.md` always apply:** read-only, metadata-only scanners, both scanners kept in parity, the CLI contract in `docs/cli.md`, and a promo refresh for major UI changes.
