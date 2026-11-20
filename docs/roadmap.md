@@ -6,10 +6,10 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — M1 not started. Next: M1.1 (Rust apparent size and item counts).
+**Resume here** — M1.1 landed (PR #12). M1.2 (excludes) is on `feature/m1-excludes`, stacked on M1.1: merge `main` into it, tick M1.2, open its PR. Next: M1.3 (TUI sort, Items column, apparent toggle, no-color).
 
 ### M1 (v0.3.0) Focus [Basic]
-- [ ] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
+- [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
 - [ ] M1.2 Rust: `--exclude` / `--exclude-from` (scan and TUI), `excludedCount` / `excludes` in JSON
 - [ ] M1.3 TUI: `s` sort (size → items → name), Items column, `a` apparent toggle, `NO_COLOR` / `--no-color`
 - [ ] M1.4 Swift: apparent size, item counts, exclude rules in `SpaceCore`, shared parity fixture
