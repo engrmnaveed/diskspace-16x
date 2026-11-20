@@ -4,7 +4,7 @@
 
 # Space 16X
 
-Find the file or folder using your disk space. Space 16X is a read-only analyzer with a native macOS app and a Rust terminal explorer for macOS and Linux. Both rank by allocated size, use filesystem metadata, and work offline without an account.
+Find the file or folder using your disk space. Space 16X is a disk analyzer with a native macOS app and a Rust terminal explorer for macOS and Linux. Both rank by allocated size, scan read-only filesystem metadata, and work offline without an account. The only change Space 16X makes to your files is moving items you choose to the Trash, after you confirm.
 
 Space 16X is a project by Muhammad Naveed Akram, developed under the [16X Brains](https://16xbrains.com/) banner.
 
