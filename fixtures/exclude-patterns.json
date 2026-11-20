@@ -1,0 +1,32 @@
+{
+  "description": "Exclude pattern cases shared by the Rust and Swift scanner tests. path is relative to the scan root.",
+  "cases": [
+    {"patterns": ["node_modules"], "path": "node_modules", "directory": true, "excluded": true},
+    {"patterns": ["node_modules"], "path": "web/app/node_modules", "directory": true, "excluded": true},
+    {"patterns": ["node_modules"], "path": "web/node_modules_old", "directory": true, "excluded": false},
+    {"patterns": ["*.log"], "path": "logs/today.log", "directory": false, "excluded": true},
+    {"patterns": ["*.log"], "path": "logs/today.log.gz", "directory": false, "excluded": false},
+    {"patterns": ["?.txt"], "path": "a/b.txt", "directory": false, "excluded": true},
+    {"patterns": ["?.txt"], "path": "a/bc.txt", "directory": false, "excluded": false},
+    {"patterns": ["?.txt"], "path": "é.txt", "directory": false, "excluded": true},
+    {"patterns": ["/build"], "path": "build", "directory": true, "excluded": true},
+    {"patterns": ["/build"], "path": "src/build", "directory": true, "excluded": false},
+    {"patterns": ["build/cache"], "path": "build/cache", "directory": true, "excluded": true},
+    {"patterns": ["build/cache"], "path": "a/build/cache", "directory": true, "excluded": true},
+    {"patterns": ["build/cache"], "path": "build/cache2", "directory": true, "excluded": false},
+    {"patterns": ["/src/*/target"], "path": "src/app/target", "directory": true, "excluded": true},
+    {"patterns": ["/src/*/target"], "path": "src/app/x/target", "directory": true, "excluded": false},
+    {"patterns": ["/src/**/target"], "path": "src/target", "directory": true, "excluded": true},
+    {"patterns": ["/src/**/target"], "path": "src/app/x/target", "directory": true, "excluded": true},
+    {"patterns": ["**/tmp"], "path": "tmp", "directory": true, "excluded": true},
+    {"patterns": ["**/tmp"], "path": "a/b/tmp", "directory": true, "excluded": true},
+    {"patterns": ["cache/"], "path": "cache", "directory": true, "excluded": true},
+    {"patterns": ["cache/"], "path": "cache", "directory": false, "excluded": false},
+    {"patterns": ["*cache*"], "path": "my-cache-dir", "directory": true, "excluded": true},
+    {"patterns": ["a*b*c"], "path": "aXbYc", "directory": false, "excluded": true},
+    {"patterns": ["a*b*c"], "path": "aXbY", "directory": false, "excluded": false},
+    {"patterns": ["*.tmp", "/out"], "path": "out", "directory": true, "excluded": true},
+    {"patterns": ["*.tmp", "/out"], "path": "x/y.tmp", "directory": false, "excluded": true},
+    {"patterns": ["*.tmp", "/out"], "path": "x/out", "directory": true, "excluded": false}
+  ]
+}

@@ -224,8 +224,20 @@ fn draw_summary(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
             ),
             Span::styled(qualifier, qualifier_style),
             Span::styled(quantity, MUTED),
+            Span::styled(excluded_note(explorer), MUTED),
         ]),
     );
+}
+
+fn excluded_note(explorer: &Explorer) -> String {
+    match explorer
+        .report
+        .as_ref()
+        .map_or(0, |report| report.excluded_count)
+    {
+        0 => String::new(),
+        count => format!(" · {count} excluded"),
+    }
 }
 
 fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {

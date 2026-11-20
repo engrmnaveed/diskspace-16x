@@ -27,7 +27,13 @@ impl Fixture {
     }
 
     fn report(&self) -> io::Result<Report> {
-        scan(self.path(), false, &AtomicBool::new(false), |_| {})
+        scan(
+            self.path(),
+            &Excludes::default(),
+            false,
+            &AtomicBool::new(false),
+            |_| {},
+        )
     }
 }
 
@@ -103,6 +109,48 @@ fn counts_nested_items_and_apparent_bytes() -> io::Result<()> {
 }
 
 #[test]
+fn skips_excluded_entries_without_reading_them() -> io::Result<()> {
+    let fixture = Fixture::new()?;
+    fs::create_dir_all(fixture.join("app/node_modules/pkg"))?;
+    fs::write(fixture.join("app/node_modules/pkg/index.js"), [1; 100])?;
+    fs::write(fixture.join("app/main.rs"), [2; 10])?;
+    fs::write(fixture.join("app/debug.log"), [3; 50])?;
+    fs::create_dir(fixture.join("cache"))?;
+    fs::write(fixture.join("cache/blob"), [4; 70])?;
+    fs::write(fixture.join("app/cache"), [5; 7])?;
+    // An excluded folder that can't be read reports no issue, because it isn't opened.
+    fs::create_dir(fixture.join("private"))?;
+    fs::set_permissions(fixture.join("private"), fs::Permissions::from_mode(0o0))?;
+    let excludes = Excludes::new(["node_modules", "*.log", "/cache/", "/private"])
+        .map_err(io::Error::other)?;
+
+    let report = scan(
+        fixture.path(),
+        &excludes,
+        false,
+        &AtomicBool::new(false),
+        |_| {},
+    );
+    fs::set_permissions(fixture.join("private"), fs::Permissions::from_mode(0o700))?;
+    let report = report?;
+
+    assert!(report.issues.is_empty(), "{:?}", report.issues);
+    assert_eq!(report.excluded_count, 4);
+    // app, app/main.rs and app/cache, a file that the folder-only /cache/ doesn't match.
+    assert_eq!(report.root.item_count, 3);
+    assert_eq!(report.root.apparent_bytes, 17);
+    let app = child(&report.root, "app");
+    assert_eq!(app.children.len(), 2);
+    Ok(())
+}
+
+#[test]
+fn excludes_match_below_the_filesystem_root() {
+    assert_eq!(relative_bytes(1, Path::new("/tmp/x")), b"tmp/x");
+    assert_eq!(relative_bytes(4, Path::new("/tmp/x/y")), b"x/y");
+}
+
+#[test]
 fn does_not_count_sparse_file_length() -> io::Result<()> {
     let fixture = Fixture::new()?;
     let file = File::create(fixture.join("sparse.img"))?;
@@ -129,7 +177,13 @@ fn ordinary_directory_with_startup_volume_layout_counts_both_trees() -> io::Resu
     fs::write(&visible, [0x21; 8_192])?;
     fs::write(&backing, [0x21; 8_192])?;
 
-    let report = scan(fixture.path(), true, &AtomicBool::new(false), |_| {})?;
+    let report = scan(
+        fixture.path(),
+        &Excludes::default(),
+        true,
+        &AtomicBool::new(false),
+        |_| {},
+    )?;
 
     assert!(report.issues.is_empty());
     assert_eq!(
@@ -148,10 +202,16 @@ fn rejects_non_directory_roots_and_root_symlinks_with_trailing_slash() -> io::Re
     let cancelled = AtomicBool::new(false);
     let link = fixture.join("link/");
     for root in [fixture.join("file"), fixture.join("link"), link] {
-        let error = scan(&root, false, &cancelled, |_| {}).unwrap_err();
+        let error = scan(&root, &Excludes::default(), false, &cancelled, |_| {}).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
-    let report = scan(&fixture.join("local/./"), false, &cancelled, |_| {})?;
+    let report = scan(
+        &fixture.join("local/./"),
+        &Excludes::default(),
+        false,
+        &cancelled,
+        |_| {},
+    )?;
     assert_eq!(report.root.path, fixture.join("local"));
     Ok(())
 }
@@ -169,7 +229,13 @@ fn reports_unreadable_descendants_and_fails_for_an_unreadable_root() -> io::Resu
     fs::write(fixture.join("visible"), [0x21; 5_300])?;
     fs::set_permissions(&private, fs::Permissions::from_mode(0o0))?;
     let report = fixture.report();
-    let failed = scan(&private, false, &AtomicBool::new(false), |_| {});
+    let failed = scan(
+        &private,
+        &Excludes::default(),
+        false,
+        &AtomicBool::new(false),
+        |_| {},
+    );
     fs::set_permissions(&private, fs::Permissions::from_mode(0o700))?;
 
     let report = report?;
@@ -217,18 +283,24 @@ fn previews_leave_deep_and_hard_link_bytes_unassigned_until_dfs() -> io::Result<
     let mut snapshots = Vec::new();
     let mut progress = Vec::new();
 
-    let final_report = scan(fixture.path(), true, &AtomicBool::new(false), |event| {
-        match event {
-            Event::Snapshot(report) => {
-                if snapshots.is_empty() {
-                    // Let the publication interval elapse before the first branch completes.
-                    std::thread::sleep(Duration::from_millis(420));
+    let final_report = scan(
+        fixture.path(),
+        &Excludes::default(),
+        true,
+        &AtomicBool::new(false),
+        |event| {
+            match event {
+                Event::Snapshot(report) => {
+                    if snapshots.is_empty() {
+                        // Let the publication interval elapse before the first branch completes.
+                        std::thread::sleep(Duration::from_millis(420));
+                    }
+                    snapshots.push(report);
                 }
-                snapshots.push(report);
+                Event::Progress { visited, path } => progress.push((visited, path)),
             }
-            Event::Progress { visited, path } => progress.push((visited, path)),
-        }
-    })?;
+        },
+    )?;
 
     let initial = &snapshots[0];
     assert!(initial.is_preview);
@@ -273,12 +345,18 @@ fn cancellation_preserves_the_emitted_preview_without_a_final_snapshot() -> io::
     fs::create_dir_all(fixture.join("A/deeper"))?;
     let cancelled = AtomicBool::new(false);
     let mut snapshots = Vec::new();
-    let result = scan(fixture.path(), true, &cancelled, |event| {
-        if let Event::Snapshot(report) = event {
-            snapshots.push(report);
-            cancelled.store(true, Ordering::Relaxed);
-        }
-    });
+    let result = scan(
+        fixture.path(),
+        &Excludes::default(),
+        true,
+        &cancelled,
+        |event| {
+            if let Event::Snapshot(report) = event {
+                snapshots.push(report);
+                cancelled.store(true, Ordering::Relaxed);
+            }
+        },
+    );
 
     assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Interrupted);
     assert_eq!(snapshots.len(), 1);

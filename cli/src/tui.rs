@@ -2,7 +2,7 @@ mod explorer;
 mod ranker;
 mod view;
 
-use crate::scanner::{self, Event as ScanEvent, Report};
+use crate::scanner::{self, Event as ScanEvent, Excludes, Report};
 use crossterm::{
     cursor::Show,
     event::{
@@ -26,7 +26,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub fn run(path: &Path) -> io::Result<()> {
+pub fn run(path: &Path, excludes: Excludes) -> io::Result<()> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -36,7 +36,7 @@ pub fn run(path: &Path) -> io::Result<()> {
 
     let _mode = TerminalMode::enter()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-    let worker = ScanWorker::start(path.to_path_buf())?;
+    let worker = ScanWorker::start(path.to_path_buf(), excludes)?;
     let ranking = RankWorker::start()?;
     let mut explorer = Explorer::new(path);
     let started = Instant::now();
@@ -153,7 +153,7 @@ struct ScanWorker {
 }
 
 impl ScanWorker {
-    fn start(path: PathBuf) -> io::Result<Self> {
+    fn start(path: PathBuf, excludes: Excludes) -> io::Result<Self> {
         let cancelled = Arc::new(AtomicBool::new(false));
         let update = Arc::new(Mutex::new(ScanUpdate::default()));
         let worker_cancelled = Arc::clone(&cancelled);
@@ -161,7 +161,7 @@ impl ScanWorker {
         let thread = thread::Builder::new()
             .name("space16x-scan".into())
             .spawn(move || {
-                let result = scanner::scan(&path, true, &worker_cancelled, |event| {
+                let result = scanner::scan(&path, &excludes, true, &worker_cancelled, |event| {
                     let mut pending = worker_update
                         .lock()
                         .unwrap_or_else(|error| error.into_inner());

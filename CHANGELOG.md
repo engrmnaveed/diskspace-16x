@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Add apparent sizes and item counts to the CLI. `space16x scan --apparent` shows and ranks file lengths, as `ls -l` reports them, instead of allocated bytes, which helps with sparse and compressed files. JSON reports move to schema 3, which keeps every schema 2 field and adds `apparentBytes`, `itemCount` (files and folders below an entry, counting each hard-linked file once), `rankedBy` and `edition`. Exit codes are unchanged.
+- Skip files and folders by pattern in the CLI explorer and reports with `--exclude PATTERN` and `--exclude-from FILE`. Patterns follow a small `.gitignore` subset: `node_modules` or `*.log` match a name anywhere, `/build` anchors to the scan root, `**` spans folders, and `cache/` matches folders only. Excluded entries aren't read, keep the scan complete, and appear as `excludedCount` and `excludes` in JSON.
 
 ## 0.2.4
 

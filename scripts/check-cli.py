@@ -88,6 +88,28 @@ def check(binary, root):
     assert "itemCount" not in rows[str(first)]
     assert rows[str(sparse)]["allocatedBytes"] == allocated_bytes(sparse)
 
+    # Excludes skip matches without reading them and keep the scan complete.
+    patterns = root.parent / f"{root.name}-excludes.txt"
+    patterns.write_text("# comment\n\nbeta.dat\n", encoding="utf-8")
+    try:
+        excluded = json.loads(run(
+            binary, "scan", root, "--json", "--exclude", "*.dat", "--exclude-from", patterns,
+        ).stdout)
+        assert excluded["excludes"] == ["*.dat", "beta.dat"], excluded["excludes"]
+        assert excluded["excludedCount"] == 4 and excluded["allocatedBytes"] == 0
+        assert excluded["itemCount"] == 1 and excluded["isPartial"] is False
+        folder_only = json.loads(run(binary, "scan", root, "--json", "--exclude", "/Nested folder/").stdout)
+        assert folder_only["excludedCount"] == 1 and folder_only["entries"] == []
+        summary = run(binary, "scan", root, "--exclude", "sparse.dat")
+        assert "excluded 1 path matching 1 pattern" in summary.stderr, summary.stderr
+        assert str(sparse) not in summary.stdout
+        assert run(binary, "scan", root, "--exclude-from", root / "missing.txt", status=1).stderr
+        assert run(binary, "scan", root, "--exclude", "/", status=1).stderr
+    finally:
+        patterns.unlink()
+    unfiltered = json.loads(run(binary, "scan", root, "--json").stdout)
+    assert unfiltered["excludedCount"] == 0 and unfiltered["excludes"] == []
+
     zero_depth = json.loads(run(binary, "scan", root, "--depth", 0, "--json").stdout)
     assert zero_depth["entries"] == [] and zero_depth["allocatedBytes"] == total_bytes
     zero_top = json.loads(run(binary, "scan", root, "--top", 0, "--json").stdout)

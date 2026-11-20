@@ -1,3 +1,4 @@
+mod exclude;
 mod fs;
 mod preview;
 #[cfg(target_os = "macos")]
@@ -12,6 +13,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+pub use exclude::Excludes;
 use fs::{Directory, Identity, MetadataAccess, Operation, is_cloud_error, with_local_metadata};
 use preview::Preview;
 
@@ -111,6 +113,8 @@ impl IssueKind {
 pub struct Report {
     pub root: Arc<Entry>,
     pub issues: Vec<Issue>,
+    /// Entries skipped by exclude patterns. Their contents aren't visited or counted.
+    pub excluded_count: u64,
     pub is_preview: bool,
 }
 
@@ -124,6 +128,7 @@ pub enum Event {
 /// and then publish finished branches as they become available.
 pub fn scan(
     path: &Path,
+    excludes: &Excludes,
     progressive: bool,
     cancelled: &AtomicBool,
     notify: impl FnMut(Event),
@@ -136,6 +141,7 @@ pub fn scan(
             notify,
             metadata: MetadataAccess::new(cancelled),
             cancelled,
+            excludes,
             visited: 0,
             last_progress: None,
         };
@@ -187,6 +193,7 @@ struct Walker<'a, F> {
     notify: F,
     metadata: MetadataAccess<'a>,
     cancelled: &'a AtomicBool,
+    excludes: &'a Excludes,
     visited: u64,
     last_progress: Option<Instant>,
 }
@@ -237,6 +244,8 @@ impl<F: FnMut(Event)> Walker<'_, F> {
         }
 
         let mut issues = Vec::new();
+        let mut excluded = 0_u64;
+        let scope_length = scope.as_os_str().len();
         let mut links = HashSet::new();
         let mut ancestors = HashSet::from([identity]);
         #[cfg(target_os = "macos")]
@@ -252,20 +261,29 @@ impl<F: FnMut(Event)> Walker<'_, F> {
                 let entry = finished.finish(&mut issues);
                 if let Some(parent) = stack.last_mut() {
                     add(parent, entry, level - 1, preview);
-                    self.publish_preview(preview, &issues);
+                    self.publish_preview(preview, &issues, excluded);
                     continue;
                 }
                 return Ok(Report {
                     root: entry,
                     issues,
+                    excluded_count: excluded,
                     is_preview: false,
                 });
             };
 
             let path = frame.path.join(&name);
+            let relative = (!self.excludes.is_empty()).then(|| relative_bytes(scope_length, &path));
+            if relative.is_some_and(|relative| {
+                self.excludes
+                    .matches_any_type(relative, name.as_encoded_bytes())
+            }) {
+                excluded += 1;
+                continue;
+            }
             self.visited += 1;
             self.progress(&path, false);
-            self.publish_preview(preview, &issues);
+            self.publish_preview(preview, &issues, excluded);
             let metadata = match self.metadata.stat(&path, Some(&frame.fd), &name) {
                 Ok(metadata) => metadata,
                 Err(error) => {
@@ -291,6 +309,13 @@ impl<F: FnMut(Event)> Walker<'_, F> {
                     add(frame, entry, level, preview);
                 }
                 libc::S_IFDIR => {
+                    if relative.is_some_and(|relative| {
+                        self.excludes
+                            .matches_directory(relative, name.as_encoded_bytes())
+                    }) {
+                        excluded += 1;
+                        continue;
+                    }
                     #[cfg(target_os = "macos")]
                     if let Some(volume) = &startup_volume
                         && volume.is_backing_path(&path)
@@ -405,8 +430,11 @@ impl<F: FnMut(Event)> Walker<'_, F> {
         });
     }
 
-    fn publish_preview(&mut self, preview: &mut Option<Preview>, issues: &[Issue]) {
-        if let Some(report) = preview.as_mut().and_then(|preview| preview.publish(issues)) {
+    fn publish_preview(&mut self, preview: &mut Option<Preview>, issues: &[Issue], excluded: u64) {
+        if let Some(report) = preview
+            .as_mut()
+            .and_then(|preview| preview.publish(issues, excluded))
+        {
             (self.notify)(Event::Snapshot(report));
         }
     }
@@ -563,10 +591,23 @@ fn directory_entry(
     )
 }
 
+/// The bytes of `path` after the scan root and its separator.
+fn relative_bytes(scope_length: usize, path: &Path) -> &[u8] {
+    let bytes = path.as_os_str().as_encoded_bytes();
+    // A root of "/" has no separator of its own to skip.
+    let start = if scope_length == 1 {
+        1
+    } else {
+        scope_length + 1
+    };
+    bytes.get(start..).unwrap_or_default()
+}
+
 fn unavailable_root(path: &Path, error: &io::Error) -> Report {
     Report {
         root: empty_directory(path.to_path_buf(), EntryState::Incomplete),
         issues: vec![Issue::error(path.to_path_buf(), error.to_string())],
+        excluded_count: 0,
         is_preview: false,
     }
 }
@@ -575,6 +616,7 @@ fn cloud_root(path: &Path) -> Report {
     Report {
         root: empty_directory(path.to_path_buf(), EntryState::CloudOnly),
         issues: Vec::new(),
+        excluded_count: 0,
         is_preview: false,
     }
 }

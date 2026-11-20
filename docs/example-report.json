@@ -6,6 +6,8 @@
   "allocatedBytes": 8392704,
   "apparentBytes": 8389890,
   "itemCount": 3,
+  "excludedCount": 0,
+  "excludes": [],
   "isPartial": false,
   "issues": [],
   "topLimit": 2,
