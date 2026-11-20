@@ -6,12 +6,12 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — M1.1 and M1.2 landed. M1.3 (TUI sort, Items column, apparent toggle, no-color) is on `feature/m1-tui-sort`, stacked on M1.2: merge `main` into it, tick M1.3, open its PR. Next: M1.4 (Swift scanner parity: apparent size, item counts, `ExcludeRules.swift` using `fixtures/exclude-patterns.json`).
+**Resume here** — M1.1–M1.3 landed. M1.4 (Swift parity) is on `feature/m1-swift-parity` and M1.5 (Mac UI) on `feature/m1-mac-ui`, stacked in that order: merge `main` into each, tick, open its PR. M1.5 still needs the promo refresh (`scripts/promo/`), the README and manual QA rows. Then M1.6 docs and benchmark, M1.7 release.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
 - [x] M1.2 Rust: `--exclude` / `--exclude-from` (scan and TUI), `excludedCount` / `excludes` in JSON
-- [ ] M1.3 TUI: `s` sort (size → items → name), Items column, `a` apparent toggle, `NO_COLOR` / `--no-color`
+- [x] M1.3 TUI: `s` sort (size → items → name), Items column, `a` apparent toggle, `NO_COLOR` / `--no-color`
 - [ ] M1.4 Swift: apparent size, item counts, exclude rules in `SpaceCore`, shared parity fixture
 - [ ] M1.5 Mac: Items column, sortable columns, View → Size menu, Settings scene with exclude patterns, plus the promo refresh covering the TUI and Mac changes (`AGENTS.md` wants it in the same change)
 - [ ] M1.6 Docs (`docs/cli.md`, README, CHANGELOG, manual QA, PRD/AGENTS edition model), benchmark in `docs/qa.md`, CI parity checks
