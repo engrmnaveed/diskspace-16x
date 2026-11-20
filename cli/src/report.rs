@@ -16,21 +16,48 @@ pub(crate) enum Selection {
     Top(usize),
 }
 
+/// The size that reports show and rank by.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Metric {
+    /// Disk space the files occupy (`st_blocks`), the default.
+    #[default]
+    Allocated,
+    /// File lengths (`st_size`), which differ for sparse, compressed, and small files.
+    Apparent,
+}
+
+impl Metric {
+    pub(crate) fn bytes(self, entry: &Entry) -> u64 {
+        match self {
+            Self::Allocated => entry.allocated_bytes,
+            Self::Apparent => entry.apparent_bytes,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Allocated => "allocated",
+            Self::Apparent => "apparent",
+        }
+    }
+}
+
 pub(crate) fn write_plain(
     out: impl Write,
     report: &Report,
     selection: Selection,
+    metric: Metric,
 ) -> io::Result<()> {
     let mut out = io::BufWriter::new(out);
     match selection {
         Selection::Depth(depth) => {
-            for entry in directory_entries(&report.root, depth) {
-                write_entry(&mut out, entry, "")?;
+            for entry in directory_entries(&report.root, depth, metric) {
+                write_entry(&mut out, entry, metric, "")?;
             }
         }
         Selection::Top(limit) => {
-            for entry in largest_files(&report.root, limit) {
-                write_entry(&mut out, entry, "")?;
+            for entry in largest_files(&report.root, limit, metric) {
+                write_entry(&mut out, entry, metric, "")?;
             }
         }
     }
@@ -39,11 +66,16 @@ pub(crate) fn write_plain(
     } else {
         "  [partial total]"
     };
-    write_entry(&mut out, &report.root, total)?;
+    write_entry(&mut out, &report.root, metric, total)?;
     out.flush()
 }
 
-fn write_entry(mut out: impl Write, entry: &Entry, annotation: &str) -> io::Result<()> {
+fn write_entry(
+    mut out: impl Write,
+    entry: &Entry,
+    metric: Metric,
+    annotation: &str,
+) -> io::Result<()> {
     let state = match entry.state {
         EntryState::CloudOnly => "  [cloud only]",
         EntryState::Protected => "  [protected]",
@@ -54,7 +86,7 @@ fn write_entry(mut out: impl Write, entry: &Entry, annotation: &str) -> io::Resu
     writeln!(
         out,
         "{:>10}  {}{state}{annotation}",
-        format_bytes(entry.allocated_bytes),
+        format_bytes(metric.bytes(entry)),
         terminal_path(&entry.path),
     )
 }
@@ -138,10 +170,14 @@ fn needs_escape(character: char) -> bool {
 #[serde(rename_all = "camelCase")]
 struct JsonReport<'a> {
     schema_version: u8,
+    edition: &'static str,
     scope: Cow<'a, str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     scope_bytes: Option<String>,
+    ranked_by: &'static str,
     allocated_bytes: u64,
+    apparent_bytes: u64,
+    item_count: u64,
     is_partial: bool,
     issues: Vec<JsonIssue<'a>>,
     #[serde(flatten)]
@@ -162,10 +198,13 @@ enum JsonSelection<'a> {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct JsonEntry<'a> {
     #[serde(flatten)]
     file: JsonFile<'a>,
     kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    item_count: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -174,6 +213,7 @@ struct JsonFile<'a> {
     #[serde(flatten)]
     path: JsonPath<'a>,
     allocated_bytes: u64,
+    apparent_bytes: u64,
 }
 
 impl<'a> From<&'a Entry> for JsonFile<'a> {
@@ -181,6 +221,7 @@ impl<'a> From<&'a Entry> for JsonFile<'a> {
         Self {
             path: JsonPath::from(entry.path.as_path()),
             allocated_bytes: entry.allocated_bytes,
+            apparent_bytes: entry.apparent_bytes,
         }
     }
 }
@@ -220,37 +261,46 @@ impl<'a> From<&'a Path> for JsonPath<'a> {
     }
 }
 
-pub(crate) fn write_json(out: impl Write, report: &Report, selection: Selection) -> io::Result<()> {
+pub(crate) fn write_json(
+    out: impl Write,
+    report: &Report,
+    selection: Selection,
+    metric: Metric,
+) -> io::Result<()> {
     let mut out = io::BufWriter::new(out);
     let scope = JsonPath::from(report.root.path.as_path());
     let result = match selection {
         Selection::Depth(depth) => JsonSelection::Depth {
             depth,
-            entries: directory_entries(&report.root, depth)
+            entries: directory_entries(&report.root, depth, metric)
                 .into_iter()
-                .map(|entry| JsonEntry {
-                    file: JsonFile::from(entry),
-                    kind: if entry.kind == EntryKind::Directory {
-                        "directory"
-                    } else {
-                        "file"
-                    },
+                .map(|entry| {
+                    let directory = entry.kind == EntryKind::Directory;
+                    JsonEntry {
+                        file: JsonFile::from(entry),
+                        kind: if directory { "directory" } else { "file" },
+                        item_count: directory.then_some(entry.item_count),
+                    }
                 })
                 .collect(),
         },
         Selection::Top(top_limit) => JsonSelection::Top {
             top_limit,
-            top_files: largest_files(&report.root, top_limit)
+            top_files: largest_files(&report.root, top_limit, metric)
                 .into_iter()
                 .map(|entry| JsonFile::from(entry.as_ref()))
                 .collect(),
         },
     };
     let json = JsonReport {
-        schema_version: 2,
+        schema_version: 3,
+        edition: EDITION,
         scope: scope.path,
         scope_bytes: scope.path_bytes,
+        ranked_by: metric.name(),
         allocated_bytes: report.root.allocated_bytes,
+        apparent_bytes: report.root.apparent_bytes,
+        item_count: report.root.item_count,
         is_partial: !report.issues.is_empty(),
         issues: report
             .issues
@@ -267,7 +317,10 @@ pub(crate) fn write_json(out: impl Write, report: &Report, selection: Selection)
     out.flush()
 }
 
-fn directory_entries(root: &Entry, depth: usize) -> Vec<&Entry> {
+/// The build's edition. The Pro edition arrives with milestone M4.
+const EDITION: &str = "basic";
+
+fn directory_entries(root: &Entry, depth: usize, metric: Metric) -> Vec<&Entry> {
     let mut output = Vec::new();
     let mut pending = Vec::new();
     let mut entry = root;
@@ -276,7 +329,7 @@ fn directory_entries(root: &Entry, depth: usize) -> Vec<&Entry> {
         if remaining > 0 && !entry.children.is_empty() {
             let mut children: Vec<_> = entry.children.iter().map(AsRef::as_ref).collect();
             // Sort in reverse output order so the next child is on top of the stack.
-            children.sort_unstable_by(|left, right| rank(left, right));
+            children.sort_unstable_by(|left, right| rank(left, right, metric));
             pending.extend(children.into_iter().map(|child| (child, remaining - 1)));
         }
         let Some((next, next_depth)) = pending.pop() else {
@@ -289,7 +342,7 @@ fn directory_entries(root: &Entry, depth: usize) -> Vec<&Entry> {
     output
 }
 
-pub(crate) fn largest_files(root: &Entry, limit: usize) -> Vec<&Arc<Entry>> {
+pub(crate) fn largest_files(root: &Entry, limit: usize, metric: Metric) -> Vec<&Arc<Entry>> {
     if limit == 0 {
         return Vec::new();
     }
@@ -303,7 +356,7 @@ pub(crate) fn largest_files(root: &Entry, limit: usize) -> Vec<&Arc<Entry>> {
         if entry.kind == EntryKind::Directory {
             levels.push(entry.children.iter());
         } else if entry.state == EntryState::Local {
-            let candidate = Reverse(RankedFile(entry));
+            let candidate = Reverse(RankedFile(entry, metric));
             if heap.len() < limit {
                 heap.push(candidate);
             } else if let Some(mut smallest) = heap.peek_mut()
@@ -319,20 +372,18 @@ pub(crate) fn largest_files(root: &Entry, limit: usize) -> Vec<&Arc<Entry>> {
         .collect()
 }
 
-fn rank(left: &Entry, right: &Entry) -> Ordering {
-    left.allocated_bytes
-        .cmp(&right.allocated_bytes)
-        .then_with(|| {
-            right
-                .path
-                .as_os_str()
-                .as_encoded_bytes()
-                .cmp(left.path.as_os_str().as_encoded_bytes())
-        })
+fn rank(left: &Entry, right: &Entry, metric: Metric) -> Ordering {
+    metric.bytes(left).cmp(&metric.bytes(right)).then_with(|| {
+        right
+            .path
+            .as_os_str()
+            .as_encoded_bytes()
+            .cmp(left.path.as_os_str().as_encoded_bytes())
+    })
 }
 
 #[derive(Clone, Copy)]
-struct RankedFile<'a>(&'a Arc<Entry>);
+struct RankedFile<'a>(&'a Arc<Entry>, Metric);
 
 impl PartialEq for RankedFile<'_> {
     fn eq(&self, other: &Self) -> bool {
@@ -350,7 +401,7 @@ impl PartialOrd for RankedFile<'_> {
 
 impl Ord for RankedFile<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
-        rank(self.0, other.0)
+        rank(self.0, other.0, self.1)
     }
 }
 

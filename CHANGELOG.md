@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add apparent sizes and item counts to the CLI. `space16x scan --apparent` shows and ranks file lengths, as `ls -l` reports them, instead of allocated bytes, which helps with sparse and compressed files. JSON reports move to schema 3, which keeps every schema 2 field and adds `apparentBytes`, `itemCount` (files and folders below an entry, counting each hard-linked file once), `rankedBy` and `edition`. Exit codes are unchanged.
+
 ## 0.2.4
 
 - Treat folders the system won't let apps read as protected items rather than scan errors. A scan of `/` used to show an orange "Partial scan" with hundreds of skipped paths, though nearly all were expected macOS restrictions. Both apps now keep the orange warning for real errors and show a neutral notice for protected items. The Mac app groups them by folder in Scan Details and offers Full Disk Access when it would unlock some of them. The CLI summarizes them in one stderr line and marks them `[protected]` and Protected in the explorer. JSON output and exit codes are unchanged.

@@ -70,6 +70,35 @@ fn counts_metadata_and_hard_links_in_bytewise_order() -> io::Result<()> {
     let uncounted = child(child(&report.root, "z"), "original");
     assert_eq!(uncounted.state, EntryState::HardLinkAlias);
     assert_eq!(uncounted.allocated_bytes, 0);
+    // Apparent sizes and item counts follow the same hard-link rule.
+    assert_eq!(counted.apparent_bytes, 4_097);
+    assert_eq!(uncounted.apparent_bytes, 0);
+    assert_eq!(report.root.apparent_bytes, 4_097 + 13);
+    // A, A/alias, z and .hidden. The second link and the symlinks aren't items.
+    assert_eq!(report.root.item_count, 4);
+    assert_eq!(child(&report.root, "A").item_count, 1);
+    assert_eq!(child(&report.root, "z").item_count, 0);
+    Ok(())
+}
+
+#[test]
+fn counts_nested_items_and_apparent_bytes() -> io::Result<()> {
+    let fixture = Fixture::new()?;
+    fs::create_dir_all(fixture.join("one/two/three"))?;
+    fs::write(fixture.join("one/a"), [1; 10])?;
+    fs::write(fixture.join("one/two/b"), [2; 20])?;
+    fs::write(fixture.join("one/two/three/c"), [3; 30])?;
+    fs::create_dir(fixture.join("empty"))?;
+
+    let report = fixture.report()?;
+
+    let one = child(&report.root, "one");
+    assert_eq!(one.item_count, 5);
+    assert_eq!(one.apparent_bytes, 60);
+    assert_eq!(child(one, "two").item_count, 3);
+    assert_eq!(child(&report.root, "empty").item_count, 0);
+    assert_eq!(report.root.item_count, 7);
+    assert_eq!(report.root.apparent_bytes, 60);
     Ok(())
 }
 
@@ -85,6 +114,7 @@ fn does_not_count_sparse_file_length() -> io::Result<()> {
 
     assert_eq!(report.root.allocated_bytes, metadata.blocks() * 512);
     assert!(report.root.allocated_bytes < logical);
+    assert_eq!(report.root.apparent_bytes, logical);
     Ok(())
 }
 

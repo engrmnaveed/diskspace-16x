@@ -490,6 +490,8 @@ mod tests {
         Arc::new(Entry {
             path: path.into(),
             allocated_bytes,
+            apparent_bytes: allocated_bytes,
+            item_count: 0,
             kind: EntryKind::File,
             state: EntryState::Local,
             children: Vec::new(),
@@ -500,6 +502,8 @@ mod tests {
         Arc::new(Entry {
             path: path.into(),
             allocated_bytes: children.iter().map(|entry| entry.allocated_bytes).sum(),
+            apparent_bytes: children.iter().map(|entry| entry.apparent_bytes).sum(),
+            item_count: children.iter().map(|entry| entry.item_count + 1).sum(),
             kind: EntryKind::Directory,
             state: EntryState::Local,
             children,
