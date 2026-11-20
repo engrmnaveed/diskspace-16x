@@ -1,5 +1,21 @@
 # Space 16X verification
 
+## 0.3.0
+
+- The Rust CLI passed 31 unit tests, including the shared exclude-pattern table in `fixtures/exclude-patterns.json`, scanner tests for apparent bytes, item counts and exclusions, and explorer tests for sorting and the size toggle. `scripts/check-cli.py` covers JSON schema 3, `--apparent` ordering, the hard-link rule for items, and `--exclude` / `--exclude-from`. `scripts/check-tui.py` drives `s` and `a` in a pseudo-terminal and checks that `NO_COLOR` and `--no-color` emit no color codes while keeping the selection in reverse video.
+- All 25 Swift tests passed. The Swift matcher reads the same pattern table, and the Swift excludes test mirrors the Rust one with the same tree, patterns and totals: 4 excluded, 3 items, 17 bytes.
+- Offscreen renders of the Mac app checked the sortable list, the Items column, apparent sizes in the list and treemap, the excluded count, and the Settings pane in dark mode. The promo Short rendered at 1080 × 1920 and 29.5 seconds.
+- The packaged `aarch64-apple-darwin` CLI archive is 450,872 bytes, compared with 441,692 bytes for 0.2.4.
+
+The Rust release CLI benchmark ran on the Apple M5 Pro MacBook Pro with macOS 27.2.1 and APFS, with one warm-up run before each set.
+
+| Fixture | Wall time (3 runs) | Peak resident memory |
+| --- | --- | --- |
+| 100,000 files (`scripts/benchmark.py`) | 0.1581, 0.1567, 0.1653 s | 36,241,408–36,274,176 bytes |
+| 1,000,000 files (`--files 1000000`) | 5.533, 5.450, 5.423 s | 338,198,528–338,296,832 bytes |
+
+Peak memory at 100,000 files rose about 5% from 0.2.0's 34.5 MB, because each entry now also records apparent bytes and an item count. Memory grows linearly with the file count, while time grows faster than linearly. Milestone M3 targets both with a leaner tree and a parallel walk.
+
 ## 0.2.0
 
 - The Rust CLI passed 14 unit tests on Apple silicon and 13 each on Linux ARM64 and x86-64. The release archives for those three targets and Intel macOS passed the CLI and pseudo-terminal checks. Intel macOS ran through Rosetta. The terminal checks include directory navigation, largest files, resize, and terminal restoration after quit and Ctrl-C.

@@ -12,17 +12,17 @@ import tempfile
 import time
 
 
-DIRECTORIES = 1_000
+GROUPS = 100
 FILES_PER_DIRECTORY = 100
 PAYLOAD = bytes(512)
 
 
-def create_fixture(root):
+def create_fixture(root, folders_per_group):
     allocated_bytes = 0
-    for group_index in range(100):
+    for group_index in range(GROUPS):
         group = root / f"group-{group_index:03}"
         group.mkdir()
-        for directory_index in range(10):
+        for directory_index in range(folders_per_group):
             directory = group / f"folder-{directory_index:03}"
             directory.mkdir()
             for file_index in range(FILES_PER_DIRECTORY):
@@ -62,14 +62,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("binary", type=Path, help="path to a release build of space16x")
     parser.add_argument("--fixture-parent", type=Path, help="directory on the filesystem to benchmark")
+    parser.add_argument(
+        "--files", type=int, default=100_000,
+        help="fixture size, a multiple of 10,000 (default 100,000; use 1,000,000 for the large run)",
+    )
     args = parser.parse_args()
+    if args.files <= 0 or args.files % (GROUPS * FILES_PER_DIRECTORY):
+        parser.error("--files must be a positive multiple of 10,000.")
+    folders_per_group = args.files // (GROUPS * FILES_PER_DIRECTORY)
     binary = str(args.binary.resolve(strict=True))
     os_name = platform.system()
     if os_name not in ("Darwin", "Linux"):
         parser.error("The benchmark supports macOS and Linux.")
     with tempfile.TemporaryDirectory(prefix="space16x-bench-", dir=args.fixture_parent) as path:
         root = Path(path).resolve()
-        allocated_bytes = create_fixture(root)
+        allocated_bytes = create_fixture(root, folders_per_group)
         run([binary, "scan", str(root), "--top", "20", "--json"], stdout=DEVNULL, check=True)
         runs = [measure(binary, root, os_name, allocated_bytes) for _ in range(3)]
         if os_name == "Darwin":
@@ -82,9 +89,9 @@ def main():
             "operatingSystem": f"{os_name} {os_version}",
             "filesystemMount": check_output(["df", "-P", str(root)], text=True).splitlines()[-1],
             "fixture": {
-                "groupDirectories": 100,
-                "leafDirectories": DIRECTORIES,
-                "files": DIRECTORIES * FILES_PER_DIRECTORY,
+                "groupDirectories": GROUPS,
+                "leafDirectories": GROUPS * folders_per_group,
+                "files": args.files,
                 "payloadBytesPerFile": len(PAYLOAD),
                 "allocatedBytes": allocated_bytes,
             },

@@ -35,7 +35,7 @@ On macOS, run `swift test` and `open "$(scripts/package-macos.sh)"`. Exercise fo
 python3 scripts/benchmark.py cli/target/release/space16x
 ```
 
-The benchmark creates 100,000 files with a 512-byte payload under 1,100 directories. It runs one warm-up and three timed CLI scans, verifies the allocated total against filesystem metadata, and reports wall time and peak resident memory. The fixture is temporary and requires a few hundred MiB of local disk space on filesystems with 4 KiB blocks. Use `--fixture-parent PATH` to compare filesystems and record the toolchain version with the results.
+The benchmark creates 100,000 files with a 512-byte payload under 1,100 directories. It runs one warm-up and three timed CLI scans, verifies the allocated total against filesystem metadata, and reports wall time and peak resident memory. The fixture is temporary and requires a few hundred MiB of local disk space on filesystems with 4 KiB blocks. Use `--fixture-parent PATH` to compare filesystems, and `--files 1000000` for the large run, which needs a few GiB and several minutes. Record the toolchain version with the results.
 
 Keep changes focused. Use commit messages that explain the outcome, and include the verification commands and platform coverage in your pull request.
 
