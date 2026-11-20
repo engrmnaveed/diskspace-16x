@@ -12,7 +12,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
 - [x] M1.2 Rust: `--exclude` / `--exclude-from` (scan and TUI), `excludedCount` / `excludes` in JSON
 - [x] M1.3 TUI: `s` sort (size → items → name), Items column, `a` apparent toggle, `NO_COLOR` / `--no-color`
-- [ ] M1.4 Swift: apparent size, item counts, exclude rules in `SpaceCore`, shared parity fixture
+- [x] M1.4 Swift: apparent size, item counts, exclude rules in `SpaceCore`, shared parity fixture
 - [ ] M1.5 Mac: Items column, sortable columns, View → Size menu, Settings scene with exclude patterns, plus the promo refresh covering the TUI and Mac changes (`AGENTS.md` wants it in the same change)
 - [ ] M1.6 Docs (`docs/cli.md`, README, CHANGELOG, manual QA, PRD/AGENTS edition model), benchmark in `docs/qa.md`, CI parity checks
 - [ ] M1.7 Release v0.3.0
