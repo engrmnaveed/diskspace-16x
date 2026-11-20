@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — M1.1–M1.6 landed. Next: M1.7, release v0.3.0 (rename the changelog's Unreleased section, bump versions, tag).
+**Resume here** — M1 is released as v0.3.0. M2.1 (Trash backends and the rules update) is on `feature/m2-trash-backends`: the backends and their tests are committed; next, update the rules in `AGENTS.md`, `SECURITY.md`, `PRD.md` and `README.md`, tick M2.1 and open its PR. Then M2.2.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -15,10 +15,18 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 - [x] M1.4 Swift: apparent size, item counts, exclude rules in `SpaceCore`, shared parity fixture
 - [x] M1.5 Mac: Items column, sortable columns, View → Size menu, Settings scene with exclude patterns, plus the promo refresh covering the TUI and Mac changes (`AGENTS.md` wants it in the same change)
 - [x] M1.6 Docs (`docs/cli.md`, README, CHANGELOG, manual QA, PRD/AGENTS edition model), benchmark in `docs/qa.md`, CI parity checks
-- [ ] M1.7 Release v0.3.0
+- [x] M1.7 Release v0.3.0
+
+### M2 (v0.4.0) Act [Basic]
+- [~] M2.1 Rust: Trash backends, macOS `trashItemAtURL` through a minimal Objective-C binding (no new crate) and an in-house Linux FreeDesktop Trash (home Trash, else `$topdir/.Trash/$uid` or `$topdir/.Trash-$uid`, `.trashinfo` written first, never across devices), plus the write rule in `AGENTS.md`, `SECURITY.md`, `PRD.md` and `README.md`
+- [ ] M2.2 TUI: Space marks items, `d` moves them to the Trash after a `y/N` prompt, the tree updates in place, "Space is freed when you empty the Trash", cloud-only and protected items blocked, `--read-only` and `SPACE16X_READ_ONLY=1`, a pty check in `scripts/check-tui.py`
+- [ ] M2.3 Mac: multi-select, ⌘⌫ Move to Trash, a confirmation sheet with the item count and size, `FileManager.trashItem`, cloud-only and protected items blocked, the tree updated in place
+- [ ] M2.4 Rescan folder: TUI `r` and Mac **Rescan Folder**, replacing one subtree in place
+- [ ] M2.5 Mac: Quick Look on Space
+- [ ] M2.6 Docs (`docs/cli.md`, README, CHANGELOG, manual QA rows for Trash and Put Back) and the promo refresh showing Move to Trash
+- [ ] M2.7 Release v0.4.0
 
 ### Later milestones
-- [ ] M2 (v0.4) Act: Move to Trash (Mac, TUI with Linux FreeDesktop backend), `--read-only`, rescan folder, Quick Look, promo
 - [ ] M3 (v0.5) Speed: lean arena tree, parallel walk `--threads`, Swift TaskGroup walk, 1M-file benchmark
 - [ ] M4 (v0.6) Carry, compare, editions: ncdu export/import, `volumes`, Pro edition scaffolding, `diff` and Mac Compare, promo
 - [ ] M5 (v0.7) Pro analysis: mtime and `--older-than`, file types, `--by-owner`, history
