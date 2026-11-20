@@ -17,6 +17,7 @@ Usage: space16x [--no-color] [--read-only] [EXCLUDES] [PATH]
        space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [EXCLUDES]
 
 Open the disk explorer in an interactive terminal. PATH defaults to the current directory.
+In the explorer, Space marks items and d moves them to the Trash after you confirm.
 The scan command prints a plain directory summary and works in scripts.
 
   --depth N  List entries through N levels (default: 1, 0 for the root total)
