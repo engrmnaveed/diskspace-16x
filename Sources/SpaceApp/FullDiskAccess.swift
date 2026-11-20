@@ -18,7 +18,7 @@ enum FullDiskAccess {
         return true
     }
 
-    static func openSettings() {
+    @MainActor static func openSettings() {
         guard let settingsURL else { return }
         NSWorkspace.shared.open(settingsURL)
     }

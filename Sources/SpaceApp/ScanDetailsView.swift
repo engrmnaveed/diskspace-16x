@@ -100,7 +100,7 @@ struct ScanDetailsView: View {
                     Section("Protected items (\(protectedCount.formatted()))") {
                         ForEach(protectedGroups) { group in
                             if group.issues.count == 1, let issue = group.issues.first {
-                                protectedRow(issue, title: Self.displayPath(issue.path))
+                                protectedRow(issue, title: homeRelativePath(issue.path))
                             } else {
                                 DisclosureGroup {
                                     ForEach(group.issues) { issue in
@@ -162,10 +162,6 @@ struct ScanDetailsView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    static func displayPath(_ path: String) -> String {
-        (path as NSString).abbreviatingWithTildeInPath
-    }
-
     private func protectedRow(_ issue: ScanIssue, title: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
@@ -189,6 +185,11 @@ struct ScanDetailsView: View {
     }
 }
 
+/// Shortens a path in the home folder to `~`. It isn't tied to the view's main actor.
+private func homeRelativePath(_ path: String) -> String {
+    (path as NSString).abbreviatingWithTildeInPath
+}
+
 private extension IssueGroup {
-    var displayPath: String { ScanDetailsView.displayPath(folder) }
+    var displayPath: String { homeRelativePath(folder) }
 }
