@@ -6,14 +6,14 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — M1.1–M1.3 landed. M1.4 (Swift parity) is on `feature/m1-swift-parity` and M1.5 (Mac UI) on `feature/m1-mac-ui`, stacked in that order: merge `main` into each, tick, open its PR. M1.5 still needs the promo refresh (`scripts/promo/`), the README and manual QA rows. Then M1.6 docs and benchmark, M1.7 release.
+**Resume here** — M1.1–M1.5 landed once their PRs merge (M1.4 is PR #15). M1.6 (PRD and AGENTS edition model, benchmark notes in `docs/qa.md`, `scripts/benchmark.py --files`) is on `feature/m1-docs-benchmark`. Then M1.7: release v0.3.0.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
 - [x] M1.2 Rust: `--exclude` / `--exclude-from` (scan and TUI), `excludedCount` / `excludes` in JSON
 - [x] M1.3 TUI: `s` sort (size → items → name), Items column, `a` apparent toggle, `NO_COLOR` / `--no-color`
 - [ ] M1.4 Swift: apparent size, item counts, exclude rules in `SpaceCore`, shared parity fixture
-- [ ] M1.5 Mac: Items column, sortable columns, View → Size menu, Settings scene with exclude patterns, plus the promo refresh covering the TUI and Mac changes (`AGENTS.md` wants it in the same change)
+- [x] M1.5 Mac: Items column, sortable columns, View → Size menu, Settings scene with exclude patterns, plus the promo refresh covering the TUI and Mac changes (`AGENTS.md` wants it in the same change)
 - [ ] M1.6 Docs (`docs/cli.md`, README, CHANGELOG, manual QA, PRD/AGENTS edition model), benchmark in `docs/qa.md`, CI parity checks
 - [ ] M1.7 Release v0.3.0
 
