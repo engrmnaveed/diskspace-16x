@@ -1,6 +1,6 @@
 [package]
 name = "space16x"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 rust-version = "1.100"
 description = "A terminal disk space explorer for macOS and Linux"

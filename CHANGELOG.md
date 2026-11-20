@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.4
 
 - Treat folders the system won't let apps read as protected items rather than scan errors. A scan of `/` used to show an orange "Partial scan" with hundreds of skipped paths, though nearly all were expected macOS restrictions. Both apps now keep the orange warning for real errors and show a neutral notice for protected items. The Mac app groups them by folder in Scan Details and offers Full Disk Access when it would unlock some of them. The CLI summarizes them in one stderr line and marks them `[protected]` and Protected in the explorer. JSON output and exit codes are unchanged.
 - Show CLI sizes in decimal units (KB, MB, GB), the way Finder, System Settings, and the Mac app do, instead of binary KiB, MiB, and GiB. The same folder now shows the same number everywhere, for example 245.33 GB rather than 228.5 GiB. The CLI explorer's file details and the Mac app's size tooltips also show the binary size next to the exact byte count. JSON reports are unchanged and still give exact bytes.
