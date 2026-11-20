@@ -514,6 +514,7 @@ mod tests {
         explorer.install(Report {
             root,
             issues: Vec::new(),
+            excluded_count: 0,
             is_preview: true,
         });
         settle_ranking(explorer);

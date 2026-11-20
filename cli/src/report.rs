@@ -178,6 +178,8 @@ struct JsonReport<'a> {
     allocated_bytes: u64,
     apparent_bytes: u64,
     item_count: u64,
+    excluded_count: u64,
+    excludes: &'a [String],
     is_partial: bool,
     issues: Vec<JsonIssue<'a>>,
     #[serde(flatten)]
@@ -266,6 +268,7 @@ pub(crate) fn write_json(
     report: &Report,
     selection: Selection,
     metric: Metric,
+    excludes: &[String],
 ) -> io::Result<()> {
     let mut out = io::BufWriter::new(out);
     let scope = JsonPath::from(report.root.path.as_path());
@@ -301,6 +304,8 @@ pub(crate) fn write_json(
         allocated_bytes: report.root.allocated_bytes,
         apparent_bytes: report.root.apparent_bytes,
         item_count: report.root.item_count,
+        excluded_count: report.excluded_count,
+        excludes,
         is_partial: !report.issues.is_empty(),
         issues: report
             .issues

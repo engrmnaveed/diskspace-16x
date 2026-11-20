@@ -40,7 +40,7 @@ impl Preview {
         }
     }
 
-    pub(super) fn publish(&mut self, issues: &[Issue]) -> Option<Report> {
+    pub(super) fn publish(&mut self, issues: &[Issue], excluded_count: u64) -> Option<Report> {
         if self.changes.is_empty() || self.published.elapsed() < Duration::from_millis(400) {
             return None;
         }
@@ -71,6 +71,7 @@ impl Preview {
         Some(Report {
             root: Arc::clone(&self.root),
             issues: issues.to_vec(),
+            excluded_count,
             is_preview: true,
         })
     }
