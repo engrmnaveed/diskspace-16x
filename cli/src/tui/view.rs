@@ -1,10 +1,11 @@
-use super::explorer::{Explorer, LARGEST_LIMIT, Mode, Panel, Status};
+use super::explorer::{Explorer, LARGEST_LIMIT, Mode, Panel, Sort, Status};
 use crate::{
-    report::{format_binary_bytes, format_bytes, terminal_path, terminal_text},
+    report::{Metric, format_binary_bytes, format_bytes, terminal_path, terminal_text},
     scanner::{Entry, EntryKind, EntryState},
 };
 use ratatui::{
     Frame,
+    buffer::Buffer,
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -69,6 +70,18 @@ pub(super) fn draw(frame: &mut Frame<'_>, explorer: &mut Explorer, tick: usize) 
         && let Some(entry) = explorer.current()
     {
         labeled_path(frame, line_at(area, bottom), "Selected  ", &entry.path);
+    }
+}
+
+/// Removes colors for `NO_COLOR` and `--no-color`, keeping bold and dim emphasis.
+/// Cells drawn on a background, such as the selection, switch to reverse video.
+pub(super) fn strip_colors(buffer: &mut Buffer) {
+    for cell in &mut buffer.content {
+        if cell.bg != Color::Reset {
+            cell.modifier.insert(Modifier::REVERSED);
+        }
+        cell.fg = Color::Reset;
+        cell.bg = Color::Reset;
     }
 }
 
@@ -204,6 +217,11 @@ fn draw_summary(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
         ("", MUTED)
     };
     let count = explorer.rows.len();
+    let sorted = match (explorer.mode, explorer.sort) {
+        (Mode::Folders, Sort::Items) => " · by items",
+        (Mode::Folders, Sort::Name) => " · by name",
+        _ => "",
+    };
     let quantity = if explorer.is_ranking() {
         " · ranking…".into()
     } else {
@@ -219,14 +237,26 @@ fn draw_summary(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
         area,
         Line::from(vec![
             Span::styled(
-                format!("{} allocated", format_bytes(scope.allocated_bytes)),
+                format!(
+                    "{} {}",
+                    format_bytes(explorer.metric.bytes(scope)),
+                    metric_word(explorer.metric)
+                ),
                 ACCENT,
             ),
             Span::styled(qualifier, qualifier_style),
             Span::styled(quantity, MUTED),
+            Span::styled(sorted, MUTED),
             Span::styled(excluded_note(explorer), MUTED),
         ]),
     );
+}
+
+fn metric_word(metric: Metric) -> &'static str {
+    match metric {
+        Metric::Allocated => "allocated",
+        Metric::Apparent => "apparent",
+    }
 }
 
 fn excluded_note(explorer: &Explorer) -> String {
@@ -288,11 +318,13 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         frame.render_widget(widget.wrap(Wrap { trim: true }), area);
         return;
     }
-    let columns = Columns::for_width(area.width);
+    let columns = Columns::for_width(area.width, explorer.mode, explorer.sort, explorer.metric);
     let header = columns.heading();
     paint(frame, line_at(area, 0), Line::styled(header, ACCENT));
     explorer.set_page_rows(usize::from(area.height.saturating_sub(1)));
-    let total = explorer.scope().map_or(0, |scope| scope.allocated_bytes);
+    let total = explorer
+        .scope()
+        .map_or(0, |scope| explorer.metric.bytes(scope));
     let visible = explorer
         .rows
         .iter()
@@ -311,14 +343,22 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
 struct Columns {
     name: usize,
     size: usize,
+    items: usize,
     state: usize,
     share: usize,
+    /// The sorted column, marked in the heading: None in the largest-files view.
+    sort: Option<Sort>,
+    metric: Metric,
 }
 
 impl Columns {
-    fn for_width(width: u16) -> Self {
+    fn for_width(width: u16, mode: Mode, sort: Sort, metric: Metric) -> Self {
         let width = usize::from(width);
         let size = (width / 3).min(13);
+        let items = match (mode, width) {
+            (Mode::Folders, 70..) => 9,
+            _ => 0,
+        };
         let state = match width {
             82.. => 14,
             56..=81 => 12,
@@ -330,14 +370,32 @@ impl Columns {
             _ => 0,
         };
         Self {
-            name: width - size - state - share,
+            name: width - size - items - state - share,
             size,
+            items,
             state,
             share,
+            sort: (mode == Mode::Folders).then_some(sort),
+            metric,
         }
     }
 
     fn heading(&self) -> String {
+        let arrow = |sort: Sort| if self.sort == Some(sort) { " ↓" } else { "" };
+        let name = if self.sort == Some(Sort::Name) {
+            "  Name ↑"
+        } else {
+            "  Name"
+        };
+        let items = if self.items == 0 {
+            String::new()
+        } else {
+            format!(
+                "{:>width$}",
+                format!("Items{}", arrow(Sort::Items)),
+                width = self.items
+            )
+        };
         let state = if self.state == 0 {
             String::new()
         } else {
@@ -348,11 +406,16 @@ impl Columns {
         } else {
             format!("{:>width$}", "Share", width = self.share - 1) + " "
         };
-        let size_label = if self.size < 9 { "Size" } else { "Allocated" };
+        let size_label = match (self.size, self.metric) {
+            (..9, _) => "Size",
+            (_, Metric::Allocated) => "Allocated",
+            (_, Metric::Apparent) => "Apparent",
+        };
+        let size_label = format!("{size_label}{}", arrow(Sort::Size));
         format!(
-            "{}{:>width$}{state}{share}",
-            padded("  Name", self.name),
-            shorten(size_label, self.size, false),
+            "{}{:>width$}{items}{state}{share}",
+            padded(name, self.name),
+            shorten(&size_label, self.size, false),
             width = self.size,
         )
     }
@@ -389,7 +452,8 @@ impl Columns {
             String::new()
         };
         let name_width = self.name.saturating_sub(marker.width() + kind.width());
-        let amount = format_bytes(entry.allocated_bytes);
+        let bytes = self.metric.bytes(entry);
+        let amount = format_bytes(bytes);
         let mut spans = vec![
             Span::styled(marker, style(ACCENT)),
             Span::styled(
@@ -407,6 +471,21 @@ impl Columns {
                 width = self.size
             )),
         ];
+        if self.items != 0 {
+            let count = if entry.kind == EntryKind::Directory {
+                format_count(entry.item_count)
+            } else {
+                String::new()
+            };
+            spans.push(Span::styled(
+                format!(
+                    "{:>width$}",
+                    shorten(&count, self.items - 1, false),
+                    width = self.items
+                ),
+                style(MUTED),
+            ));
+        }
         if self.state != 0 {
             spans.push(Span::styled(
                 padded(&format!("  {state}"), self.state),
@@ -417,7 +496,7 @@ impl Columns {
             let fraction = if total == 0 {
                 0.0
             } else {
-                (entry.allocated_bytes as f64 / total as f64).min(1.0)
+                (bytes as f64 / total as f64).min(1.0)
             };
             if self.share >= 12 {
                 let size = self.share - 9;
@@ -434,6 +513,19 @@ impl Columns {
         }
         Line::from(spans)
     }
+}
+
+/// Formats an item count with thousands separators, such as 12,345.
+fn format_count(count: u64) -> String {
+    let digits = count.to_string();
+    let mut formatted = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            formatted.push(',');
+        }
+        formatted.push(digit);
+    }
+    formatted
 }
 
 fn draw_footer(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
@@ -476,6 +568,10 @@ fn draw_footer(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
     }
     let text = if explorer.panel.is_some() {
         " Esc back   ↑↓ scroll   q quit"
+    } else if explorer.is_active() && area.width >= 90 {
+        " ↑↓ move  ↵ open  ← back  / filter  f largest  s sort  a size  e issues  c cancel  ? help"
+    } else if area.width >= 80 {
+        " ↑↓ move  ↵ open  ← back  / filter  f largest  s sort  a size  e issues  ? help"
     } else if explorer.is_active() && area.width >= 72 {
         " ↑↓ move  ↵ open  ← back  / filter  f largest  e issues  c cancel  ? help"
     } else if area.width >= 65 {
@@ -532,6 +628,8 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         ("← / Backspace", "Go to the parent folder"),
         ("/", "Filter displayed names or paths"),
         ("f", "Toggle largest files for the scan"),
+        ("s", "Sort folders by size, items, or name"),
+        ("a", "Switch between allocated and apparent sizes"),
         ("e / i", "Show skipped paths and errors"),
         ("c / x", "Cancel the scan and keep its preview"),
         ("Esc", "Go back or clear the filter"),
@@ -643,19 +741,19 @@ fn draw_details(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         EntryState::Incomplete => "Incomplete scan data",
         EntryState::HardLinkAlias => "Hard link counted at another path",
     };
-    let bytes = entry.allocated_bytes;
-    // The binary size adds detail only once it differs from the byte count.
-    let binary = if bytes < 1024 {
-        String::new()
-    } else {
-        format!("{} · ", format_binary_bytes(bytes))
+    let size_line = |bytes: u64, word: &str| {
+        // The binary size adds detail only once it differs from the byte count.
+        let binary = if bytes < 1024 {
+            String::new()
+        } else {
+            format!("{} · ", format_binary_bytes(bytes))
+        };
+        format!("{} {word} ({binary}{bytes} bytes)", format_bytes(bytes))
     };
     frame.render_widget(
         Paragraph::new(vec![
-            Line::styled(
-                format!("{} allocated ({binary}{bytes} bytes)", format_bytes(bytes)),
-                ACCENT,
-            ),
+            Line::styled(size_line(entry.allocated_bytes, "allocated"), ACCENT),
+            Line::raw(size_line(entry.apparent_bytes, "apparent")),
             Line::styled(state, MUTED),
             Line::raw(""),
             Line::raw(terminal_path(&entry.path)),

@@ -1,8 +1,5 @@
-use super::explorer::{LARGEST_LIMIT, Mode};
-use crate::{
-    report::{Metric, largest_files},
-    scanner::Entry,
-};
+use super::explorer::{LARGEST_LIMIT, Mode, RankKey, Sort};
+use crate::{report::largest_files, scanner::Entry};
 use std::{
     io,
     path::PathBuf,
@@ -11,12 +8,12 @@ use std::{
 };
 
 pub(super) struct RankRequest {
-    pub(super) mode: Mode,
+    pub(super) key: RankKey,
     pub(super) source: Arc<Entry>,
 }
 
 pub(super) struct Ranked {
-    pub(super) mode: Mode,
+    pub(super) key: RankKey,
     pub(super) folder: PathBuf,
     pub(super) snapshot: Weak<Entry>,
     pub(super) items: Vec<Arc<Entry>>,
@@ -101,24 +98,43 @@ impl Drop for RankWorker {
 }
 
 pub(super) fn rank(request: RankRequest) -> Ranked {
-    let items = match request.mode {
+    let RankKey { mode, sort, metric } = request.key;
+    let items = match mode {
         Mode::Folders => {
             let mut items = request.source.children.clone();
-            items.sort_unstable_by(|left, right| {
-                right
-                    .allocated_bytes
-                    .cmp(&left.allocated_bytes)
-                    .then_with(|| left.path.as_os_str().cmp(right.path.as_os_str()))
-            });
+            let by_path = |left: &Arc<Entry>, right: &Arc<Entry>| {
+                left.path.as_os_str().cmp(right.path.as_os_str())
+            };
+            match sort {
+                Sort::Size => items.sort_unstable_by(|left, right| {
+                    metric
+                        .bytes(right)
+                        .cmp(&metric.bytes(left))
+                        .then_with(|| by_path(left, right))
+                }),
+                Sort::Items => items.sort_unstable_by(|left, right| {
+                    right
+                        .item_count
+                        .cmp(&left.item_count)
+                        .then_with(|| by_path(left, right))
+                }),
+                Sort::Name => items.sort_by_cached_key(|entry| {
+                    let name = entry.path.file_name().unwrap_or(entry.path.as_os_str());
+                    (
+                        name.to_string_lossy().to_lowercase(),
+                        entry.path.as_os_str().to_owned(),
+                    )
+                }),
+            }
             items
         }
-        Mode::Largest => largest_files(&request.source, LARGEST_LIMIT, Metric::Allocated)
+        Mode::Largest => largest_files(&request.source, LARGEST_LIMIT, metric)
             .into_iter()
             .cloned()
             .collect(),
     };
     Ranked {
-        mode: request.mode,
+        key: request.key,
         folder: request.source.path.clone(),
         snapshot: Arc::downgrade(&request.source),
         items,

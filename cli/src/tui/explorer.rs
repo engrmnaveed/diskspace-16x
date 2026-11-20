@@ -1,7 +1,7 @@
 use super::ranker::{RankRequest, Ranked};
 use super::{Progress, ScanUpdate};
 use crate::{
-    report::terminal_path,
+    report::{Metric, terminal_path},
     scanner::{Entry, EntryKind, Report},
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -18,6 +18,33 @@ const FILTER_LIMIT: usize = 256;
 pub(super) enum Mode {
     Folders,
     Largest,
+}
+
+/// How folder contents are ordered. The largest-files view always ranks by size.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum Sort {
+    #[default]
+    Size,
+    Items,
+    Name,
+}
+
+impl Sort {
+    fn next(self) -> Self {
+        match self {
+            Self::Size => Self::Items,
+            Self::Items => Self::Name,
+            Self::Name => Self::Size,
+        }
+    }
+}
+
+/// What a ranking was computed for. A change in any part needs a new ranking.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) struct RankKey {
+    pub(super) mode: Mode,
+    pub(super) sort: Sort,
+    pub(super) metric: Metric,
 }
 
 pub(super) enum Status {
@@ -46,6 +73,8 @@ pub(super) struct Explorer {
     pub(super) status: Status,
     pub(super) progress: Option<Progress>,
     pub(super) mode: Mode,
+    pub(super) sort: Sort,
+    pub(super) metric: Metric,
     pub(super) rows: Vec<Arc<Entry>>,
     pub(super) selected: usize,
     pub(super) offset: usize,
@@ -57,7 +86,7 @@ pub(super) struct Explorer {
     pub(super) panel_items: usize,
     pub(super) panel_page: usize,
     folder: Option<Arc<Entry>>,
-    requested_ranking: Option<(Mode, Weak<Entry>)>,
+    requested_ranking: Option<(RankKey, Weak<Entry>)>,
     ranking: Option<Ranked>,
     selection_target: Option<PathBuf>,
 }
@@ -70,6 +99,8 @@ impl Explorer {
             status: Status::Scanning,
             progress: None,
             mode: Mode::Folders,
+            sort: Sort::default(),
+            metric: Metric::default(),
             rows: Vec::new(),
             selected: 0,
             offset: 0,
@@ -143,35 +174,42 @@ impl Explorer {
         }
     }
 
+    fn rank_key(&self) -> RankKey {
+        RankKey {
+            mode: self.mode,
+            sort: self.sort,
+            metric: self.metric,
+        }
+    }
+
     pub(super) fn ranking_request(&mut self) -> Option<RankRequest> {
         let source = Arc::clone(self.scope_reference()?);
         let snapshot = Arc::downgrade(&source);
+        let key = self.rank_key();
         if self
             .requested_ranking
             .as_ref()
-            .is_some_and(|(mode, requested)| {
-                *mode == self.mode && Weak::ptr_eq(requested, &snapshot)
+            .is_some_and(|(requested_key, requested)| {
+                *requested_key == key && Weak::ptr_eq(requested, &snapshot)
             })
         {
             return None;
         }
-        self.requested_ranking = Some((self.mode, snapshot));
-        Some(RankRequest {
-            mode: self.mode,
-            source,
-        })
+        self.requested_ranking = Some((key, snapshot));
+        Some(RankRequest { key, source })
     }
 
     pub(super) fn is_ranking(&self) -> bool {
         self.scope_reference().is_some_and(|entry| {
-            self.ranking
-                .as_ref()
-                .is_none_or(|rank| !Weak::ptr_eq(&rank.snapshot, &Arc::downgrade(entry)))
+            self.ranking.as_ref().is_none_or(|rank| {
+                rank.key != self.rank_key() || !Weak::ptr_eq(&rank.snapshot, &Arc::downgrade(entry))
+            })
         })
     }
 
     pub(super) fn accept_ranking(&mut self, ranked: Ranked) -> bool {
-        if ranked.mode != self.mode || self.scope().is_none_or(|scope| scope.path != ranked.folder)
+        if ranked.key != self.rank_key()
+            || self.scope().is_none_or(|scope| scope.path != ranked.folder)
         {
             return false;
         }
@@ -336,6 +374,30 @@ impl Explorer {
         self.reset_ranking(None);
     }
 
+    /// Re-ranks the current view, keeping the selection and the rows on screen meanwhile.
+    fn rerank(&mut self) {
+        if self.report.is_none() {
+            return;
+        }
+        self.selection_target = self.current().map(|entry| entry.path.clone());
+        self.requested_ranking = None;
+    }
+
+    fn cycle_sort(&mut self) {
+        if self.mode == Mode::Folders {
+            self.sort = self.sort.next();
+            self.rerank();
+        }
+    }
+
+    fn toggle_metric(&mut self) {
+        self.metric = match self.metric {
+            Metric::Allocated => Metric::Apparent,
+            Metric::Apparent => Metric::Allocated,
+        };
+        self.rerank();
+    }
+
     fn move_selection(&mut self, delta: isize) {
         self.selected = self
             .selected
@@ -460,6 +522,8 @@ impl Explorer {
             KeyCode::Esc | KeyCode::Backspace | KeyCode::Left | KeyCode::Char('h') => self.back(),
             KeyCode::Char('/') => self.original_query = Some(self.query.clone()),
             KeyCode::Char('f') => self.toggle_largest(),
+            KeyCode::Char('s') => self.cycle_sort(),
+            KeyCode::Char('a') => self.toggle_metric(),
             KeyCode::Char('e' | 'i') => self.open_panel(Panel::Issues),
             KeyCode::Char('?') => self.open_panel(Panel::Help),
             _ => {}
@@ -531,6 +595,80 @@ mod tests {
 
     fn key(explorer: &mut Explorer, code: KeyCode) -> Action {
         explorer.key(KeyEvent::new(code, KeyModifiers::NONE))
+    }
+
+    fn sized(path: &str, allocated_bytes: u64, apparent_bytes: u64) -> Arc<Entry> {
+        Arc::new(Entry {
+            apparent_bytes,
+            ..(*file(path, allocated_bytes)).clone()
+        })
+    }
+
+    fn names(explorer: &Explorer) -> Vec<String> {
+        explorer
+            .rows
+            .iter()
+            .map(|row| row.path.file_name().unwrap().to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn cycles_sort_keys_and_keeps_the_selection() {
+        let mut explorer = Explorer::new(Path::new("/r"));
+        let three = vec![file("/r/b/1", 10), file("/r/b/2", 10), file("/r/b/3", 10)];
+        let root = folder(
+            "/r",
+            vec![
+                folder("/r/b", three),
+                file("/r/C", 100),
+                folder("/r/a", vec![file("/r/a/1", 50)]),
+            ],
+        );
+        show(&mut explorer, root);
+        assert_eq!(names(&explorer), ["C", "a", "b"]);
+        key(&mut explorer, KeyCode::Down);
+        assert_eq!(names(&explorer)[explorer.selected], "a");
+
+        key(&mut explorer, KeyCode::Char('s'));
+        settle_ranking(&mut explorer);
+        assert_eq!(explorer.sort, Sort::Items);
+        assert_eq!(names(&explorer), ["b", "a", "C"]);
+        assert_eq!(names(&explorer)[explorer.selected], "a");
+
+        key(&mut explorer, KeyCode::Char('s'));
+        settle_ranking(&mut explorer);
+        assert_eq!(names(&explorer), ["a", "b", "C"]);
+
+        key(&mut explorer, KeyCode::Char('s'));
+        settle_ranking(&mut explorer);
+        assert_eq!(explorer.sort, Sort::Size);
+        assert_eq!(names(&explorer), ["C", "a", "b"]);
+    }
+
+    #[test]
+    fn toggles_apparent_sizes_in_both_views() {
+        let mut explorer = Explorer::new(Path::new("/r"));
+        let root = folder(
+            "/r",
+            vec![
+                sized("/r/sparse", 4_096, 1_000_000),
+                sized("/r/dense", 8_192, 8_000),
+            ],
+        );
+        show(&mut explorer, root);
+        assert_eq!(names(&explorer), ["dense", "sparse"]);
+
+        key(&mut explorer, KeyCode::Char('a'));
+        settle_ranking(&mut explorer);
+        assert_eq!(explorer.metric, Metric::Apparent);
+        assert_eq!(names(&explorer), ["sparse", "dense"]);
+
+        key(&mut explorer, KeyCode::Char('f'));
+        settle_ranking(&mut explorer);
+        assert_eq!(names(&explorer), ["sparse", "dense"]);
+        // Sorting applies to folders only; the largest files stay ranked by size.
+        key(&mut explorer, KeyCode::Char('s'));
+        assert_eq!(explorer.sort, Sort::Size);
     }
 
     #[test]

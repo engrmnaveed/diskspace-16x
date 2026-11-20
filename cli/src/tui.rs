@@ -26,7 +26,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub fn run(path: &Path, excludes: Excludes) -> io::Result<()> {
+pub fn run(path: &Path, excludes: Excludes, plain: bool) -> io::Result<()> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -60,7 +60,12 @@ pub fn run(path: &Path, excludes: Excludes) -> io::Result<()> {
         }
         let tick = started.elapsed().as_millis() / 150;
         if dirty || (explorer.is_active() && tick != last_tick) {
-            terminal.draw(|frame| view::draw(frame, &mut explorer, (tick % 4) as usize))?;
+            terminal.draw(|frame| {
+                view::draw(frame, &mut explorer, (tick % 4) as usize);
+                if plain {
+                    view::strip_colors(frame.buffer_mut());
+                }
+            })?;
             last_tick = tick;
             dirty = false;
         }
