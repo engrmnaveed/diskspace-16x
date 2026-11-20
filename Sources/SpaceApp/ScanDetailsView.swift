@@ -42,8 +42,11 @@ struct ScanDetailsView: View {
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
                 Text("Folder totals sum regular files in the scan. Space 16X skips symbolic links and other devices, and counts each hard-linked file once.")
-                Text("Allocated size is what the filesystem reports. APFS clones can share blocks and snapshots can retain them, so totals can differ from volume usage or from the space recovered after deletion.")
+                Text("Allocated size is what the filesystem reports. APFS clones can share blocks and snapshots can retain them, so totals can differ from volume usage or from the space recovered after deletion. Apparent size, under View → Size, adds up file lengths instead, which differ for sparse, compressed, and small files.")
                 Text("Cloud-only entries are shown as references. They contribute no bytes, and cloud-only folders stay unexpanded.")
+                if report.excludedCount > 0 {
+                    Text("\(ScanFormat.items(report.excludedCount)) matched your exclude patterns and weren't read. Change the patterns in Settings.")
+                }
                 if report.isPreview {
                     Text("This preview shows allocated space counted so far. Folders awaiting a deeper scan have a status in the list.")
                 }

@@ -34,7 +34,7 @@ struct DiskDonutView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Folder allocation chart")
+        .accessibilityLabel("Folder size chart")
     }
 
     private func ring(_ slices: [Slice], width: CGFloat) -> some View {
@@ -43,7 +43,7 @@ struct DiskDonutView: View {
         return ZStack {
             Chart(slices) { slice in
                 SectorMark(
-                    angle: .value("Allocated bytes", Double(slice.bytes)),
+                    angle: .value("Bytes", Double(slice.bytes)),
                     innerRadius: .ratio(0.68),
                     angularInset: slices.count > 1 ? 0.8 : 0
                 )
@@ -53,11 +53,13 @@ struct DiskDonutView: View {
             .accessibilityHidden(true)
 
             VStack(spacing: 3) {
-                Text(ScanFormat.size(folder.allocatedBytes))
+                Text(ScanFormat.size(folderBytes))
                     .font(.system(size: 28, weight: .semibold).monospacedDigit())
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)
-                Text(folder.isPending ? "Allocated so far" : "Allocated in folder")
+                Text(folder.isPending
+                    ? "\(workspace.sizeMetric.title) so far"
+                    : "\(workspace.sizeMetric.title) in folder")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -65,9 +67,9 @@ struct DiskDonutView: View {
             }
             .frame(maxWidth: diameter * 0.56)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Folder allocation")
-            .accessibilityValue(ScanFormat.exactSize(folder.allocatedBytes))
-            .help(ScanFormat.sizeDetail(folder.allocatedBytes))
+            .accessibilityLabel("Folder size")
+            .accessibilityValue(ScanFormat.exactSize(folderBytes))
+            .help(ScanFormat.sizeDetail(folderBytes))
         }
         .padding(5)
         .frame(width: diameter, height: diameter)
@@ -79,7 +81,7 @@ struct DiskDonutView: View {
             HStack {
                 Text("Item")
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text("Allocated")
+                Text(workspace.sizeMetric.title)
                     .frame(width: 62, alignment: .trailing)
                 if !compact {
                     Text("Share")
@@ -101,7 +103,7 @@ struct DiskDonutView: View {
 
     private func legendRow(_ slice: Slice, compact: Bool) -> some View {
         let isSelected = slice.entry.map { $0.id == workspace.selection } ?? false
-        let share = Double(slice.bytes) / Double(folder.allocatedBytes)
+        let share = Double(slice.bytes) / Double(max(folderBytes, 1))
         let percentFormat = FloatingPointFormatStyle<Double>.Percent.percent.precision(.fractionLength(0...1))
         let percent = share < 0.001 ? "<\(0.001.formatted(percentFormat))" : share.formatted(percentFormat)
         let valueLayout = compact
@@ -176,8 +178,9 @@ struct DiskDonutView: View {
 
     private var emptyMessage: String {
         if folder.isCloudOnly { return "Cloud-only folder" }
-        guard folder.isPending else { return "No allocated bytes in this folder" }
-        return workspace.isScanning ? "No allocated bytes counted yet" : "No allocated bytes counted"
+        let word = workspace.sizeMetric.title.lowercased()
+        guard folder.isPending else { return "No \(word) bytes in this folder" }
+        return workspace.isScanning ? "No \(word) bytes counted yet" : "No \(word) bytes counted"
     }
 
     private struct Slice: Identifiable {
@@ -193,6 +196,8 @@ struct DiskDonutView: View {
         }
     }
 
+    private var folderBytes: UInt64 { folder.bytes(for: workspace.sizeMetric) }
+
     private func makeSlices() -> [Slice] {
         let colors = [
             SpaceColor.accent,
@@ -202,11 +207,12 @@ struct DiskDonutView: View {
             Color(nsColor: .systemPink),
             Color(nsColor: .systemIndigo),
         ]
-        guard !workspace.rows.isEmpty else { return [] }
-        var remaining = folder.allocatedBytes
+        guard !workspace.chartRows.isEmpty else { return [] }
+        let metric = workspace.sizeMetric
+        var remaining = folder.bytes(for: metric)
         var slices: [Slice] = []
-        for (entry, color) in zip(workspace.rows, colors) {
-            let bytes = min(entry.allocatedBytes, remaining)
+        for (entry, color) in zip(workspace.chartRows, colors) {
+            let bytes = min(entry.bytes(for: metric), remaining)
             guard bytes > 0 else { break }
             slices.append(Slice(entry: entry, bytes: bytes, color: color))
             remaining -= bytes

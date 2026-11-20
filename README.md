@@ -13,10 +13,10 @@ Space 16X is a project by Muhammad Naveed Akram, developed under the [16X Brains
 ## Analyze a folder on macOS
 
 1. Choose a folder or local drive, or drop it into the Space 16X window.
-2. Browse the folder list, treemap, or donut chart. Drill down with the breadcrumb or switch to **Largest Files**.
+2. Browse the folder list, treemap, or donut chart. Drill down with the breadcrumb or switch to **Largest Files**. Click a column header to sort by name, size, or item count.
 3. Reveal a selected item in Finder or copy its path.
 
-The Mac app uses allocated size for totals, rankings, and chart shares. On a large scan, the first two levels are available while deeper folders are scanned. The progress strip shows the current path, and the list marks pending folders. A cancelled scan keeps the preview and labels its unfinished folders.
+The Mac app uses allocated size for totals, rankings, and chart shares. Choose **View → Size → Apparent Size** to use file lengths instead. The **Items** column counts the files and folders inside each folder. To skip folders such as `node_modules` or caches, list patterns under **Settings → Exclude from scans**. On a large scan, the first two levels are available while deeper folders are scanned. The progress strip shows the current path, and the list marks pending folders. A cancelled scan keeps the preview and labels its unfinished folders.
 
 The treemap shows the largest items with a positive size. Remaining bytes are grouped as **Other Items**. Switch back to **List** to inspect each item.
 
@@ -30,9 +30,10 @@ space16x "$HOME/Downloads"
 space16x scan "/Volumes/Work" --depth 2
 space16x scan "$HOME/Downloads" --top 20
 space16x scan --top 10 --json > report.json
+space16x --exclude node_modules --exclude '*.log' ~/Projects
 ```
 
-Use the arrow keys and Enter to drill into a folder, `/` to filter, `f` for the largest files, and `?` for help. The `scan` command provides plain text and JSON for scripts.
+Use the arrow keys and Enter to drill into a folder, `/` to filter, `f` for the largest files, `s` to sort by size, item count, or name, `a` for apparent sizes, and `?` for help. The `scan` command provides plain text and JSON for scripts.
 
 Exit code `0` means the scan completed, `2` means it returned partial results, and `1` means the scan could not start or complete. A partial JSON report carries its issues and totals on standard output. See the [CLI reference](docs/cli.md) and [example report](docs/example-report.json).
 
@@ -79,7 +80,8 @@ See the [installation guide](docs/install.md) for Wget removal, Fish commands, v
 
 ## How totals are counted
 
-- Allocated bytes come from filesystem metadata. A sparse file can have a large reported length and use very few disk blocks.
+- Allocated bytes come from filesystem metadata. A sparse file can have a large reported length and use very few disk blocks. Apparent sizes add up those reported lengths instead, under the same hard-link and cloud rules.
+- Item counts include every file and folder inside a folder, counting each hard-linked file once. Excluded paths are skipped without being read and aren't counted.
 - Sizes use decimal units, as Finder and System Settings do: 1 GB is 1,000,000,000 bytes. The Mac app's size tooltips and the CLI explorer's file details also show the exact byte count and the binary size in GiB, where 1 GiB is 1,073,741,824 bytes.
 - Directory totals sum regular-file bytes within the scan. A hard-linked file contributes once. Symbolic links and mounts on other devices are skipped.
 - On the macOS startup disk, both scanners count APFS firmlinked folders such as `/Users` at their visible paths and skip their duplicate paths under `/System/Volumes/Data`. A direct scan of the Data volume includes those folders.

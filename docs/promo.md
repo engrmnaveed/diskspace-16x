@@ -1,6 +1,6 @@
 # Promotional video
 
-The Space 16X promo is a 29.5-second vertical Short. It opens with “What’s eating your disk space?”, launches the interactive terminal explorer by typing `space16x`, and shows folder navigation, file ranking, a one-shot report, and the Mac app. The README uses a six-second loop with the terminal explorer and desktop side by side.
+The Space 16X promo is a 29.5-second vertical Short. It opens with “What’s eating your disk space?”, launches the interactive terminal explorer by typing `space16x`, and shows folder navigation, file ranking, a one-shot report, and the Mac app's charts and sortable folder list. The README uses a six-second loop with the terminal explorer and desktop side by side.
 
 ## Build locally
 
@@ -29,7 +29,7 @@ Pass `--cli path/to/space16x` to reuse a built binary or `--output path/to/folde
 | 10–13.5 s | Press `f` to rank the largest files |
 | 13.5–16.5 s | Print a one-shot report with `--top 5` |
 | 16.5–23 s | Mac app treemap and donut chart |
-| 23–25.5 s | Mac app Largest Files view |
+| 23–25.5 s | Mac app folder list sorted by item count, with the Items column |
 | 25.5–29.5 s | Free and open-source call to action with the GitHub handle |
 
 ## Refresh for a major change

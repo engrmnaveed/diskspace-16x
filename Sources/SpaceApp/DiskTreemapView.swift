@@ -18,7 +18,7 @@ struct DiskTreemapView: View {
                             .controlSize(.small)
                     } else if tiles.isEmpty {
                         Text(folder.isPending && workspace.isScanning
-                            ? "Waiting for allocated sizes…" : "No allocated bytes counted here")
+                            ? "Waiting for \(sizeWord) sizes…" : "No \(sizeWord) bytes counted here")
                             .font(.headline)
                             .foregroundStyle(.secondary)
                     } else {
@@ -33,7 +33,9 @@ struct DiskTreemapView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             HStack {
-                Text(folder.isPending ? "Area shows allocated space counted so far." : "Area represents allocated size.")
+                Text(folder.isPending
+                    ? "Area shows \(sizeWord) size counted so far."
+                    : "Area represents \(sizeWord) size.")
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 5)
                 Button("Show All Items") { workspace.folderPresentation = .list }
@@ -62,14 +64,17 @@ struct DiskTreemapView: View {
         var weight: CGFloat { CGFloat(bytes) }
     }
 
+    private var sizeWord: String { workspace.sizeMetric.title.lowercased() }
+
     private func makeTiles() -> [Tile] {
-        let total = folder.allocatedBytes
+        let metric = workspace.sizeMetric
+        let total = folder.bytes(for: metric)
         guard total > 0 else { return [] }
         var tiles: [Tile] = []
         var remaining = total
         let minimumBytes = max(total / 250, 1)
-        for entry in workspace.rows.prefix(32) {
-            let bytes = min(entry.allocatedBytes, remaining)
+        for entry in workspace.chartRows {
+            let bytes = min(entry.bytes(for: metric), remaining)
             guard bytes >= minimumBytes, remaining > 0 else { break }
             tiles.append(.item(entry: entry, bytes: bytes))
             remaining -= bytes
