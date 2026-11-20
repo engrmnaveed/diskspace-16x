@@ -82,7 +82,12 @@ class Terminal:
         raise AssertionError(f"Expected {needle!r} in the terminal. Tail: {visible!r}")
 
     def finish(self, status):
-        assert self.process.wait(timeout=8) == status
+        # Keep reading while the explorer exits. A full pseudo-terminal buffer, which is
+        # small on macOS, would otherwise block its last writes and the exit.
+        deadline = time.monotonic() + 8
+        while self.process.poll() is None and time.monotonic() < deadline:
+            self.read(0.10)
+        assert self.process.wait(timeout=1) == status
         deadline = time.monotonic() + 2
         while LEAVE_SCREEN not in self.output and time.monotonic() < deadline:
             self.read(0.10)
