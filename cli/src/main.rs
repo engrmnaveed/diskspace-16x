@@ -12,7 +12,7 @@ use std::sync::atomic::AtomicBool;
 use report::{Metric, Selection};
 
 const HELP: &str = "\
-Usage: space16x [EXCLUDES] [PATH]
+Usage: space16x [--no-color] [EXCLUDES] [PATH]
        space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [EXCLUDES]
 
 Open the disk explorer in an interactive terminal. PATH defaults to the current directory.
@@ -22,6 +22,7 @@ The scan command prints a plain directory summary and works in scripts.
   --top N    List the N largest files in the scan instead of directory entries
   --apparent Show and rank apparent sizes (file lengths) instead of disk usage
   --json     Print a report in JSON schema 3
+  --no-color Show the explorer without colors, as does setting NO_COLOR
   --         Treat the following argument as a path, even if it starts with a dash
   --version  Show the installed version
   -h, --help Show this help
@@ -48,6 +49,7 @@ enum Command {
 struct ExploreOptions {
     path: PathBuf,
     excludes: ExcludeOptions,
+    no_color: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -134,7 +136,9 @@ fn run(command: Command) -> io::Result<u8> {
                 && io::stdout().is_terminal()
                 && env::var_os("TERM").is_none_or(|term| term != "dumb") =>
         {
-            tui::run(&options.path, options.excludes.load()?)?;
+            // https://no-color.org: any nonempty NO_COLOR value turns colors off.
+            let plain = options.no_color || env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
+            tui::run(&options.path, options.excludes.load()?, plain)?;
         }
         Command::Explore(options) => {
             return run_scan(ScanOptions {
@@ -258,6 +262,7 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Command, Strin
 fn parse_explore(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, String> {
     let mut path = None;
     let mut excludes = ExcludeOptions::default();
+    let mut no_color = false;
     while let Some(argument) = arguments.next() {
         match argument.to_str() {
             Some("--") => {
@@ -265,6 +270,7 @@ fn parse_explore(mut arguments: impl Iterator<Item = OsString>) -> Result<Comman
                 break;
             }
             Some(flag @ ("--exclude" | "--exclude-from")) => excludes.take(flag, &mut arguments)?,
+            Some("--no-color") if !no_color => no_color = true,
             _ if is_option(&argument) => return Err(format!("Unknown option {argument:?}.")),
             _ => set_path(&mut path, checked_path(argument)?)?,
         }
@@ -272,6 +278,7 @@ fn parse_explore(mut arguments: impl Iterator<Item = OsString>) -> Result<Comman
     Ok(Command::Explore(ExploreOptions {
         path: path.unwrap_or_else(|| PathBuf::from(".")),
         excludes,
+        no_color,
     }))
 }
 
@@ -396,6 +403,7 @@ mod tests {
             Ok(Command::Explore(ExploreOptions {
                 path: path.into(),
                 excludes: ExcludeOptions::default(),
+                no_color: false,
             }))
         };
         assert_eq!(args(&[]), explore("."));
@@ -441,8 +449,13 @@ mod tests {
             Ok(Command::Explore(ExploreOptions {
                 path: "data".into(),
                 excludes,
+                no_color: false,
             }))
         );
+        assert!(matches!(
+            args(&["--no-color", "data"]),
+            Ok(Command::Explore(ExploreOptions { no_color: true, .. }))
+        ));
         let Ok(Command::Scan(scan)) = args(&["scan", "--exclude", "target", "--json"]) else {
             panic!("scan with excludes should parse");
         };

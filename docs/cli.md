@@ -1,7 +1,7 @@
 # CLI reference
 
 ```text
-space16x [EXCLUDES] [PATH]
+space16x [--no-color] [EXCLUDES] [PATH]
 space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [EXCLUDES]
 space16x --version
 space16x --help
@@ -20,10 +20,14 @@ Run `space16x` or `space16x PATH` from an interactive terminal. Scan progress an
 | ←, Backspace, Esc, or `h` | Go back. |
 | / | Filter the current view by path. Press Enter to keep the filter or Esc to undo the edit. |
 | `f` | Switch between browsing and the largest-files view. |
+| `s` | Sort folder contents by size, item count, or name. The sorted column is marked in the heading. |
+| `a` | Switch between allocated and apparent sizes, in both views. |
 | `e` | Show scan issues. |
 | `c` | Cancel an active scan and keep the available preview. |
 | ? | Show keyboard help. |
 | `q` or Ctrl-C | Exit the explorer. |
+
+Wide terminals show an **Items** column with the number of files and folders inside each folder, which helps find folders that use up inodes. File details show both the allocated and the apparent size. Set `NO_COLOR` to any value, or pass `--no-color`, to draw the explorer without colors. The selection then uses reverse video.
 
 ## Exclude files and folders
 
