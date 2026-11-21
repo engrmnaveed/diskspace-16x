@@ -1,3 +1,4 @@
+mod ncdu;
 mod report;
 mod scanner;
 mod trash;
@@ -5,7 +6,10 @@ mod tui;
 
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::io::{self, IsTerminal, Write};
+use std::fs::File;
+use std::io::{self, IsTerminal, Read, Write};
+use std::os::fd::{AsFd, AsRawFd};
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
@@ -14,7 +18,9 @@ use report::{Metric, Selection};
 
 const HELP: &str = "\
 Usage: space16x [--no-color] [--read-only] [--threads N] [EXCLUDES] [PATH]
-       space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [--threads N] [EXCLUDES]
+       space16x --import FILE|- [--no-color]
+       space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [--export FILE|-]
+                     [--threads N] [EXCLUDES]
 
 Open the disk explorer in an interactive terminal. PATH defaults to the current directory.
 In the explorer, Space marks items and d moves them to the Trash after you confirm.
@@ -24,6 +30,10 @@ The scan command prints a plain directory summary and works in scripts.
   --top N    List the N largest files in the scan instead of directory entries
   --apparent Show and rank apparent sizes (file lengths) instead of disk usage
   --json     Print a report in JSON schema 3
+  --export FILE Also save the whole scan to FILE in ncdu's JSON format. With -, write
+             only the export to standard output.
+  --import FILE Browse a scan saved by --export, ncdu -o or gdu -o, read-only. With -,
+             read standard input: ssh HOST space16x scan / --export - | space16x --import -
   --no-color Show the explorer without colors, as does setting NO_COLOR
   --read-only Turn off Move to Trash in the explorer, as does SPACE16X_READ_ONLY=1
   --threads N Read metadata with N threads, from 1 to 64 (default: one per core, up
@@ -53,6 +63,7 @@ enum Command {
 #[derive(Debug, PartialEq, Eq)]
 struct ExploreOptions {
     path: PathBuf,
+    import: Option<PathBuf>,
     excludes: ExcludeOptions,
     threads: Option<usize>,
     no_color: bool,
@@ -65,6 +76,7 @@ struct ScanOptions {
     selection: Selection,
     metric: Metric,
     json: bool,
+    export: Option<PathBuf>,
     excludes: ExcludeOptions,
     threads: Option<usize>,
 }
@@ -159,36 +171,93 @@ fn run(command: Command) -> io::Result<u8> {
     match command {
         Command::Help => io::stdout().write_all(HELP.as_bytes())?,
         Command::Version => writeln!(io::stdout(), "space16x {}", env!("CARGO_PKG_VERSION"))?,
-        Command::Explore(options)
-            if io::stdin().is_terminal()
-                && io::stdout().is_terminal()
-                && env::var_os("TERM").is_none_or(|term| term != "dumb") =>
-        {
-            // https://no-color.org: any nonempty NO_COLOR value turns colors off.
-            let plain = options.no_color || env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
-            let read_only = options.read_only || trash::read_only_requested();
-            let threads = options.threads.unwrap_or_else(scanner::default_threads);
-            tui::run(
-                &options.path,
-                options.excludes.load()?,
-                threads,
-                plain,
-                read_only,
-            )?;
-        }
-        Command::Explore(options) => {
+        Command::Explore(options) => return explore(options),
+        Command::Scan(options) => return run_scan(options),
+    }
+    Ok(0)
+}
+
+fn explore(options: ExploreOptions) -> io::Result<u8> {
+    let imported = match &options.import {
+        Some(file) => Some(import(file)?),
+        None => None,
+    };
+    // Keys come from the terminal even when an import arrives on standard input.
+    let from_stdin = options.import.as_deref() == Some(Path::new("-"));
+    if !((from_stdin || io::stdin().is_terminal())
+        && io::stdout().is_terminal()
+        && env::var_os("TERM").is_none_or(|term| term != "dumb"))
+    {
+        let Some(imported) = imported else {
             return run_scan(ScanOptions {
                 path: options.path,
                 selection: Selection::Depth(1),
                 metric: Metric::Allocated,
                 json: false,
+                export: None,
                 excludes: options.excludes,
                 threads: options.threads,
             });
-        }
-        Command::Scan(options) => return run_scan(options),
+        };
+        let report = &imported.report;
+        report::write_plain(
+            io::stdout().lock(),
+            report,
+            Selection::Depth(1),
+            Metric::Allocated,
+        )?;
+        report_issues(&report.issues, false);
+        report_excluded(report.excluded_count, imported.excludes.len());
+        return Ok(status(report));
     }
+    if from_stdin && !io::stdin().is_terminal() {
+        read_keys_from_terminal()?;
+    }
+    // https://no-color.org: any nonempty NO_COLOR value turns colors off.
+    let plain = options.no_color || env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
+    let read_only = options.read_only || trash::read_only_requested();
+    let source = match imported {
+        Some(imported) => tui::Source::Imported(imported.report),
+        None => tui::Source::Scan {
+            path: options.path,
+            excludes: options.excludes.load()?,
+            threads: options.threads.unwrap_or_else(scanner::default_threads),
+        },
+    };
+    tui::run(source, plain, read_only)?;
     Ok(0)
+}
+
+/// Points standard input at the terminal on standard output, once an import has been
+/// read from a pipe, so the explorer can read keys. crossterm could open /dev/tty
+/// itself, but macOS can't watch that device for input.
+fn read_keys_from_terminal() -> io::Result<()> {
+    // SAFETY: ttyname returns null or a C string that stays valid until the next call,
+    // and nothing else calls it.
+    let name = unsafe { libc::ttyname(libc::STDOUT_FILENO) };
+    if name.is_null() {
+        return Err(io::Error::last_os_error());
+    }
+    let name = OsStr::from_bytes(unsafe { std::ffi::CStr::from_ptr(name) }.to_bytes());
+    let terminal = File::options().read(true).write(true).open(name)?;
+    // SAFETY: both descriptors are open, and dup2 replaces standard input atomically.
+    if unsafe { libc::dup2(terminal.as_raw_fd(), libc::STDIN_FILENO) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// Reads a saved scan from `file`, or from standard input for `-`.
+fn import(file: &Path) -> io::Result<ncdu::Imported> {
+    let (mut input, label) = if file == Path::new("-") {
+        let stdin = io::stdin().as_fd().try_clone_to_owned()?;
+        (File::from(stdin), "standard input".into())
+    } else {
+        let input = File::open(file).map_err(|error| scan_error(file, error))?;
+        (input, report::terminal_path(file))
+    };
+    ncdu::read(&mut |buffer| input.read(buffer))
+        .map_err(|error| io::Error::new(error.kind(), format!("{label}: {error}")))
 }
 
 fn run_scan(options: ScanOptions) -> io::Result<u8> {
@@ -205,16 +274,37 @@ fn run_scan(options: ScanOptions) -> io::Result<u8> {
         |_| {},
     )
     .map_err(|error| scan_error(&options.path, error))?;
+    let sources = excludes.sources();
+    match options.export.as_deref() {
+        Some(file) if file == Path::new("-") => {
+            let mut stdout = io::stdout().lock();
+            ncdu::write(&mut |bytes| stdout.write_all(bytes), &scan, sources)?;
+            stdout.flush()?;
+            report_issues(&scan.issues, true);
+            report_excluded(scan.excluded_count, sources.len());
+            return Ok(status(&scan));
+        }
+        Some(file) => File::create(file)
+            .and_then(|mut output| {
+                ncdu::write(&mut |bytes| output.write_all(bytes), &scan, sources)
+            })
+            .map_err(|error| scan_error(file, error))?,
+        None => {}
+    }
     let stdout = io::stdout().lock();
     if options.json {
-        let sources = excludes.sources();
         report::write_json(stdout, &scan, options.selection, options.metric, sources)?;
     } else {
         report::write_plain(stdout, &scan, options.selection, options.metric)?;
-        report_issues(&scan.issues);
-        report_excluded(scan.excluded_count, excludes.sources().len());
+        report_issues(&scan.issues, true);
+        report_excluded(scan.excluded_count, sources.len());
     }
-    Ok(if scan.issues.is_empty() { 0 } else { 2 })
+    Ok(status(&scan))
+}
+
+/// Exit status 2 marks a partial scan.
+fn status(report: &scanner::Report) -> u8 {
+    if report.issues.is_empty() { 0 } else { 2 }
 }
 
 fn scan_error(path: &Path, error: io::Error) -> io::Error {
@@ -237,7 +327,8 @@ fn report_excluded(count: u64, patterns: usize) {
 
 /// Lists each scan error, then summarizes paths the OS refused in one line.
 /// System locations hold hundreds of these, and JSON output still lists every one.
-fn report_issues(issues: &[scanner::Issue]) {
+/// `local` scans can suggest Full Disk Access, which can't help an imported scan.
+fn report_issues(issues: &[scanner::Issue], local: bool) {
     let mut protected = 0;
     let mut privacy_refusals = false;
     for issue in issues {
@@ -264,7 +355,7 @@ fn report_issues(issues: &[scanner::Issue]) {
         "space16x: skipped {protected} protected {} (permission denied or blocked by {os}); use --json to list them",
         if protected == 1 { "path" } else { "paths" }
     );
-    if privacy_refusals && !has_full_disk_access() {
+    if local && privacy_refusals && !has_full_disk_access() {
         eprintln!(
             "space16x: give your terminal app Full Disk Access in System Settings to include privacy-protected folders"
         );
@@ -302,6 +393,7 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Command, Strin
 
 fn parse_explore(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, String> {
     let mut path = None;
+    let mut import = None;
     let mut excludes = ExcludeOptions::default();
     let mut no_color = false;
     let mut read_only = false;
@@ -316,17 +408,33 @@ fn parse_explore(mut arguments: impl Iterator<Item = OsString>) -> Result<Comman
             Some("--no-color") if !no_color => no_color = true,
             Some("--read-only") if !read_only => read_only = true,
             Some("--threads") => take_threads(&mut threads, &mut arguments)?,
+            Some("--import") if import.is_none() => import = Some(take_file(&mut arguments)?),
             _ if is_option(&argument) => return Err(format!("Unknown option {argument:?}.")),
             _ => set_path(&mut path, checked_path(argument)?)?,
         }
     }
+    if import.is_some() && (path.is_some() || !excludes.is_empty() || threads.is_some()) {
+        return Err(
+            "--import opens a saved scan, so it takes no PATH, excludes or --threads.".into(),
+        );
+    }
     Ok(Command::Explore(ExploreOptions {
         path: path.unwrap_or_else(|| PathBuf::from(".")),
+        import,
         excludes,
         threads,
         no_color,
         read_only,
     }))
+}
+
+/// Takes the file after `--import` or `--export`, where `-` is a standard stream.
+fn take_file(arguments: &mut impl Iterator<Item = OsString>) -> Result<PathBuf, String> {
+    arguments
+        .next()
+        .filter(|file| !file.is_empty())
+        .map(PathBuf::from)
+        .ok_or_else(|| "--import and --export require a file path or -.".into())
 }
 
 fn only_argument(count: usize, command: Command) -> Result<Command, String> {
@@ -362,6 +470,7 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
     let mut selection = None;
     let mut metric = None;
     let mut json = false;
+    let mut export = None;
     let mut excludes = ExcludeOptions::default();
     let mut threads = None;
     while let Some(argument) = arguments.next() {
@@ -371,6 +480,7 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
                     && selection.is_none()
                     && metric.is_none()
                     && !json
+                    && export.is_none()
                     && excludes.is_empty()
                     && threads.is_none() =>
             {
@@ -401,6 +511,7 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
                 });
             }
             Some("--json") if !json => json = true,
+            Some("--export") if export.is_none() => export = Some(take_file(&mut arguments)?),
             Some("--apparent") if metric.is_none() => metric = Some(Metric::Apparent),
             Some(flag @ ("--exclude" | "--exclude-from")) => excludes.take(flag, &mut arguments)?,
             Some("--threads") => take_threads(&mut threads, &mut arguments)?,
@@ -410,11 +521,20 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
             _ => set_path(&mut path, checked_path(argument)?)?,
         }
     }
+    if export.as_deref() == Some(Path::new("-"))
+        && (json || selection.is_some() || metric.is_some())
+    {
+        return Err(
+            "--export - writes only the export, so it takes no --json, --depth, --top or --apparent."
+                .into(),
+        );
+    }
     Ok(Command::Scan(ScanOptions {
         path: path.unwrap_or_else(|| PathBuf::from(".")),
         selection: selection.unwrap_or(Selection::Depth(1)),
         metric: metric.unwrap_or_default(),
         json,
+        export,
         excludes,
         threads,
     }))
@@ -453,6 +573,7 @@ mod tests {
         let explore = |path: &str| {
             Ok(Command::Explore(ExploreOptions {
                 path: path.into(),
+                import: None,
                 excludes: ExcludeOptions::default(),
                 threads: None,
                 no_color: false,
@@ -468,6 +589,7 @@ mod tests {
                 selection: Selection::Top(0),
                 metric: Metric::Allocated,
                 json: true,
+                export: None,
                 excludes: ExcludeOptions::default(),
                 threads: None,
             }))
@@ -479,6 +601,7 @@ mod tests {
                 selection: Selection::Depth(1),
                 metric: Metric::Apparent,
                 json: false,
+                export: None,
                 excludes: ExcludeOptions::default(),
                 threads: None,
             }))
@@ -503,6 +626,7 @@ mod tests {
             ]),
             Ok(Command::Explore(ExploreOptions {
                 path: "data".into(),
+                import: None,
                 excludes,
                 threads: None,
                 no_color: false,
@@ -553,6 +677,40 @@ mod tests {
             &["scan", "--threads", "65"],
             &["scan", "--threads", "two"],
             &["scan", "--threads", "2", "--threads", "2"],
+        ] {
+            assert!(args(invalid).is_err(), "{invalid:?}");
+        }
+    }
+
+    #[test]
+    fn takes_export_and_import_files() {
+        let Ok(Command::Scan(scan)) = args(&["scan", "/", "--export", "-"]) else {
+            panic!("scan with an export should parse");
+        };
+        assert_eq!(scan.export, Some("-".into()));
+        let Ok(Command::Scan(scan)) =
+            args(&["scan", "--export", "out.json", "--json", "--top", "3"])
+        else {
+            panic!("an export file allows any report");
+        };
+        assert_eq!(scan.export, Some("out.json".into()));
+        assert!(matches!(
+            args(&["--no-color", "--import", "-"]),
+            Ok(Command::Explore(ExploreOptions { import: Some(file), no_color: true, .. }))
+                if file == Path::new("-")
+        ));
+        for invalid in [
+            &["scan", "--export"][..],
+            &["scan", "--export", ""],
+            &["scan", "--export", "a", "--export", "b"],
+            &["scan", "--export", "-", "--json"],
+            &["scan", "--apparent", "--export", "-"],
+            &["scan", "--export", "-", "--depth", "2"],
+            &["--import"],
+            &["--import", "a", "--import", "b"],
+            &["--import", "a", "data"],
+            &["--import", "a", "--threads", "2"],
+            &["--exclude", "x", "--import", "a"],
         ] {
             assert!(args(invalid).is_err(), "{invalid:?}");
         }

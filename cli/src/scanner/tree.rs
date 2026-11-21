@@ -95,7 +95,10 @@ impl Tree {
     /// The full path of `id`, rebuilt from the names above it.
     pub fn path(&self, id: NodeId) -> PathBuf {
         let mut path = self.root_path.clone();
-        path.push(self.relative_path(id, NodeId::ROOT));
+        // Pushing the root's empty relative path would add a trailing separator.
+        if id != NodeId::ROOT {
+            path.push(self.relative_path(id, NodeId::ROOT));
+        }
         path
     }
 
@@ -267,6 +270,11 @@ impl<'a> Entry<'a> {
 
     pub fn state(self) -> EntryState {
         self.node().state
+    }
+
+    /// A folder's own state, before its contents degrade it. A file's is its state.
+    pub fn own_state(self) -> EntryState {
+        self.node().own_state
     }
 
     /// The last path component. The root's is its path's final component.
@@ -600,6 +608,8 @@ mod tests {
             Path::new("a/deep/y")
         );
         assert_eq!(root.name(), "r");
+        assert_eq!(root.path(), Path::new("/r"));
+        assert_eq!(root.path().as_os_str(), "/r");
         assert!(tree.find(Path::new("/r/missing")).is_none());
         assert!(tree.find(Path::new("/elsewhere")).is_none());
     }

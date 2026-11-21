@@ -137,6 +137,8 @@ impl Notice {
 }
 
 const READ_ONLY_NOTICE: &str = "Read-only mode: Move to Trash is off.";
+const IMPORTED_NOTICE: &str =
+    "This scan was imported, so it's read-only. Scan the folder to change it.";
 
 pub(super) struct Explorer {
     pub(super) requested_path: PathBuf,
@@ -159,6 +161,9 @@ pub(super) struct Explorer {
     pub(super) panel_page: usize,
     /// Set by `--read-only` or `SPACE16X_READ_ONLY`: marking and trashing are off.
     pub(super) read_only: bool,
+    /// A saved scan from `--import`. Its files may be elsewhere, so it is read-only and
+    /// can't be rescanned.
+    pub(super) imported: bool,
     /// Paths marked for the Trash. They can span folders and both views.
     pub(super) marked: BTreeSet<PathBuf>,
     pub(super) prompt: Option<TrashPlan>,
@@ -193,6 +198,7 @@ impl Explorer {
             panel_items: 0,
             panel_page: 1,
             read_only: false,
+            imported: false,
             marked: BTreeSet::new(),
             prompt: None,
             notice: None,
@@ -601,7 +607,7 @@ impl Explorer {
         };
         let (path, state) = (entry.path(), entry.state());
         if self.read_only {
-            self.notice = Some(Notice::warning(READ_ONLY_NOTICE));
+            self.notice = Some(Notice::warning(self.read_only_notice()));
             return;
         }
         if !self.marked.remove(&path) {
@@ -647,7 +653,7 @@ impl Explorer {
     /// Asks to move the marked items, or the selected one, to the Trash.
     fn plan_trash(&mut self) {
         if self.read_only {
-            self.notice = Some(Notice::warning(READ_ONLY_NOTICE));
+            self.notice = Some(Notice::warning(self.read_only_notice()));
             return;
         }
         if self.is_active() {
@@ -675,8 +681,20 @@ impl Explorer {
         }
     }
 
+    fn read_only_notice(&self) -> &'static str {
+        if self.imported {
+            IMPORTED_NOTICE
+        } else {
+            READ_ONLY_NOTICE
+        }
+    }
+
     /// Scans the open folder again, or the whole scope in the largest files view.
     fn request_rescan(&mut self) -> Action {
+        if self.imported {
+            self.notice = Some(Notice::warning(IMPORTED_NOTICE));
+            return Action::Stay;
+        }
         if self.is_active() {
             self.notice = Some(Notice::warning(
                 "Let the scan finish, or press c to stop it, before rescanning.",
@@ -1276,6 +1294,24 @@ mod tests {
         key(&mut explorer, KeyCode::Delete);
         assert!(explorer.prompt.is_none());
         assert_eq!(notice(&explorer), (READ_ONLY_NOTICE, true));
+    }
+
+    #[test]
+    fn imported_scans_are_read_only_and_never_rescanned() {
+        let mut explorer = trash_fixture();
+        explorer.imported = true;
+        explorer.read_only = true;
+        key(&mut explorer, KeyCode::Char(' '));
+        assert!(explorer.marked.is_empty());
+        assert_eq!(notice(&explorer), (IMPORTED_NOTICE, true));
+        key(&mut explorer, KeyCode::Char('d'));
+        assert!(explorer.prompt.is_none());
+        assert!(matches!(
+            key(&mut explorer, KeyCode::Char('r')),
+            Action::Stay
+        ));
+        assert!(!explorer.is_rescanning());
+        assert_eq!(notice(&explorer), (IMPORTED_NOTICE, true));
     }
 
     #[test]

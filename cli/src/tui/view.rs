@@ -256,7 +256,9 @@ fn draw_summary(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
             Span::styled(excluded_note(explorer), MUTED),
             Span::styled(marked_note(explorer), WARNING),
             Span::styled(
-                if explorer.read_only {
+                if explorer.imported {
+                    " · imported"
+                } else if explorer.read_only {
                     " · read-only"
                 } else {
                     ""
@@ -693,7 +695,12 @@ fn draw_panel(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
 }
 
 fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
-    let trash = if explorer.read_only {
+    let trash = if explorer.imported {
+        [
+            ("Imported", "Saved scans are read-only"),
+            ("", "Scan the folder to rescan or trash"),
+        ]
+    } else if explorer.read_only {
         [
             ("Read-only", "Move to Trash is off"),
             ("", "Unset SPACE16X_READ_ONLY or --read-only"),

@@ -19,22 +19,30 @@ LEAVE_SCREEN = b"\x1b[?1049l"
 
 
 class Terminal:
-    def __init__(self, command, *, cwd=None, columns=100, rows=28, env=None):
+    def __init__(self, command, *, cwd=None, columns=100, rows=28, env=None, stdin=None):
+        """With `stdin`, the explorer reads that file and takes keys from its terminal."""
         self.master, self.slave = os.openpty()
         self.process = None
         self.initial_attributes = termios.tcgetattr(self.slave)
         self.output = bytearray()
         self.columns, self.rows = columns, rows
+        self.own_session = stdin is not None
         try:
             self.resize(columns, rows)
             environment = {**(os.environ if env is None else env), "TERM": "xterm-256color"}
+            # A new session makes the pseudo-terminal its /dev/tty, as a shell would.
+            controlling = None if stdin is None else (
+                lambda: fcntl.ioctl(1, termios.TIOCSCTTY, 0)
+            )
             self.process = subprocess.Popen(
                 command,
                 cwd=cwd,
-                stdin=self.slave,
+                stdin=self.slave if stdin is None else stdin,
                 stdout=self.slave,
                 stderr=self.slave,
                 env=environment,
+                start_new_session=self.own_session,
+                preexec_fn=controlling,
             )
         except BaseException:
             os.close(self.master)
@@ -124,7 +132,10 @@ class Terminal:
         while LEAVE_SCREEN not in self.output and time.monotonic() < deadline:
             self.read(0.10)
         assert ENTER_SCREEN in self.output and LEAVE_SCREEN in self.output
-        assert termios.tcgetattr(self.slave) == self.initial_attributes
+        # macOS revokes a session's terminal when its leader exits, so only a terminal
+        # shared with this process can be checked afterwards.
+        if not self.own_session:
+            assert termios.tcgetattr(self.slave) == self.initial_attributes
 
     def report_hang(self):
         """Prints where a process that should have exited is stuck, then fails."""

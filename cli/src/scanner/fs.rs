@@ -11,9 +11,20 @@ use std::sync::atomic::AtomicBool;
 use super::check_cancelled;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(super) struct Identity {
+pub(crate) struct Identity {
     device: libc::dev_t,
     inode: libc::ino_t,
+}
+
+impl Identity {
+    /// An identity read from a saved scan. Values outside the platform's range wrap.
+    #[allow(clippy::unnecessary_cast)]
+    pub(crate) fn new(device: u64, inode: u64) -> Self {
+        Self {
+            device: device as libc::dev_t,
+            inode: inode as libc::ino_t,
+        }
+    }
 }
 
 impl From<&libc::stat> for Identity {

@@ -2,7 +2,8 @@
 
 ```text
 space16x [--no-color] [--read-only] [--threads N] [EXCLUDES] [PATH]
-space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [--threads N] [EXCLUDES]
+space16x --import FILE|- [--no-color]
+space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [--export FILE|-] [--threads N] [EXCLUDES]
 space16x --version
 space16x --help
 ```
@@ -91,9 +92,42 @@ space16x scan /var/log --top 5 --apparent
 | `--top N` | List up to N largest files in the scan by allocated size. Use zero for the root total alone. |
 | `--apparent` | Show and rank apparent sizes, the file lengths that `ls -l` reports, instead of allocated bytes. Sparse, compressed, and small files can differ a lot between the two. |
 | `--json` | Write a machine-readable report on standard output. |
+| `--export FILE` | Also save the whole scan to FILE, or write only the export to standard output with `-`. See [Save and open scans](#save-and-open-scans). |
 | `--threads N` | Read metadata with N threads, from 1 to 64. The explorer takes it too. |
 
 Use either `--depth` or `--top` once per command. Reports use allocated bytes unless `--apparent` is given. Text reports and the explorer show sizes in decimal units, matching Finder and the Mac app: 1 KB is 1,000 bytes and 1 GB is 1,000,000,000 bytes. The explorer's file details add the binary size, such as GiB, and the exact byte count. JSON reports exact byte counts. Entries within a folder and the top files are ranked descending by the reported size, with ties ordered by original path bytes. Apparent sizes follow the same counting rules as allocated bytes: each hard-linked file counts once, and cloud-only files count as zero.
+
+## Save and open scans
+
+`scan --export FILE` saves the whole scan in [ncdu's JSON export format](https://dev.yorhel.nl/ncdu/jsonfmt) and still prints the usual report. `--export -` writes only the export to standard output, so it takes no `--json`, `--depth`, `--top` or `--apparent`. Issues and the excluded count still go to standard error, and the exit code is the scan's.
+
+`space16x --import FILE` opens a saved scan in the explorer, and `--import -` reads it from standard input. Together they scan a server and browse the result on your own computer, with nothing installed but `space16x`:
+
+```sh
+ssh -C server space16x scan / --export - | space16x --import -
+space16x scan /var --export var.json
+space16x --import var.json
+```
+
+An imported scan is read-only. Its files may be on another computer or may have changed, so the explorer turns off marking, Move to Trash and rescanning. The heading says **imported**. If standard output isn't a terminal, `--import` prints the one-level report instead, with exit code `2` when the saved scan was partial. `--import` takes no PATH, exclude patterns or `--threads`.
+
+ncdu and gdu open these exports (`ncdu -f FILE`, `gdu -f FILE`), and Space 16X opens theirs (`ncdu -o FILE`, `gdu -o FILE`). Their binary formats, such as ncdu 2's `-O`, aren't supported. Reading another tool's export follows Space 16X's rules:
+
+- Folder sizes count their contents only, as a scan does, so a folder's own blocks in the file aren't added.
+- Symbolic links and other special files, entries on other filesystems, and excluded entries are left out. Entries excluded by a pattern count as excluded.
+- A file with the same device and inode as an earlier one is a hard link and counts once, at its first path. gdu marks only the second and later links to a file, so each file it marks counts as a hard link.
+- Entries with read errors are incomplete, and each one becomes an issue.
+
+Space 16X adds keys that start with `space16x_`, which other tools ignore:
+
+| Key | Where | Meaning |
+| --- | --- | --- |
+| `space16x_excludedCount`, `space16x_excludes` | Metadata | The excluded count and the patterns, as in JSON reports. |
+| `space16x_issues` | Metadata | Every issue, with `path`, `message`, `kind` (`permissionDenied`, `notPermitted` or `error`), and `pathBytes` for a path that isn't UTF-8. |
+| `space16x_state` | Entry | `cloudOnly`, `protected`, or `hardLinkAlias`. A hard-link alias has zero sizes. |
+| `space16x_nameBytes` | Entry | The original name in hexadecimal, when it isn't UTF-8. `name` then substitutes invalid sequences, so the file stays valid JSON. |
+
+Exports contain every path in the scan. Review them for personal paths before sharing.
 
 ## Threads
 
@@ -112,7 +146,7 @@ On macOS, a startup-disk scan counts firmlinked directories such as `/Users` at 
 | Code | Meaning |
 | --- | --- |
 | `0` | Complete scan. |
-| `1` | Fatal scan, output, or usage error. See standard error for details. |
+| `1` | Fatal scan, output, import, or usage error. See standard error for details. |
 | `2` | Partial scan. Totals include the data that could be counted. See the issue paths in JSON output or standard error. |
 
 Expected exclusions such as symlinks and different-device mounts are part of a complete scan. Read errors and skipped provider metadata due to a timeout make a scan partial.
