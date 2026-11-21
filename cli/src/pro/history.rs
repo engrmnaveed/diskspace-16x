@@ -475,7 +475,10 @@ mod tests {
         assert_eq!(file_name(Path::new("/srv/.."), 0), "19700101T000000Z-root");
         assert_eq!(file_name(Path::new("/"), 0), "19700101T000000Z-root");
         // Keep in sync with ScanHistoryTests in the Swift package.
-        assert_eq!(file_name(Path::new("/Volumes/Café"), 0), "19700101T000000Z-Caf__");
+        assert_eq!(
+            file_name(Path::new("/Volumes/Café"), 0),
+            "19700101T000000Z-Caf__"
+        );
         let long = "x".repeat(100);
         assert_eq!(file_name(Path::new(&long), 0).len(), 17 + 48);
         assert_eq!(from_hex("2f6aff"), Some(vec![0x2f, 0x6a, 0xff]));
