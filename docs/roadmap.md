@@ -4,7 +4,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — M3 (v0.5) Speed is in progress. M3.1 moved the Rust scanner to a flat arena (`cli/src/scanner/tree.rs`) built from per-directory records (`cli/src/scanner/walk.rs`). Next: M3.2 runs that record walk on worker threads with `--threads N`.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — M3 (v0.5) Speed is in progress. M3.1 (arena tree) and M3.2 (`--threads`) are done. Next: M3.3, bulk metadata reads on macOS (`getattrlistbulk`) in `cli/src/scanner/fs.rs`. A prototype read 1M files in 1.35 s on one thread, against 5.4 s with `fstatat`, and its file attributes matched `fstatat` on 590K real entries.
 
 **Resume here** — M3 (v0.5) Speed is in progress on `feature/m3-lean-tree` (M3.1). The Rust scanner now builds a flat arena (`cli/src/scanner/tree.rs`) from per-directory records (`cli/src/scanner/walk.rs`). Next: land M3.1, then M3.2 adds worker threads to the same record walk.
 
@@ -28,11 +28,12 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** —
 
 ### M3 (v0.5.0) Speed [Basic]
 - [x] M3.1 Rust: lean arena tree, with name-only nodes in depth-first order, parent indices and subtree sizes, and paths rebuilt on demand. The walk stores one record per directory and a compose pass builds the tree, assigning each hard-linked file to its first path in depth-first order. Reports, the TUI, Move to Trash and rescan use the arena.
-- [ ] M3.2 Rust: parallel walk with `--threads N` (default `min(cores, 8)`, `1` for HDDs and NFS), std threads and a shared work queue. Output stays deterministic because hard links are assigned in the compose pass, so workers share no hard-link set. Tests cover repeated runs and hard links across threads.
-- [ ] M3.3 Swift: entries keep their name and a shared parent location instead of a full path
-- [ ] M3.4 Swift: TaskGroup walk with the same deterministic hard-link rule
-- [ ] M3.5 Benchmarks at 100K and 1M files in `docs/qa.md`; `--threads` in `docs/cli.md`, README and CHANGELOG
-- [ ] M3.6 Release v0.5.0
+- [x] M3.2 Rust: parallel walk with `--threads N` (1 to 64, default `min(cores, 8)`, `1` for HDDs and NFS), std threads and a shared work queue, documented in `docs/cli.md`, README and CHANGELOG. Output stays deterministic because hard links are assigned in the compose pass, so workers share no hard-link set. Tests cover repeated runs, unreadable folders and hard links across threads.
+- [ ] M3.3 Rust on macOS: read each directory's names and regular files' metadata with `getattrlistbulk`, keeping `fstatat` for folders, entries with errors and filesystems without bulk support. At 1M files, per-file `fstatat` thrashes the vnode cache and threads contend in the kernel.
+- [ ] M3.4 Swift: entries keep their name and a shared parent location instead of a full path
+- [ ] M3.5 Swift: TaskGroup walk with the same deterministic hard-link rule
+- [ ] M3.6 Benchmarks at 100K and 1M files in `docs/qa.md`
+- [ ] M3.7 Release v0.5.0
 
 ### Later milestones
 - [ ] M4 (v0.6) Carry, compare, editions: ncdu export/import, `volumes`, Pro edition scaffolding, `diff` and Mac Compare, promo

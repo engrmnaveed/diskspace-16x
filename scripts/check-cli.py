@@ -88,6 +88,15 @@ def check(binary, root):
     assert "itemCount" not in rows[str(first)]
     assert rows[str(sparse)]["allocatedBytes"] == allocated_bytes(sparse)
 
+    # Every thread count gives the same report, hard links included, and --threads
+    # takes 1 to 64.
+    single = run(binary, "scan", root, "--depth", 3, "--json", "--threads", 1).stdout
+    for threads in (2, 8, 64):
+        parallel = run(binary, "scan", root, "--depth", 3, "--json", "--threads", threads).stdout
+        assert parallel == single, threads
+    for invalid in ("0", "65", "two"):
+        assert run(binary, "scan", root, "--threads", invalid, status=1).stderr
+
     # Excludes skip matches without reading them and keep the scan complete.
     patterns = root.parent / f"{root.name}-excludes.txt"
     patterns.write_text("# comment\n\nbeta.dat\n", encoding="utf-8")

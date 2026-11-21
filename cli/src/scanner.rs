@@ -1,5 +1,6 @@
 mod exclude;
 mod fs;
+mod parallel;
 #[cfg(target_os = "macos")]
 mod provider;
 #[cfg(target_os = "macos")]
@@ -148,11 +149,25 @@ pub enum Event {
     Snapshot(Report),
 }
 
+/// The default number of threads that read metadata: one per core, up to 8. More
+/// rarely helps, and one suits hard disks and network filesystems.
+pub fn default_threads() -> usize {
+    std::thread::available_parallelism().map_or(1, |cores| cores.get().min(8))
+}
+
+/// How a scan runs.
+#[derive(Clone, Copy, Debug)]
+pub struct Options<'a> {
+    pub excludes: &'a Excludes,
+    /// Threads that read metadata. One walks on the calling thread.
+    pub threads: usize,
+}
+
 /// Scan read-only filesystem metadata. Progressive scans first resolve two levels
 /// and then publish finished branches as they become available.
 pub fn scan(
     path: &Path,
-    excludes: &Excludes,
+    options: Options<'_>,
     progressive: bool,
     cancelled: &AtomicBool,
     mut notify: impl FnMut(Event),
@@ -160,7 +175,7 @@ pub fn scan(
     fs::raise_open_file_limit();
     with_local_metadata(|| {
         let scope = scan_scope(path)?;
-        let report = walk(&scope, excludes, None, progressive, cancelled, &mut notify)?;
+        let report = walk(&scope, options, None, progressive, cancelled, &mut notify)?;
         if progressive {
             check_cancelled(cancelled)?;
             notify(Event::Snapshot(report.clone()));
@@ -177,7 +192,7 @@ pub fn scan(
 pub fn rescan(
     root: &Path,
     folder: &Path,
-    excludes: &Excludes,
+    options: Options<'_>,
     cancelled: &AtomicBool,
     mut notify: impl FnMut(Event),
 ) -> io::Result<Report> {
@@ -193,14 +208,7 @@ pub fn rescan(
             ));
         }
         let length = root.as_os_str().len();
-        walk(
-            &scope,
-            excludes,
-            Some(length),
-            false,
-            cancelled,
-            &mut notify,
-        )
+        walk(&scope, options, Some(length), false, cancelled, &mut notify)
     })
 }
 
@@ -208,7 +216,7 @@ pub fn rescan(
 /// the scan, except a cloud-only root or an unresponsive cloud provider.
 fn walk(
     scope: &Path,
-    excludes: &Excludes,
+    options: Options<'_>,
     exclude_root_length: Option<usize>,
     progressive: bool,
     cancelled: &AtomicBool,
@@ -260,7 +268,7 @@ fn walk(
 
     let walk_scope = Scope {
         root: scope.to_path_buf(),
-        excludes,
+        excludes: options.excludes,
         exclude_root_length: exclude_root_length.unwrap_or(scope.as_os_str().len()),
         device: stat.st_dev,
         cancelled,
@@ -268,15 +276,27 @@ fn walk(
         startup_volume: startup_volume::StartupVolume::for_scope(scope, &directory.fd),
     };
     let (task, root) = Task::root(scope.to_path_buf(), identity, directory);
-    let mut inline = Inline {
-        scope: &walk_scope,
-        notify: &mut *notify,
-        previews: progressive,
-        visited: 1,
-        last_progress: None,
+    let (report, visited) = if options.threads > 1 {
+        let (report, visited) = parallel::run(
+            &walk_scope,
+            task,
+            root,
+            options.threads,
+            progressive,
+            notify,
+        )?;
+        (report, 1 + visited)
+    } else {
+        let mut inline = Inline {
+            scope: &walk_scope,
+            notify: &mut *notify,
+            previews: progressive,
+            visited: 1,
+            last_progress: None,
+        };
+        let report = inline.run(task, root)?;
+        (report, inline.visited)
     };
-    let report = inline.run(task, root)?;
-    let visited = inline.visited;
     progress(notify, visited);
     check_cancelled(cancelled)?;
     Ok(report)

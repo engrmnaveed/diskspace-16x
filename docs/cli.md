@@ -1,8 +1,8 @@
 # CLI reference
 
 ```text
-space16x [--no-color] [--read-only] [EXCLUDES] [PATH]
-space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [EXCLUDES]
+space16x [--no-color] [--read-only] [--threads N] [EXCLUDES] [PATH]
+space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [--threads N] [EXCLUDES]
 space16x --version
 space16x --help
 ```
@@ -91,8 +91,17 @@ space16x scan /var/log --top 5 --apparent
 | `--top N` | List up to N largest files in the scan by allocated size. Use zero for the root total alone. |
 | `--apparent` | Show and rank apparent sizes, the file lengths that `ls -l` reports, instead of allocated bytes. Sparse, compressed, and small files can differ a lot between the two. |
 | `--json` | Write a machine-readable report on standard output. |
+| `--threads N` | Read metadata with N threads, from 1 to 64. The explorer takes it too. |
 
 Use either `--depth` or `--top` once per command. Reports use allocated bytes unless `--apparent` is given. Text reports and the explorer show sizes in decimal units, matching Finder and the Mac app: 1 KB is 1,000 bytes and 1 GB is 1,000,000,000 bytes. The explorer's file details add the binary size, such as GiB, and the exact byte count. JSON reports exact byte counts. Entries within a folder and the top files are ranked descending by the reported size, with ties ordered by original path bytes. Apparent sizes follow the same counting rules as allocated bytes: each hard-linked file counts once, and cloud-only files count as zero.
+
+## Threads
+
+Scans read metadata on several threads: one per core, up to 8. On SSDs this makes large scans several times faster. Use `--threads 1` for hard disks and network filesystems, where parallel reads compete for the same disk or connection. Every thread count gives the same report, including which path counts a hard-linked file and the order of issues.
+
+```sh
+space16x scan /mnt/archive --threads 1
+```
 
 The scanner reads filesystem metadata, skips symbolic links and mounts on other devices, and counts each hard-linked file once. A later alias can appear as a zero-byte entry. In the top-files report only the counted path appears. Cloud-only entries detected on macOS contribute zero bytes, and their directory contents are left unexpanded.
 

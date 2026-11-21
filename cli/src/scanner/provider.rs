@@ -5,7 +5,7 @@ use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, mpsc};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -88,6 +88,9 @@ impl<'a> Access<'a> {
         if self.timed_out.contains(path) {
             return Err(metadata_timeout());
         }
+        // Scan threads take turns, so a busy pool doesn't fail calls that never ran.
+        let _turn = TURN.lock().unwrap_or_else(PoisonError::into_inner);
+        check_cancelled(self.cancelled)?;
 
         let pool = POOL.get_or_init(Pool::new);
         let slot = pool.try_acquire().ok_or_else(metadata_timeout)?;
@@ -141,6 +144,7 @@ impl Drop for Request {
 type Job = Box<dyn FnOnce() + Send>;
 const WORKERS: usize = 2;
 static POOL: OnceLock<Pool> = OnceLock::new();
+static TURN: Mutex<()> = Mutex::new(());
 
 /// Provider calls may still be blocked in the kernel after our wait ends. Keep
 /// one slot occupied until its actual worker returns, with no unbounded backlog.

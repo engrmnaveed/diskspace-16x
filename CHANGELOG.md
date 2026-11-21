@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Scan faster with less memory in the CLI. Scans read metadata on several threads, one per core up to 8, and `--threads N` sets the count for `scan` and the explorer. Use `--threads 1` on hard disks and network filesystems. Every thread count gives the same report. The scanner keeps each file's name instead of its full path, which cuts peak memory by more than half. The JSON schema and exit codes are unchanged. Issues are now listed in path order.
+
 ## 0.4.0
 
 - Move files and folders to the Trash from the CLI explorer. Press Space to mark items, press `d`, and confirm the count and size with `y`. Folder totals and rankings update in place without a rescan. Space is freed when you empty the Trash. On Linux, items go to the FreeDesktop.org Trash that file managers use, and they are never copied to another disk. `--read-only` or `SPACE16X_READ_ONLY=1` turns trashing off. Cloud-only, protected, and incompletely scanned items stay where they are.

@@ -71,6 +71,10 @@ impl Task {
     pub(super) fn depth(&self) -> usize {
         self.depth
     }
+
+    pub(super) fn path(&self) -> &Path {
+        &self.path
+    }
 }
 
 struct Ancestor {
@@ -619,7 +623,7 @@ impl<F: FnMut(Event)> Inline<'_, '_, F> {
             }
         }
         let capacity = (worker.nodes + 1, worker.name_bytes);
-        finish(scope, root, vec![worker], capacity)
+        finish(scope, root, worker.issues, worker.excluded, capacity)
     }
 
     fn collect(&mut self, worker: &mut Worker<'_>) {
@@ -639,33 +643,38 @@ impl<F: FnMut(Event)> Inline<'_, '_, F> {
     }
 
     fn snapshot(&self, worker: &Worker<'_>, root: &Slot) -> io::Result<Report> {
-        let tree = preview(&self.scope.root, root)?;
-        let mut issues = worker.issues.clone();
-        sort_issues(&mut issues);
-        Ok(Report {
-            tree: Arc::new(tree),
-            issues,
-            excluded_count: worker.excluded,
-            is_preview: true,
-        })
+        snapshot(self.scope, root, &worker.issues, worker.excluded)
     }
 }
 
-/// Composes the final tree and gathers every worker's issues in path order.
+/// A preview of the walk so far, with the issues recorded until now.
+pub(super) fn snapshot(
+    scope: &Scope<'_>,
+    root: &Slot,
+    issues: &[Issue],
+    excluded_count: u64,
+) -> io::Result<Report> {
+    let tree = preview(&scope.root, root)?;
+    let mut issues = issues.to_vec();
+    sort_issues(&mut issues);
+    Ok(Report {
+        tree: Arc::new(tree),
+        issues,
+        excluded_count,
+        is_preview: true,
+    })
+}
+
+/// Composes the final tree and sorts the issues by path.
 pub(super) fn finish(
     scope: &Scope<'_>,
     root: Arc<Slot>,
-    workers: Vec<Worker<'_>>,
+    mut issues: Vec<Issue>,
+    excluded_count: u64,
     capacity: (usize, usize),
 ) -> io::Result<Report> {
     check_cancelled(scope.cancelled)?;
     let (tree, overflowed) = complete(&scope.root, root, capacity)?;
-    let mut issues = Vec::new();
-    let mut excluded_count = 0;
-    for worker in workers {
-        issues.extend(worker.issues);
-        excluded_count += worker.excluded;
-    }
     for id in overflowed {
         issues.push(Issue {
             path: tree.path(id),

@@ -13,8 +13,8 @@ use std::sync::atomic::AtomicBool;
 use report::{Metric, Selection};
 
 const HELP: &str = "\
-Usage: space16x [--no-color] [--read-only] [EXCLUDES] [PATH]
-       space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [EXCLUDES]
+Usage: space16x [--no-color] [--read-only] [--threads N] [EXCLUDES] [PATH]
+       space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [--threads N] [EXCLUDES]
 
 Open the disk explorer in an interactive terminal. PATH defaults to the current directory.
 In the explorer, Space marks items and d moves them to the Trash after you confirm.
@@ -26,6 +26,8 @@ The scan command prints a plain directory summary and works in scripts.
   --json     Print a report in JSON schema 3
   --no-color Show the explorer without colors, as does setting NO_COLOR
   --read-only Turn off Move to Trash in the explorer, as does SPACE16X_READ_ONLY=1
+  --threads N Read metadata with N threads, from 1 to 64 (default: one per core, up
+             to 8). Use 1 for hard disks and network filesystems.
   --         Treat the following argument as a path, even if it starts with a dash
   --version  Show the installed version
   -h, --help Show this help
@@ -52,6 +54,7 @@ enum Command {
 struct ExploreOptions {
     path: PathBuf,
     excludes: ExcludeOptions,
+    threads: Option<usize>,
     no_color: bool,
     read_only: bool,
 }
@@ -63,6 +66,27 @@ struct ScanOptions {
     metric: Metric,
     json: bool,
     excludes: ExcludeOptions,
+    threads: Option<usize>,
+}
+
+/// The most threads `--threads` accepts.
+const MAX_THREADS: usize = 64;
+
+/// Takes the value after `--threads`.
+fn take_threads(
+    current: &mut Option<usize>,
+    arguments: &mut impl Iterator<Item = OsString>,
+) -> Result<(), String> {
+    if current.is_some() {
+        return Err("Use --threads once.".into());
+    }
+    let threads = arguments
+        .next()
+        .and_then(|value| value.to_str()?.parse::<usize>().ok())
+        .filter(|threads| (1..=MAX_THREADS).contains(threads))
+        .ok_or_else(|| format!("--threads requires a number from 1 to {MAX_THREADS}."))?;
+    *current = Some(threads);
+    Ok(())
 }
 
 /// Exclude patterns as given on the command line, loaded when the command runs.
@@ -143,7 +167,14 @@ fn run(command: Command) -> io::Result<u8> {
             // https://no-color.org: any nonempty NO_COLOR value turns colors off.
             let plain = options.no_color || env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
             let read_only = options.read_only || trash::read_only_requested();
-            tui::run(&options.path, options.excludes.load()?, plain, read_only)?;
+            let threads = options.threads.unwrap_or_else(scanner::default_threads);
+            tui::run(
+                &options.path,
+                options.excludes.load()?,
+                threads,
+                plain,
+                read_only,
+            )?;
         }
         Command::Explore(options) => {
             return run_scan(ScanOptions {
@@ -152,6 +183,7 @@ fn run(command: Command) -> io::Result<u8> {
                 metric: Metric::Allocated,
                 json: false,
                 excludes: options.excludes,
+                threads: options.threads,
             });
         }
         Command::Scan(options) => return run_scan(options),
@@ -161,9 +193,13 @@ fn run(command: Command) -> io::Result<u8> {
 
 fn run_scan(options: ScanOptions) -> io::Result<u8> {
     let excludes = options.excludes.load()?;
+    let threads = options.threads.unwrap_or_else(scanner::default_threads);
     let scan = scanner::scan(
         &options.path,
-        &excludes,
+        scanner::Options {
+            excludes: &excludes,
+            threads,
+        },
         false,
         &AtomicBool::new(false),
         |_| {},
@@ -269,6 +305,7 @@ fn parse_explore(mut arguments: impl Iterator<Item = OsString>) -> Result<Comman
     let mut excludes = ExcludeOptions::default();
     let mut no_color = false;
     let mut read_only = false;
+    let mut threads = None;
     while let Some(argument) = arguments.next() {
         match argument.to_str() {
             Some("--") => {
@@ -278,6 +315,7 @@ fn parse_explore(mut arguments: impl Iterator<Item = OsString>) -> Result<Comman
             Some(flag @ ("--exclude" | "--exclude-from")) => excludes.take(flag, &mut arguments)?,
             Some("--no-color") if !no_color => no_color = true,
             Some("--read-only") if !read_only => read_only = true,
+            Some("--threads") => take_threads(&mut threads, &mut arguments)?,
             _ if is_option(&argument) => return Err(format!("Unknown option {argument:?}.")),
             _ => set_path(&mut path, checked_path(argument)?)?,
         }
@@ -285,6 +323,7 @@ fn parse_explore(mut arguments: impl Iterator<Item = OsString>) -> Result<Comman
     Ok(Command::Explore(ExploreOptions {
         path: path.unwrap_or_else(|| PathBuf::from(".")),
         excludes,
+        threads,
         no_color,
         read_only,
     }))
@@ -324,6 +363,7 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
     let mut metric = None;
     let mut json = false;
     let mut excludes = ExcludeOptions::default();
+    let mut threads = None;
     while let Some(argument) = arguments.next() {
         match argument.to_str() {
             Some("-h" | "--help")
@@ -331,7 +371,8 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
                     && selection.is_none()
                     && metric.is_none()
                     && !json
-                    && excludes.is_empty() =>
+                    && excludes.is_empty()
+                    && threads.is_none() =>
             {
                 return only_argument(arguments.count() + 1, Command::Help);
             }
@@ -362,6 +403,7 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
             Some("--json") if !json => json = true,
             Some("--apparent") if metric.is_none() => metric = Some(Metric::Apparent),
             Some(flag @ ("--exclude" | "--exclude-from")) => excludes.take(flag, &mut arguments)?,
+            Some("--threads") => take_threads(&mut threads, &mut arguments)?,
             _ if is_option(&argument) => {
                 return Err(format!("Unknown or repeated option {argument:?}."));
             }
@@ -374,6 +416,7 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
         metric: metric.unwrap_or_default(),
         json,
         excludes,
+        threads,
     }))
 }
 
@@ -411,6 +454,7 @@ mod tests {
             Ok(Command::Explore(ExploreOptions {
                 path: path.into(),
                 excludes: ExcludeOptions::default(),
+                threads: None,
                 no_color: false,
                 read_only: false,
             }))
@@ -425,6 +469,7 @@ mod tests {
                 metric: Metric::Allocated,
                 json: true,
                 excludes: ExcludeOptions::default(),
+                threads: None,
             }))
         );
         assert_eq!(
@@ -435,6 +480,7 @@ mod tests {
                 metric: Metric::Apparent,
                 json: false,
                 excludes: ExcludeOptions::default(),
+                threads: None,
             }))
         );
     }
@@ -458,6 +504,7 @@ mod tests {
             Ok(Command::Explore(ExploreOptions {
                 path: "data".into(),
                 excludes,
+                threads: None,
                 no_color: false,
                 read_only: false,
             }))
@@ -482,6 +529,30 @@ mod tests {
             &["--exclude"][..],
             &["scan", "--exclude", ""],
             &["scan", "--exclude-from"],
+        ] {
+            assert!(args(invalid).is_err(), "{invalid:?}");
+        }
+    }
+
+    #[test]
+    fn takes_a_thread_count_from_1_to_64() {
+        assert!(matches!(
+            args(&["--threads", "1", "data"]),
+            Ok(Command::Explore(ExploreOptions {
+                threads: Some(1),
+                ..
+            }))
+        ));
+        let Ok(Command::Scan(scan)) = args(&["scan", "--threads", "64", "--json"]) else {
+            panic!("scan with threads should parse");
+        };
+        assert_eq!(scan.threads, Some(64));
+        for invalid in [
+            &["--threads"][..],
+            &["--threads", "0"],
+            &["scan", "--threads", "65"],
+            &["scan", "--threads", "two"],
+            &["scan", "--threads", "2", "--threads", "2"],
         ] {
             assert!(args(invalid).is_err(), "{invalid:?}");
         }
