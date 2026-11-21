@@ -403,7 +403,8 @@ private struct Walk: Sendable {
         let entry = ScanEntry(
             name: name, container: folder, isDirectory: false, isHardLinkAlias: false,
             isCloudOnly: cloudOnly, isPending: false,
-            logicalBytes: logical, allocatedBytes: overflow ? .max : allocated, itemCount: 0, children: []
+            logicalBytes: logical, allocatedBytes: overflow ? .max : allocated, itemCount: 0, children: [],
+            newestModified: modificationSeconds(metadata)
         )
         // Another path may own this inode. The depth-first assembly picks the first one.
         if !cloudOnly && metadata.st_nlink > 1 { return .linked(entry, FileIdentity(metadata)) }
@@ -646,7 +647,7 @@ private final class Coordinator {
                     name: record.name, container: record.container, isDirectory: true,
                     isHardLinkAlias: false, isCloudOnly: record.isCloudOnly, isPending: frame.isPending,
                     logicalBytes: frame.logical, allocatedBytes: frame.allocated,
-                    itemCount: frame.items, children: frame.children
+                    itemCount: frame.items, children: frame.children, newestModified: frame.newest
                 )
                 if frame.didOverflow {
                     overflowed.append(ScanIssue(path: entry.path, message: "Directory totals exceed the supported byte range."))
@@ -693,6 +694,8 @@ private struct Frame {
     var logical: UInt64 = 0
     var allocated: UInt64 = 0
     var items: UInt64 = 0
+    /// The newest modification time of any file below.
+    var newest: UInt32 = 0
     var isPending = false
     var didOverflow = false
 
@@ -708,6 +711,7 @@ private struct Frame {
         allocated = allocatedOverflow ? .max : newAllocated
         didOverflow = didOverflow || logicalOverflow || allocatedOverflow
         items = items.addingCounted(entry)
+        newest = max(newest, entry.newestModified)
         children.append(entry)
     }
 }
@@ -719,9 +723,19 @@ private extension ScanEntry {
         ScanEntry(
             name: name, container: container, isDirectory: false, isHardLinkAlias: alias,
             isCloudOnly: false, isPending: !alias, logicalBytes: 0, allocatedBytes: 0,
-            itemCount: 0, children: []
+            itemCount: 0, children: [], newestModified: newestModified
         )
     }
+}
+
+/// A file's modification time in whole seconds since 1970, clamped as `ScanEntry` stores it.
+private func modificationSeconds(_ metadata: stat) -> UInt32 {
+    #if canImport(Darwin)
+    let seconds = Int64(metadata.st_mtimespec.tv_sec)
+    #else
+    let seconds = Int64(metadata.st_mtim.tv_sec)
+    #endif
+    return UInt32(min(max(seconds, 1), Int64(UInt32.max)))
 }
 
 /// Orders issues by path, comparing components as a depth-first walk visits them, then

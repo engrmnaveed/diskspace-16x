@@ -34,6 +34,11 @@ public struct ScanEntry: Identifiable, Sendable {
     public let isCloudOnly: Bool
     /// The preview still has local entries to inspect for this item.
     public let isPending: Bool
+    /// A file's modification time, or a folder's newest one of any file below it, in
+    /// whole seconds since 1970, clamped to 1 through `UInt32.max`. Zero means unknown, as
+    /// for a folder without files or an opened scan. Stored after the flags, it fills
+    /// their padding, so entries stay the same size.
+    public let newestModified: UInt32
     public let logicalBytes: UInt64
     public let allocatedBytes: UInt64
     /// Files and folders below this entry, counting each hard-linked file once.
@@ -43,7 +48,7 @@ public struct ScanEntry: Identifiable, Sendable {
     init(
         name: String, container: ScanLocation?, isDirectory: Bool, isHardLinkAlias: Bool,
         isCloudOnly: Bool, isPending: Bool, logicalBytes: UInt64, allocatedBytes: UInt64,
-        itemCount: UInt64, children: [ScanEntry]
+        itemCount: UInt64, children: [ScanEntry], newestModified: UInt32 = 0
     ) {
         self.name = name
         self.container = container
@@ -51,6 +56,7 @@ public struct ScanEntry: Identifiable, Sendable {
         self.isHardLinkAlias = isHardLinkAlias
         self.isCloudOnly = isCloudOnly
         self.isPending = isPending
+        self.newestModified = newestModified
         self.logicalBytes = logicalBytes
         self.allocatedBytes = allocatedBytes
         self.itemCount = itemCount
@@ -61,7 +67,7 @@ public struct ScanEntry: Identifiable, Sendable {
     init(
         path: String, isDirectory: Bool, isHardLinkAlias: Bool, isCloudOnly: Bool,
         isPending: Bool, logicalBytes: UInt64, allocatedBytes: UInt64, itemCount: UInt64,
-        children: [ScanEntry]
+        children: [ScanEntry], newestModified: UInt32 = 0
     ) {
         let bytes = path.utf8
         let slash = bytes.lastIndex(of: 0x2F)
@@ -71,7 +77,7 @@ public struct ScanEntry: Identifiable, Sendable {
             container: name.isEmpty ? nil : ScanLocation(path: parentPath(of: path)),
             isDirectory: isDirectory, isHardLinkAlias: isHardLinkAlias, isCloudOnly: isCloudOnly,
             isPending: isPending, logicalBytes: logicalBytes, allocatedBytes: allocatedBytes,
-            itemCount: itemCount, children: children
+            itemCount: itemCount, children: children, newestModified: newestModified
         )
     }
 
@@ -87,6 +93,16 @@ public struct ScanEntry: Identifiable, Sendable {
             return name.utf8.lexicographicallyPrecedes(other.name.utf8)
         }
         return PathBytes(self).lexicographicallyPrecedes(PathBytes(other))
+    }
+
+    /// The modification time, or a folder's newest one below it, or nil when unknown.
+    public var newestModification: Date? {
+        newestModified == 0 ? nil : Date(timeIntervalSince1970: TimeInterval(newestModified))
+    }
+
+    /// The newest modification time of `children`, for a folder rebuilt from them.
+    static func newest(of children: [ScanEntry]) -> UInt32 {
+        children.reduce(0) { max($0, $1.newestModified) }
     }
 
     public func bytes(for metric: SizeMetric) -> UInt64 {
@@ -138,6 +154,8 @@ public enum EntryOrder: String, CaseIterable, Sendable {
     case size
     case items
     case name
+    /// Newest modification time, which Pro's Modified column sorts by.
+    case modified
 }
 
 extension Array where Element == ScanEntry {
@@ -153,6 +171,8 @@ extension Array where Element == ScanEntry {
                 comparison = threeWay(left.itemCount, right.itemCount)
             case .name:
                 comparison = left.name.localizedStandardCompare(right.name)
+            case .modified:
+                comparison = threeWay(UInt64(left.newestModified), UInt64(right.newestModified))
             }
             if comparison == .orderedSame {
                 return left.pathPrecedes(right)

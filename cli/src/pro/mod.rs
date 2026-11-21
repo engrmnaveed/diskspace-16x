@@ -6,11 +6,15 @@
 //! lean.
 
 mod diff;
+mod modified;
+
+pub use modified::format_date;
 
 use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
+use std::time::SystemTime;
 
 use crate::report::{Metric, Selection};
 use crate::scanner;
@@ -28,6 +32,58 @@ pub struct DiffOptions {
     metric: Metric,
     json: bool,
     threads: Option<usize>,
+}
+
+/// Options only Pro's `scan` takes, listed in `main.rs`'s `PRO_SCAN_OPTIONS`.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct ScanOptions {
+    /// Count only files last modified more than this many days ago.
+    older_than: Option<u32>,
+}
+
+impl ScanOptions {
+    /// Takes the value after one of the Pro options.
+    pub fn take(
+        &mut self,
+        flag: &str,
+        arguments: &mut impl Iterator<Item = OsString>,
+    ) -> Result<(), String> {
+        match flag {
+            "--older-than" if self.older_than.is_none() => {
+                let days = arguments
+                    .next()
+                    .and_then(|value| value.to_str()?.parse::<u32>().ok())
+                    .ok_or("--older-than requires a number of days.")?;
+                self.older_than = Some(days);
+                Ok(())
+            }
+            _ => Err(format!("Use {flag} once.")),
+        }
+    }
+
+    pub fn older_than_days(&self) -> Option<u32> {
+        self.older_than
+    }
+
+    /// Applies the options to a finished scan: `--older-than` keeps only older files.
+    pub fn narrow(&self, report: scanner::Report) -> scanner::Report {
+        match self.older_than {
+            Some(days) => modified::older_than(report, modified::cutoff(days, SystemTime::now())),
+            None => report,
+        }
+    }
+
+    /// Notes on standard error how the options narrowed a text report.
+    pub fn report_narrowed(&self) {
+        if let Some(days) = self.older_than {
+            let before = modified::cutoff(days, SystemTime::now());
+            eprintln!(
+                "space16x: counted only files last modified more than {days} {} ago, before {}",
+                if days == 1 { "day" } else { "days" },
+                format_date(before)
+            );
+        }
+    }
 }
 
 pub fn parse(

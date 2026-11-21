@@ -48,7 +48,7 @@ extension ScanEntry {
             logicalBytes: logicalBytes.swapping(old.logicalBytes, for: new.logicalBytes),
             allocatedBytes: allocatedBytes.swapping(old.allocatedBytes, for: new.allocatedBytes),
             itemCount: itemCount.swapping(old.countedItems, for: new.countedItems),
-            children: updated
+            children: updated, newestModified: ScanEntry.newest(of: updated)
         )
     }
 }

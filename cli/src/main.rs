@@ -70,10 +70,25 @@ This is Space 16X Pro. It adds:
   space16x diff OLD NEW|PATH [--depth N | --top N] [--apparent] [--json] [--threads N]
              Compare a saved scan with another one, or with PATH scanned now using the
              saved scan's excludes. Lists what changed, or the N files that changed most.
+  scan --older-than DAYS
+             Count only files last modified more than DAYS days ago, and the folders
+             that hold them. JSON reports add newestModified, as Unix seconds, to each
+             entry: the file's time, or the newest time of any file in a folder.
+The explorer adds a Modified column with each item's newest modification date.
 ";
 
 /// Subcommands only Space 16X Pro has. Basic builds answer them with an install hint.
 const PRO_COMMANDS: &[&str] = &["diff"];
+
+/// Options only Space 16X Pro's scan takes. Basic builds answer them with an install hint.
+const PRO_SCAN_OPTIONS: &[&str] = &["--older-than"];
+
+#[cfg(feature = "pro")]
+use pro::ScanOptions as ProScanOptions;
+/// Basic has no Pro scan options.
+#[cfg(not(feature = "pro"))]
+#[derive(Debug, Default, PartialEq, Eq)]
+struct ProScanOptions {}
 
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
@@ -111,6 +126,8 @@ struct ScanOptions {
     export: Option<PathBuf>,
     excludes: ExcludeOptions,
     threads: Option<usize>,
+    #[cfg_attr(not(feature = "pro"), allow(dead_code))]
+    pro: ProScanOptions,
 }
 
 /// The most threads `--threads` accepts.
@@ -259,6 +276,7 @@ fn explore(options: ExploreOptions) -> io::Result<u8> {
                 export: None,
                 excludes: options.excludes,
                 threads: options.threads,
+                pro: ProScanOptions::default(),
             });
         };
         let report = &imported.report;
@@ -353,13 +371,28 @@ fn run_scan(options: ScanOptions) -> io::Result<u8> {
             .map_err(|error| scan_error(file, error))?,
         None => {}
     }
+    #[cfg(feature = "pro")]
+    let scan = options.pro.narrow(scan);
     let stdout = io::stdout().lock();
     if options.json {
-        report::write_json(stdout, &scan, options.selection, options.metric, sources)?;
+        #[cfg(feature = "pro")]
+        let older_than = options.pro.older_than_days();
+        #[cfg(not(feature = "pro"))]
+        let older_than = None;
+        report::write_json(
+            stdout,
+            &scan,
+            options.selection,
+            options.metric,
+            sources,
+            older_than,
+        )?;
     } else {
         report::write_plain(stdout, &scan, options.selection, options.metric)?;
         report_issues(&scan.issues, true);
         report_excluded(scan.excluded_count, sources.len());
+        #[cfg(feature = "pro")]
+        options.pro.report_narrowed();
     }
     Ok(status(&scan))
 }
@@ -452,8 +485,7 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Command, Strin
             return parse_volumes(arguments);
         }
         Some(name) if PRO_COMMANDS.contains(&name) => {
-            let name = PRO_COMMANDS.iter().find(|command| **command == name);
-            let name = *name.expect("the command is listed");
+            let name = pro_name(PRO_COMMANDS, name);
             arguments.next();
             #[cfg(feature = "pro")]
             return pro::parse(name, arguments);
@@ -548,6 +580,8 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
     let mut export = None;
     let mut excludes = ExcludeOptions::default();
     let mut threads = None;
+    #[cfg_attr(not(feature = "pro"), allow(unused_mut))]
+    let mut pro = ProScanOptions::default();
     while let Some(argument) = arguments.next() {
         match argument.to_str() {
             Some("-h" | "--help")
@@ -557,7 +591,8 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
                     && !json
                     && export.is_none()
                     && excludes.is_empty()
-                    && threads.is_none() =>
+                    && threads.is_none()
+                    && pro == ProScanOptions::default() =>
             {
                 return only_argument(arguments.count() + 1, Command::Help);
             }
@@ -590,6 +625,12 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
             Some("--apparent") if metric.is_none() => metric = Some(Metric::Apparent),
             Some(flag @ ("--exclude" | "--exclude-from")) => excludes.take(flag, &mut arguments)?,
             Some("--threads") => take_threads(&mut threads, &mut arguments)?,
+            Some(flag) if PRO_SCAN_OPTIONS.contains(&flag) => {
+                #[cfg(feature = "pro")]
+                pro.take(flag, &mut arguments)?;
+                #[cfg(not(feature = "pro"))]
+                return Ok(Command::ProOnly(pro_name(PRO_SCAN_OPTIONS, flag)));
+            }
             _ if is_option(&argument) => {
                 return Err(format!("Unknown or repeated option {argument:?}."));
             }
@@ -597,10 +638,10 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
         }
     }
     if export.as_deref() == Some(Path::new("-"))
-        && (json || selection.is_some() || metric.is_some())
+        && (json || selection.is_some() || metric.is_some() || pro != ProScanOptions::default())
     {
         return Err(
-            "--export - writes only the export, so it takes no --json, --depth, --top or --apparent."
+            "--export - writes only the export, so it takes no report options such as --json or --depth."
                 .into(),
         );
     }
@@ -612,7 +653,16 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
         export,
         excludes,
         threads,
+        pro,
     }))
+}
+
+/// The listed name of a Pro command or option, which the install hint repeats.
+fn pro_name(names: &'static [&'static str], name: &str) -> &'static str {
+    names
+        .iter()
+        .find(|listed| **listed == name)
+        .expect("the name is listed")
 }
 
 fn parse_volumes(arguments: impl Iterator<Item = OsString>) -> Result<Command, String> {
@@ -680,6 +730,7 @@ mod tests {
                 export: None,
                 excludes: ExcludeOptions::default(),
                 threads: None,
+                pro: ProScanOptions::default(),
             }))
         );
         assert_eq!(
@@ -692,6 +743,7 @@ mod tests {
                 export: None,
                 excludes: ExcludeOptions::default(),
                 threads: None,
+                pro: ProScanOptions::default(),
             }))
         );
     }
@@ -807,15 +859,36 @@ mod tests {
     #[test]
     fn routes_pro_commands_by_edition() {
         #[cfg(not(feature = "pro"))]
-        assert_eq!(
-            args(&["diff", "old.json", "new.json"]),
-            Ok(Command::ProOnly("diff"))
-        );
+        {
+            assert_eq!(
+                args(&["diff", "old.json", "new.json"]),
+                Ok(Command::ProOnly("diff"))
+            );
+            assert_eq!(
+                args(&["scan", "--older-than", "30"]),
+                Ok(Command::ProOnly("--older-than"))
+            );
+        }
         #[cfg(feature = "pro")]
-        assert!(matches!(
-            args(&["diff", "old.json", "new.json"]),
-            Ok(Command::Pro(_))
-        ));
+        {
+            assert!(matches!(
+                args(&["diff", "old.json", "new.json"]),
+                Ok(Command::Pro(_))
+            ));
+            let Ok(Command::Scan(scan)) = args(&["scan", "--older-than", "30", "--top", "5"])
+            else {
+                panic!("scan --older-than should parse in Pro");
+            };
+            assert_eq!(scan.pro.older_than_days(), Some(30));
+            for invalid in [
+                &["scan", "--older-than"][..],
+                &["scan", "--older-than", "-1"],
+                &["scan", "--older-than", "1", "--older-than", "2"],
+                &["scan", "--older-than", "1", "--export", "-"],
+            ] {
+                assert!(args(invalid).is_err(), "{invalid:?}");
+            }
+        }
         // A folder with a Pro command's name can still be explored.
         assert!(matches!(
             args(&["./diff"]),

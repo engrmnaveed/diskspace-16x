@@ -3,7 +3,7 @@
 //! Nodes are laid out in depth-first order with each folder's children in name order, so
 //! a folder's descendants immediately follow it. Each node keeps its parent's index and
 //! the size of its subtree, and paths are rebuilt from the names on demand. Node indices
-//! are stable for one tree, which lets later features keep per-node data in side tables.
+//! are stable for one tree, which lets Pro keep per-node data in side tables.
 
 use std::cmp::Ordering;
 use std::ffi::OsStr;
@@ -11,7 +11,7 @@ use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use super::{EntryKind, EntryState};
+use super::{Details, EntryKind, EntryState};
 
 /// A node's position in its tree.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -52,6 +52,8 @@ pub struct Tree {
     root_path: PathBuf,
     nodes: Vec<Node>,
     names: Vec<u8>,
+    /// Pro's side table of each node's details, indexed like `nodes`. Empty-sized in Basic.
+    details: Vec<Details>,
 }
 
 impl Tree {
@@ -207,6 +209,7 @@ impl Tree {
             self.nodes.len(),
             self.names.len(),
         );
+        builder.set_details(self.details[0]);
         builder.copy_below(self, NodeId::ROOT, &mut visit);
         builder.finish().0
     }
@@ -275,6 +278,12 @@ impl<'a> Entry<'a> {
     /// A folder's own state, before its contents degrade it. A file's is its state.
     pub fn own_state(self) -> EntryState {
         self.node().own_state
+    }
+
+    /// Pro's details: a file's modification time and owner, or a folder's owner and the
+    /// newest modification time of any file below it.
+    pub fn details(self) -> Details {
+        self.tree.details[self.id.index()]
     }
 
     /// The last path component. The root's is its path's final component.
@@ -359,6 +368,7 @@ impl TreeBuilder {
             root_path,
             nodes: Vec::with_capacity(nodes.clamp(1, LIMIT)),
             names: Vec::with_capacity(name_bytes.min(LIMIT)),
+            details: Vec::with_capacity(nodes.clamp(1, LIMIT)),
         };
         tree.nodes.push(Node {
             allocated: 0,
@@ -372,6 +382,7 @@ impl TreeBuilder {
             state: own_state,
             own_state,
         });
+        tree.details.push(Details::default());
         Self {
             tree,
             open: vec![0],
@@ -392,7 +403,18 @@ impl TreeBuilder {
         node.name_len = name.len() as u32;
         self.tree.names.extend_from_slice(name);
         self.tree.nodes.push(node);
+        self.tree.details.push(Details::default());
         Some(NodeId(index as u32))
+    }
+
+    /// Sets the details of the node added last, a file or a folder just opened. For a
+    /// folder, only the owner counts: its time is the newest of its files.
+    pub fn set_details(&mut self, details: Details) {
+        if !self.too_large
+            && let Some(last) = self.tree.details.last_mut()
+        {
+            *last = details;
+        }
     }
 
     pub fn file(&mut self, name: &[u8], allocated: u64, apparent: u64, state: EntryState) {
@@ -438,6 +460,7 @@ impl TreeBuilder {
     }
 
     /// Adds an empty folder, such as a cloud-only or skipped one.
+    #[cfg(test)]
     pub fn folder(&mut self, name: &[u8], own_state: EntryState) {
         self.open_folder(name, own_state);
         self.close_folder();
@@ -459,9 +482,11 @@ impl TreeBuilder {
         let mut items = 0_u32;
         let mut overflow = false;
         let mut state = self.tree.nodes[index].own_state;
+        let mut details = self.tree.details[index].folder();
         let mut child = index + 1;
         while child < end {
             let node = &self.tree.nodes[child];
+            details = details.add(self.tree.details[child]);
             for (total, amount) in [(&mut bytes, node.allocated), (&mut apparent, node.apparent)] {
                 match total.checked_add(amount) {
                     Some(sum) => *total = sum,
@@ -491,6 +516,7 @@ impl TreeBuilder {
         node.items = items;
         node.state = state;
         node.size = (end - index) as u32;
+        self.tree.details[index] = details;
     }
 
     /// Copies everything below `id` in `source`, consulting `visit` for each node.
@@ -517,14 +543,17 @@ impl TreeBuilder {
                 Visit::Replace(subtree) => {
                     let root = subtree.node(NodeId::ROOT);
                     self.open_folder(name, root.own_state);
+                    self.set_details(source.details[current.index()]);
                     subtree.copy_into(self);
                     self.close_folder();
                 }
                 Visit::Keep if node.kind == EntryKind::File => {
                     self.file(name, node.allocated, node.apparent, node.state);
+                    self.set_details(source.details[current.index()]);
                 }
                 Visit::Keep => {
                     self.open_folder(name, node.own_state);
+                    self.set_details(source.details[current.index()]);
                     ends.push(index + node.size);
                     index += 1;
                     continue;

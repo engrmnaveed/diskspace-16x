@@ -63,12 +63,21 @@ def uses_color(output):
     return False
 
 
+def is_pro(binary):
+    version = subprocess.run([binary, "--version"], capture_output=True, text=True, check=True)
+    return version.stdout.strip().endswith("(pro)")
+
+
 def check_sort_size_and_color(binary, fixture):
     environment = {key: value for key, value in os.environ.items() if key != "NO_COLOR"}
     with Terminal([binary, fixture], env=environment) as terminal:
         terminal.expect(b"nested-alpha")
         terminal.expect(b"Items")
         assert uses_color(terminal.output), "the explorer should use color by default"
+        if is_pro(binary):
+            # Pro's Modified column shows each item's newest modification date.
+            terminal.expect(b"Modified")
+            assert re.search(rb"20\d\d-\d\d-\d\d", bytes(terminal.output)), "no modification date"
 
         terminal.press(b"s", b"by items")
         terminal.press(b"a", b"apparent")

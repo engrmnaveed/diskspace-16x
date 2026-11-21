@@ -37,8 +37,9 @@ struct ResultsView: View {
                 let bytes = workspace.pendingTrash.reduce(UInt64(0)) { $0 + $1.allocatedBytes }
                 Text("\(ScanFormat.size(bytes)) of allocated space. Space is freed when you empty the Trash.")
             }
-            .onChange(of: proFeatures) { _, enabled in
-                if !enabled { workspace.stopComparing() }
+            .onChange(of: proFeatures, initial: true) { _, enabled in
+                if !enabled { workspace.stopProFeatures() }
+                columns[visibility: "modified"] = enabled ? .visible : .hidden
             }
             .onChange(of: showsChanges, initial: true) { _, shown in
                 columns[visibility: "change"] = shown ? .visible : .hidden
@@ -352,6 +353,15 @@ struct ResultsView: View {
             .defaultVisibility(.hidden)
             .disabledCustomizationBehavior(.visibility)
 
+            // Pro: each item's newest modification time, newest first when sorted.
+            TableColumn("Modified", sortUsing: EntrySort(key: .modified, order: .reverse)) { entry in
+                modifiedCell(entry)
+            }
+            .width(min: 84, ideal: 100, max: 150)
+            .customizationID("modified")
+            .defaultVisibility(.hidden)
+            .disabledCustomizationBehavior(.visibility)
+
             TableColumn("Share") { entry in
                 shareCell(entry, of: scope)
             }
@@ -359,8 +369,8 @@ struct ResultsView: View {
 
         }
         .tableStyle(.inset(alternatesRowBackgrounds: false))
-        // Rebuild the table when the Change column appears or leaves, so its cells fill in.
-        .id(showsChanges)
+        // Rebuild the table when a Pro column appears or leaves, so its cells fill in.
+        .id([showsChanges, proFeatures])
         .contextMenu(forSelectionType: String.self) { identifiers in
             if identifiers.count > 1 {
                 Button("Move \(identifiers.count) Items to Trash…") {
@@ -480,6 +490,24 @@ struct ResultsView: View {
         let path = entry.path.hasPrefix(prefix) ? String(entry.path.dropFirst(prefix.count)) : entry.path
         guard let separator = path.lastIndex(of: "/") else { return nil }
         return String(path[..<separator])
+    }
+
+    @ViewBuilder
+    private func modifiedCell(_ entry: ScanEntry) -> some View {
+        if let date = entry.newestModification {
+            Text(date, format: .dateTime.year().month(.abbreviated).day())
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .help(entry.isDirectory
+                    ? "The newest modification time of any file inside"
+                    : "Last modified \(date.formatted(date: .long, time: .shortened))")
+        } else {
+            Text("—")
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .accessibilityLabel("No modification time")
+        }
     }
 
     @ViewBuilder

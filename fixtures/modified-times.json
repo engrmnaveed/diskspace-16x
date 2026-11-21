@@ -1,0 +1,31 @@
+{
+  "description": "Modification times shared by the Rust and Swift scanner tests. Each file is created at path (relative to the scan root) with its modified time in Unix seconds. A folder's newest time is the newest of any file below it; null means it has none. Times before 1970 count as 1970-01-01T00:00:01Z.",
+  "files": [
+    {"path": "docs/2019.txt", "modified": 1546300800},
+    {"path": "docs/2023.txt", "modified": 1700000000},
+    {"path": "docs/drafts/2021.txt", "modified": 1622505600},
+    {"path": "media/clip.mov", "modified": 1650000000},
+    {"path": "media/links/clip-link.mov", "hardLinkTo": "media/clip.mov"},
+    {"path": "ancient.bin", "modified": -86400},
+    {"path": "fresh.bin", "modified": 1750000000}
+  ],
+  "folders": ["empty", "media/nothing-here/deeper"],
+  "newest": {
+    "": 1750000000,
+    "docs": 1700000000,
+    "docs/2019.txt": 1546300800,
+    "docs/drafts": 1622505600,
+    "media": 1650000000,
+    "media/links": 1650000000,
+    "media/links/clip-link.mov": 1650000000,
+    "media/nothing-here": null,
+    "media/nothing-here/deeper": null,
+    "empty": null,
+    "ancient.bin": 1
+  },
+  "olderThan": {
+    "description": "scan --older-than keeps these entries, in depth-first order, for any cutoff after 1650000000 and up to 1700000000.",
+    "cutoff": 1650000001,
+    "kept": ["ancient.bin", "docs", "docs/2019.txt", "docs/drafts", "docs/drafts/2021.txt", "media", "media/clip.mov", "media/links", "media/links/clip-link.mov"]
+  }
+}

@@ -763,3 +763,67 @@ fn parallel_previews_show_two_levels_first_and_stop_when_cancelled() -> io::Resu
     assert_eq!(complete.root().state(), EntryState::Local);
     Ok(())
 }
+
+/// Builds the shared modification-time fixture, which the Swift tests read too.
+#[cfg(feature = "pro")]
+fn modified_fixture() -> io::Result<(Fixture, serde_json::Value)> {
+    use std::time::UNIX_EPOCH;
+
+    let table: serde_json::Value =
+        serde_json::from_str(include_str!("../../../fixtures/modified-times.json"))
+            .expect("the fixture is valid JSON");
+    let fixture = Fixture::new()?;
+    for folder in table["folders"].as_array().expect("folders") {
+        fs::create_dir_all(fixture.join(folder.as_str().expect("a folder path")))?;
+    }
+    for file in table["files"].as_array().expect("files") {
+        let path = fixture.join(file["path"].as_str().expect("a file path"));
+        fs::create_dir_all(path.parent().expect("files are below the root"))?;
+        if let Some(target) = file["hardLinkTo"].as_str() {
+            fs::hard_link(fixture.join(target), &path)?;
+            continue;
+        }
+        let seconds = file["modified"].as_i64().expect("a time");
+        let time = if seconds >= 0 {
+            UNIX_EPOCH + Duration::from_secs(seconds as u64)
+        } else {
+            UNIX_EPOCH - Duration::from_secs(seconds.unsigned_abs())
+        };
+        File::create(&path)?.set_modified(time)?;
+    }
+    Ok((fixture, table))
+}
+
+#[cfg(feature = "pro")]
+#[test]
+fn records_each_entrys_newest_modification_time() -> io::Result<()> {
+    let (fixture, table) = modified_fixture()?;
+    let uid = fs::metadata(fixture.path())?.uid();
+    for threads in [1, THREADS] {
+        let report = scan(
+            fixture.path(),
+            Options {
+                excludes: &Excludes::default(),
+                threads,
+            },
+            false,
+            &AtomicBool::new(false),
+            |_| {},
+        )?;
+        let tree = &report.tree;
+        for (path, expected) in table["newest"].as_object().expect("newest") {
+            let id = tree
+                .find(&fixture.join(path))
+                .expect("the path was scanned");
+            let details = tree.entry(id).details();
+            let expected = expected.as_u64().map(|seconds| seconds as u32);
+            assert_eq!(
+                details.modified(),
+                expected,
+                "{path} with {threads} threads"
+            );
+            assert_eq!(details.owner(), uid, "{path}");
+        }
+    }
+    Ok(())
+}

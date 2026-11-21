@@ -355,6 +355,14 @@ final class ScanWorkspace {
         }
     }
 
+    /// Leaves Pro's sort orders when **Settings → Pro features** turns off.
+    func stopProFeatures() {
+        stopComparing()
+        if sortOrder.first?.key == .modified {
+            sortOrder = [.largestFirst]
+        }
+    }
+
     func stopComparing() {
         guard comparison != nil else { return }
         comparison = nil

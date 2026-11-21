@@ -173,8 +173,13 @@ struct JsonReport<'a> {
     allocated_bytes: u64,
     apparent_bytes: u64,
     item_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    newest_modified: Option<u32>,
     excluded_count: u64,
     excludes: &'a [String],
+    /// Pro's `--older-than`: only files modified more than this many days ago count.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    older_than_days: Option<u32>,
     is_partial: bool,
     issues: Vec<JsonIssue<'a>>,
     #[serde(flatten)]
@@ -211,6 +216,9 @@ struct JsonFile {
     path: JsonPath<'static>,
     allocated_bytes: u64,
     apparent_bytes: u64,
+    /// Pro: the modification time, or a folder's newest one below it, in Unix seconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    newest_modified: Option<u32>,
 }
 
 impl From<Entry<'_>> for JsonFile {
@@ -219,6 +227,7 @@ impl From<Entry<'_>> for JsonFile {
             path: JsonPath::owned(&entry.path()),
             allocated_bytes: entry.allocated_bytes(),
             apparent_bytes: entry.apparent_bytes(),
+            newest_modified: entry.details().modified(),
         }
     }
 }
@@ -274,6 +283,7 @@ pub(crate) fn write_json(
     selection: Selection,
     metric: Metric,
     excludes: &[String],
+    older_than_days: Option<u32>,
 ) -> io::Result<()> {
     let mut out = io::BufWriter::new(out);
     let tree = &report.tree;
@@ -311,8 +321,10 @@ pub(crate) fn write_json(
         allocated_bytes: report.root().allocated_bytes(),
         apparent_bytes: report.root().apparent_bytes(),
         item_count: report.root().item_count(),
+        newest_modified: report.root().details().modified(),
         excluded_count: report.excluded_count,
         excludes,
+        older_than_days,
         is_partial: !report.issues.is_empty(),
         issues: report
             .issues
