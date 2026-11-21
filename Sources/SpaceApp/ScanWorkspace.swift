@@ -107,6 +107,12 @@ final class ScanWorkspace {
     var selectedPaths: Set<String> = [] {
         didSet {
             selectedEntry = selection.flatMap(entry(withPath:))
+            // Quick Look follows the selection while it is open, as in Finder.
+            if quickLookURL != nil {
+                quickLookURL = selectedEntry.flatMap { entry in
+                    entry.isCloudOnly ? nil : URL(filePath: entry.path)
+                }
+            }
         }
     }
 
@@ -118,6 +124,29 @@ final class ScanWorkspace {
     }
 
     var selectedEntries: [ScanEntry] { rows.filter { selectedPaths.contains($0.path) } }
+
+    /// The item Quick Look shows. Quick Look reads the file only while it is open.
+    var quickLookURL: URL?
+    var canQuickLook: Bool { canBrowse && selectedEntry != nil }
+
+    /// Opens Quick Look for the selected item, or closes it. Cloud-only items stay closed,
+    /// because previewing them would download them.
+    func toggleQuickLook() {
+        if quickLookURL != nil {
+            quickLookURL = nil
+            return
+        }
+        guard canBrowse, let entry = selectedEntry else { return }
+        if entry.isCloudOnly {
+            notice = Notice(
+                title: "“\(entry.name)” is cloud-only",
+                message: "Quick Look would download it. Open it in Finder if you want to.",
+                isError: true
+            )
+            return
+        }
+        quickLookURL = URL(filePath: entry.path, directoryHint: entry.isDirectory ? .isDirectory : .notDirectory)
+    }
 
     /// Items waiting for the user to confirm Move to Trash. A nonempty list shows the alert.
     var pendingTrash: [ScanEntry] = []
