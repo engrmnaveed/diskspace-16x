@@ -4,7 +4,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — M3 (v0.5) Speed is in progress. M3.1 (arena tree), M3.2 (`--threads`) and M3.3 (macOS bulk metadata) are done in Rust: 1M files take about 1.4 s instead of 5.4 s, at 119 MB instead of 342 MB. Next: M3.4, Swift entries without stored full paths, then M3.5, a Swift TaskGroup walk.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — M3 (v0.5) Speed is in progress. M3.1–M3.3 sped up the Rust CLI: 1M files take about 1.4 s instead of 5.4 s, at 119 MB instead of 342 MB. M3.4 cut the Swift scanner's memory at 1M files from 379 MB to 122 MB. Next: M3.5, a Swift TaskGroup walk in `Sources/SpaceCore/DiskScanner.swift`.
 
 **Resume here** — M3 (v0.5) Speed is in progress on `feature/m3-lean-tree` (M3.1). The Rust scanner now builds a flat arena (`cli/src/scanner/tree.rs`) from per-directory records (`cli/src/scanner/walk.rs`). Next: land M3.1, then M3.2 adds worker threads to the same record walk.
 
@@ -30,7 +30,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** —
 - [x] M3.1 Rust: lean arena tree, with name-only nodes in depth-first order, parent indices and subtree sizes, and paths rebuilt on demand. The walk stores one record per directory and a compose pass builds the tree, assigning each hard-linked file to its first path in depth-first order. Reports, the TUI, Move to Trash and rescan use the arena.
 - [x] M3.2 Rust: parallel walk with `--threads N` (1 to 64, default `min(cores, 8)`, `1` for HDDs and NFS), std threads and a shared work queue, documented in `docs/cli.md`, README and CHANGELOG. Output stays deterministic because hard links are assigned in the compose pass, so workers share no hard-link set. Tests cover repeated runs, unreadable folders and hard links across threads.
 - [x] M3.3 Rust on macOS: read each directory's names and regular files' metadata with `getattrlistbulk`, keeping `fstatat` for folders, entries with errors and filesystems without bulk support. At 1M files, per-file `fstatat` thrashes the vnode cache and threads contend in the kernel.
-- [ ] M3.4 Swift: entries keep their name and a shared parent location instead of a full path
+- [x] M3.4 Swift: entries keep their name and a shared parent location instead of a full path
 - [ ] M3.5 Swift: TaskGroup walk with the same deterministic hard-link rule
 - [ ] M3.6 Benchmarks at 100K and 1M files in `docs/qa.md`
 - [ ] M3.7 Release v0.5.0

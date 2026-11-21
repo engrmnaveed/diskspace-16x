@@ -92,6 +92,12 @@ final class DiskScannerTests: XCTestCase {
             XCTAssertFalse(try XCTUnwrap(counted.children.first).isHardLinkAlias)
             XCTAssertEqual(report.largestFiles(limit: 20, by: .logical).map(\.name), ["alias.dat", ".hidden"])
             XCTAssertTrue(report.largestFiles(limit: 20, by: .logical, under: uncounted).isEmpty)
+            // Entries keep names. Paths come from the folder location their siblings share.
+            XCTAssertEqual(report.root.path, root.path)
+            XCTAssertEqual(originalEntry.path, original.path)
+            XCTAssertEqual(originalEntry.container?.path, lastDirectory.path)
+            let topLevel = report.root.children.compactMap(\.container)
+            XCTAssertTrue(topLevel.allSatisfy { $0 === topLevel[0] })
         }
     }
 

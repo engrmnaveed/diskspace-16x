@@ -53,10 +53,29 @@ final class ExcludeRulesTests: XCTestCase {
 final class EntryOrderTests: XCTestCase {
     private func entry(_ name: String, allocated: UInt64, logical: UInt64, items: UInt64 = 0) -> ScanEntry {
         ScanEntry(
-            path: "/r/" + name, name: name, isDirectory: items > 0, isHardLinkAlias: false,
+            path: "/r/" + name, isDirectory: items > 0, isHardLinkAlias: false,
             isCloudOnly: false, isPending: false, logicalBytes: logical, allocatedBytes: allocated,
             itemCount: items, children: []
         )
+    }
+
+    func testBuildsPathsAndComparesTheirBytesWithoutStoringThem() {
+        let entry = { (path: String) in
+            ScanEntry(
+                path: path, isDirectory: false, isHardLinkAlias: false, isCloudOnly: false,
+                isPending: false, logicalBytes: 0, allocatedBytes: 0, itemCount: 0, children: []
+            )
+        }
+        XCTAssertEqual(entry("/").path, "/")
+        XCTAssertEqual(entry("/r").path, "/r")
+        XCTAssertEqual(entry("/r").name, "r")
+        XCTAssertEqual(entry("/r/a b").path, "/r/a b")
+        // "/r/a b" sorts before "/r/a/x" bytewise, because a space precedes a slash.
+        XCTAssertTrue(entry("/r/a b").pathPrecedes(entry("/r/a/x")))
+        XCTAssertFalse(entry("/r/a/x").pathPrecedes(entry("/r/a b")))
+        XCTAssertTrue(entry("/r").pathPrecedes(entry("/r/a")))
+        XCTAssertTrue(entry("/a").pathPrecedes(entry("/b")))
+        XCTAssertFalse(entry("/b").pathPrecedes(entry("/b")))
     }
 
     func testOrdersBySizeItemsAndNameWithPathTies() {

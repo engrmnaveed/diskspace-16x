@@ -138,12 +138,14 @@ private struct Traversal {
 
     mutating func scan(path: String, rootName: String) throws -> ScanReport {
         try checkCancellation()
+        // The folder holding the scope. A scan of "/" has none, and its root's name is "/".
+        let rootContainer = path == "/" ? nil : ScanLocation(path: parentPath(of: path))
         let rootIsProvider = MetadataAccess.isProviderPath(path)
         let expected: stat
         do {
             expected = try readMetadata(path: path, name: path, parent: nil, isProvider: rootIsProvider)
         } catch let error as MetadataUnavailable {
-            return unavailableRoot(path: path, name: rootName, error: error)
+            return unavailableRoot(path: path, name: rootName, container: rootContainer, error: error)
         } catch let problem as DirectoryFailure {
             throw ScanFailure(path: path, reason: problem.message)
         }
@@ -159,22 +161,22 @@ private struct Traversal {
         visited = 1
         reportProgress(at: path, force: true)
         if isCloudReference(expected) {
-            return ScanReport(root: directoryEntry(path: path, name: rootName, cloudOnly: true), issues: [])
+            return ScanReport(root: directoryEntry(name: rootName, container: rootContainer, cloudOnly: true), issues: [])
         }
         let rootListing: DirectoryListing
         do {
             rootListing = try readDirectory(path: path, name: path, parent: nil, expected: expected)
         } catch let error as MetadataUnavailable {
-            return unavailableRoot(path: path, name: rootName, error: error)
+            return unavailableRoot(path: path, name: rootName, container: rootContainer, error: error)
         } catch let problem as DirectoryFailure {
             if problem.isCloudOnly {
-                return ScanReport(root: directoryEntry(path: path, name: rootName, cloudOnly: true), issues: [])
+                return ScanReport(root: directoryEntry(name: rootName, container: rootContainer, cloudOnly: true), issues: [])
             }
             throw ScanFailure(path: path, reason: problem.message)
         }
         if let error = rootListing.error {
             if error.isCloudOnly {
-                return ScanReport(root: directoryEntry(path: path, name: rootName, cloudOnly: true), issues: [])
+                return ScanReport(root: directoryEntry(name: rootName, container: rootContainer, cloudOnly: true), issues: [])
             }
             throw ScanFailure(path: path, reason: error.message)
         }
@@ -189,6 +191,7 @@ private struct Traversal {
         var stack = [DirectoryFrame(
             path: path,
             name: rootName,
+            container: rootContainer,
             directory: rootListing.directory,
             names: rootListing.names
         )]
@@ -250,7 +253,7 @@ private struct Traversal {
                     continue
                 }
                 if isCloudReference(metadata) {
-                    let entry = directoryEntry(path: childPath, name: name.displayName, cloudOnly: true)
+                    let entry = directoryEntry(name: name.displayName, container: stack[level].location, cloudOnly: true)
                     add(entry, to: &stack[level], parentDepth: level)
                     continue
                 }
@@ -270,7 +273,7 @@ private struct Traversal {
                 }
                 #endif
                 if let depthLimit, level + 1 >= depthLimit {
-                    stack[level].add(directoryEntry(path: childPath, name: name.displayName, pending: true))
+                    stack[level].add(directoryEntry(name: name.displayName, container: stack[level].location, pending: true))
                     continue
                 }
                 let identity = FileIdentity(metadata)
@@ -288,7 +291,8 @@ private struct Traversal {
                     }
                     ancestors.insert(identity)
                     stack.append(DirectoryFrame(
-                        path: childPath, name: name.displayName, directory: listing.directory, names: listing.names
+                        path: childPath, name: name.displayName, container: stack[level].location,
+                        directory: listing.directory, names: listing.names
                     ))
                 } catch is CancellationError {
                     throw CancellationError()
@@ -297,11 +301,11 @@ private struct Traversal {
                     if !cloudOnly {
                         issues.append(ScanIssue(path: childPath, error: error))
                     }
-                    let entry = directoryEntry(path: childPath, name: name.displayName, cloudOnly: cloudOnly)
+                    let entry = directoryEntry(name: name.displayName, container: stack[level].location, cloudOnly: cloudOnly)
                     add(entry, to: &stack[level], parentDepth: level)
                 }
             case mode_t(S_IFREG):
-                let entry = file(name: name.displayName, path: childPath, metadata: metadata)
+                let entry = file(name: name.displayName, in: stack[level].location, path: childPath, metadata: metadata)
                 add(entry, to: &stack[level], parentDepth: level)
             default:
                 // Symlinks, sockets, pipes, and device nodes have no counted bytes.
@@ -312,9 +316,11 @@ private struct Traversal {
         preconditionFailure("Traversal must finish at the root directory.")
     }
 
-    private func unavailableRoot(path: String, name: String, error: MetadataUnavailable) -> ScanReport {
+    private func unavailableRoot(
+        path: String, name: String, container: ScanLocation?, error: MetadataUnavailable
+    ) -> ScanReport {
         ScanReport(
-            root: directoryEntry(path: path, name: name),
+            root: directoryEntry(name: name, container: container),
             issues: [ScanIssue(path: path, message: error.localizedDescription)]
         )
     }
@@ -342,7 +348,7 @@ private struct Traversal {
         }
     }
 
-    private mutating func file(name: String, path: String, metadata: stat) -> ScanEntry {
+    private mutating func file(name: String, in folder: ScanLocation, path: String, metadata: stat) -> ScanEntry {
         let cloudOnly = isCloudReference(metadata)
         // An unseen deeper path can own the inode. Defer these bytes until the full
         // depth-first traversal assigns each hard link to its deterministic owner.
@@ -358,7 +364,7 @@ private struct Traversal {
             issues.append(ScanIssue(path: path, message: "Allocated size exceeds the supported byte range."))
         }
         return ScanEntry(
-            path: path, name: name, isDirectory: false, isHardLinkAlias: isAlias,
+            name: name, container: folder, isDirectory: false, isHardLinkAlias: isAlias,
             isCloudOnly: cloudOnly, isPending: pending,
             logicalBytes: logical, allocatedBytes: overflow ? .max : allocated, itemCount: 0, children: []
         )
@@ -623,7 +629,7 @@ private extension ScanEntry {
             pending = pending || entry.isPending
         }
         return ScanEntry(
-            path: path, name: name, isDirectory: true, isHardLinkAlias: false,
+            name: name, container: container, isDirectory: true, isHardLinkAlias: false,
             isCloudOnly: false, isPending: pending, logicalBytes: logical,
             allocatedBytes: allocated, itemCount: items, children: children
         )
@@ -633,6 +639,9 @@ private extension ScanEntry {
 private struct DirectoryFrame {
     let path: String
     let name: String
+    /// The folder holding this one, and the location this folder's children share.
+    let container: ScanLocation?
+    let location: ScanLocation
     let directory: DirectoryHandle
     let names: [DirectoryName]
     private var nextIndex = 0
@@ -645,15 +654,20 @@ private struct DirectoryFrame {
 
     var entry: ScanEntry {
         ScanEntry(
-            path: path, name: name, isDirectory: true, isHardLinkAlias: false,
+            name: name, container: container, isDirectory: true, isHardLinkAlias: false,
             isCloudOnly: false, isPending: isPending,
             logicalBytes: logical, allocatedBytes: allocated, itemCount: items, children: children
         )
     }
 
-    init(path: String, name: String, directory: DirectoryHandle, names: [DirectoryName]) {
+    init(
+        path: String, name: String, container: ScanLocation?, directory: DirectoryHandle,
+        names: [DirectoryName]
+    ) {
         self.path = path
         self.name = name
+        self.container = container
+        self.location = ScanLocation(path: path)
         self.directory = directory
         self.names = names
     }
@@ -676,9 +690,11 @@ private struct DirectoryFrame {
     }
 }
 
-private func directoryEntry(path: String, name: String, cloudOnly: Bool = false, pending: Bool = false) -> ScanEntry {
+private func directoryEntry(
+    name: String, container: ScanLocation?, cloudOnly: Bool = false, pending: Bool = false
+) -> ScanEntry {
     ScanEntry(
-        path: path, name: name, isDirectory: true, isHardLinkAlias: false,
+        name: name, container: container, isDirectory: true, isHardLinkAlias: false,
         isCloudOnly: cloudOnly, isPending: pending,
         logicalBytes: 0, allocatedBytes: 0, itemCount: 0, children: []
     )
@@ -691,6 +707,14 @@ private extension UInt64 {
         let (sum, overflow) = addingReportingOverflow(entry.itemCount == .max ? .max : entry.itemCount + 1)
         return overflow ? .max : sum
     }
+}
+
+/// The folder that holds `path`, which is absolute and has no trailing separator. The
+/// separator is found by byte, since a name can begin with a combining mark.
+func parentPath(of path: String) -> String {
+    let bytes = path.utf8
+    guard let slash = bytes.lastIndex(of: 0x2F), slash != bytes.startIndex else { return "/" }
+    return String(decoding: bytes[..<slash], as: UTF8.self)
 }
 
 /// The traversal keeps one directory descriptor open per level. launchd starts GUI apps

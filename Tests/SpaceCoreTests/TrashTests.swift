@@ -4,7 +4,7 @@ import XCTest
 final class TrashTests: XCTestCase {
     private func file(_ path: String, _ bytes: UInt64, alias: Bool = false, cloud: Bool = false) -> ScanEntry {
         ScanEntry(
-            path: path, name: String(path.split(separator: "/").last!), isDirectory: false,
+            path: path, isDirectory: false,
             isHardLinkAlias: alias, isCloudOnly: cloud, isPending: false,
             logicalBytes: alias ? 0 : bytes * 2, allocatedBytes: alias ? 0 : bytes,
             itemCount: 0, children: []
@@ -13,7 +13,7 @@ final class TrashTests: XCTestCase {
 
     private func folder(_ path: String, _ children: [ScanEntry], pending: Bool = false) -> ScanEntry {
         ScanEntry(
-            path: path, name: String(path.split(separator: "/").last ?? "/"), isDirectory: true,
+            path: path, isDirectory: true,
             isHardLinkAlias: false, isCloudOnly: false, isPending: pending,
             logicalBytes: children.reduce(0) { $0 + $1.logicalBytes },
             allocatedBytes: children.reduce(0) { $0 + $1.allocatedBytes },

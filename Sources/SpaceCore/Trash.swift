@@ -83,7 +83,7 @@ extension ScanEntry {
             }
         }
         return ScanEntry(
-            path: path, name: name, isDirectory: isDirectory, isHardLinkAlias: isHardLinkAlias,
+            name: name, container: container, isDirectory: isDirectory, isHardLinkAlias: isHardLinkAlias,
             isCloudOnly: isCloudOnly, isPending: isPending,
             logicalBytes: logical, allocatedBytes: allocated, itemCount: items, children: kept
         )
