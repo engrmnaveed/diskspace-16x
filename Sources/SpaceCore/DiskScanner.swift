@@ -17,41 +17,54 @@ public struct ScanFailure: LocalizedError, Sendable {
 }
 
 /// Reads directory entries and file metadata. Each scan uses its own traversal state.
+///
+/// A scan reads several directories at once in a task group, one directory per child
+/// task. The scan's own task decides which directory comes next, keeps the results,
+/// reports progress, and publishes previews. Results are assembled depth first, which is
+/// also where each hard-linked file is assigned to its first path, so the report doesn't
+/// depend on which directory finished first.
 public enum DiskScanner {
+    /// Directories read at once: one per core, up to 8.
+    static let defaultConcurrency = max(1, min(ProcessInfo.processInfo.activeProcessorCount, 8))
+
     public static func scan(
         path: String,
         excludes: ExcludeRules = ExcludeRules(),
         progress: (@Sendable (ScanProgress) -> Void)? = nil,
         preview: (@Sendable (ScanReport) -> Void)? = nil,
         isCancelled: @escaping @Sendable () -> Bool = { false }
-    ) throws -> ScanReport {
+    ) async throws -> ScanReport {
+        try await scan(
+            path: path, excludes: excludes, concurrency: defaultConcurrency,
+            progress: progress, preview: preview, isCancelled: isCancelled
+        )
+    }
+
+    /// `onRead` runs in each directory's task before it reads, for tests.
+    static func scan(
+        path: String,
+        excludes: ExcludeRules = ExcludeRules(),
+        concurrency: Int,
+        progress: (@Sendable (ScanProgress) -> Void)? = nil,
+        preview: (@Sendable (ScanReport) -> Void)? = nil,
+        isCancelled: @escaping @Sendable () -> Bool = { false },
+        onRead: (@Sendable () -> Void)? = nil
+    ) async throws -> ScanReport {
         let (scope, rootName) = try normalized(path)
         raiseOpenFileLimit()
-
-        do {
-            return try withDatalessMaterializationDisabled {
-                let metadata = MetadataAccess(isCancelled: isCancelled)
-                var updates: PreviewUpdates?
-                if let preview {
-                    var discovery = Traversal(
-                        depthLimit: 2, excludes: excludes, metadata: metadata, isCancelled: isCancelled
-                    )
-                    let initial = try discovery.scan(path: scope, rootName: rootName)
-                    guard initial.root.isPending else { return initial }
-                    preview(ScanReport(
-                        root: initial.root, issues: initial.issues, isPreview: true,
-                        excludedCount: initial.excludedCount
-                    ))
-                    updates = PreviewUpdates(root: initial.root, callback: preview)
-                }
-                var scan = Traversal(
-                    progress: progress, previewUpdates: updates, excludes: excludes,
-                    metadata: metadata, isCancelled: isCancelled
-                )
-                return try scan.scan(path: scope, rootName: rootName)
-            }
-        } catch let error as DatalessPolicyError {
-            throw ScanFailure(path: scope, reason: error.localizedDescription)
+        let start = try Walk.start(
+            scope: scope, rootName: rootName, excludes: excludes, excludeRoot: nil,
+            isCancelled: isCancelled, onRead: onRead
+        )
+        switch start {
+        case .finished(let report):
+            return report
+        case .walk(let walk, let root):
+            if preview == nil { progress?(ScanProgress(visitedEntries: 1, currentPath: scope)) }
+            let coordinator = Coordinator(
+                walk: walk, concurrency: concurrency, progress: progress, preview: preview
+            )
+            return try await coordinator.run(root: root)
         }
     }
 
@@ -66,23 +79,26 @@ public enum DiskScanner {
         excludes: ExcludeRules = ExcludeRules(),
         progress: (@Sendable (ScanProgress) -> Void)? = nil,
         isCancelled: @escaping @Sendable () -> Bool = { false }
-    ) throws -> ScanReport {
+    ) async throws -> ScanReport {
         let (scope, name) = try normalized(folder)
         let (base, _) = try normalized(root)
         guard scope == base || scope.hasPrefix(base == "/" ? "/" : base + "/") else {
             throw ScanFailure(path: scope, reason: "The folder isn't inside the scanned folder.")
         }
         raiseOpenFileLimit()
-        do {
-            return try withDatalessMaterializationDisabled {
-                var scan = Traversal(
-                    progress: progress, excludes: excludes, excludeRoot: base,
-                    metadata: MetadataAccess(isCancelled: isCancelled), isCancelled: isCancelled
-                )
-                return try scan.scan(path: scope, rootName: name)
-            }
-        } catch let error as DatalessPolicyError {
-            throw ScanFailure(path: scope, reason: error.localizedDescription)
+        let start = try Walk.start(
+            scope: scope, rootName: name, excludes: excludes, excludeRoot: base,
+            isCancelled: isCancelled, onRead: nil
+        )
+        switch start {
+        case .finished(let report):
+            return report
+        case .walk(let walk, let job):
+            progress?(ScanProgress(visitedEntries: 1, currentPath: scope))
+            let coordinator = Coordinator(
+                walk: walk, concurrency: defaultConcurrency, progress: progress, preview: nil
+            )
+            return try await coordinator.run(root: job)
         }
     }
 
@@ -102,50 +118,107 @@ public enum DiskScanner {
     }
 }
 
-private struct Traversal {
-    let progress: (@Sendable (ScanProgress) -> Void)?
-    let isCancelled: @Sendable () -> Bool
-    let depthLimit: Int?
+/// One directory waiting to be read.
+private struct Job: Sendable {
+    let path: String
+    let name: String
+    let identity: FileIdentity
+    /// The open parent directory. Children are opened relative to it, so a renamed or
+    /// replaced ancestor can't redirect the scan. The root arrives already listed.
+    let parent: DirectoryHandle?
+    let listing: DirectoryListing?
+    let depth: Int
+    /// Identities of the directories above this one, to skip loops.
+    let ancestors: [FileIdentity]
+    /// The folder holding this one.
+    let container: ScanLocation?
+}
+
+/// What one directory's task read.
+private struct DirectoryResult: Sendable {
+    let name: String
+    let container: ScanLocation?
+    /// The location this directory's children share.
+    let location: ScanLocation
+    var isCloudOnly = false
+    var children: [RawChild] = []
+    var subjobs: [Job] = []
+    var issues: [ScanIssue] = []
+    var excluded: UInt64 = 0
+    var visited: UInt64 = 0
+    var hasLinks = false
+}
+
+private enum RawChild: Sendable {
+    case entry(ScanEntry)
+    /// A file with more than one hard link, counted only at its first path.
+    case linked(ScanEntry, FileIdentity)
+    /// A subdirectory, by its index among the result's new jobs.
+    case folder(Int, name: String)
+}
+
+/// The rules every directory task follows, shared read-only.
+private struct Walk: Sendable {
+    enum Start {
+        case finished(ScanReport)
+        case walk(Walk, Job)
+    }
+
     let excludes: ExcludeRules
     /// The path exclude patterns are relative to. A folder rescan keeps the original
     /// scan root, so anchored patterns such as `/build` still apply there.
-    let excludeRoot: String?
+    let excludeBase: String
+    let rootDevice: dev_t
+    #if os(macOS)
+    let startupVolume: StartupVolume?
+    #endif
     let metadata: MetadataAccess
-    private var previewUpdates: PreviewUpdates?
-    private var issues: [ScanIssue] = []
-    private var excludedCount: UInt64 = 0
-    private var hardLinks: Set<FileIdentity> = []
-    private var visited: UInt64 = 0
-    private var lastProgress: UInt64 = 0
+    let isCancelled: @Sendable () -> Bool
+    let onRead: (@Sendable () -> Void)?
 
-    init(
-        progress: (@Sendable (ScanProgress) -> Void)? = nil,
-        depthLimit: Int? = nil,
-        previewUpdates: PreviewUpdates? = nil,
-        excludes: ExcludeRules,
-        excludeRoot: String? = nil,
-        metadata: MetadataAccess,
-        isCancelled: @escaping @Sendable () -> Bool
-    ) {
-        self.progress = progress
-        self.depthLimit = depthLimit
-        self.excludes = excludes
-        self.excludeRoot = excludeRoot
-        self.previewUpdates = previewUpdates
-        self.metadata = metadata
-        self.isCancelled = isCancelled
+    /// Reads the root, which must be a readable directory, or returns the whole report
+    /// when the root is cloud-only or its provider doesn't respond.
+    static func start(
+        scope path: String, rootName: String, excludes: ExcludeRules, excludeRoot: String?,
+        isCancelled: @escaping @Sendable () -> Bool, onRead: (@Sendable () -> Void)?
+    ) throws -> Start {
+        do {
+            return try withDatalessMaterializationDisabled {
+                try startUnchecked(
+                    scope: path, rootName: rootName, excludes: excludes, excludeRoot: excludeRoot,
+                    isCancelled: isCancelled, onRead: onRead
+                )
+            }
+        } catch let error as DatalessPolicyError {
+            throw ScanFailure(path: path, reason: error.localizedDescription)
+        }
     }
 
-    mutating func scan(path: String, rootName: String) throws -> ScanReport {
-        try checkCancellation()
+    private static func startUnchecked(
+        scope path: String, rootName: String, excludes: ExcludeRules, excludeRoot: String?,
+        isCancelled: @escaping @Sendable () -> Bool, onRead: (@Sendable () -> Void)?
+    ) throws -> Start {
+        if isCancelled() || Task.isCancelled { throw CancellationError() }
+        let metadata = MetadataAccess(isCancelled: isCancelled)
         // The folder holding the scope. A scan of "/" has none, and its root's name is "/".
         let rootContainer = path == "/" ? nil : ScanLocation(path: parentPath(of: path))
         let rootIsProvider = MetadataAccess.isProviderPath(path)
+        func unavailable(_ error: MetadataUnavailable) -> Start {
+            .finished(ScanReport(
+                root: directoryEntry(name: rootName, container: rootContainer),
+                issues: [ScanIssue(path: path, message: error.localizedDescription)]
+            ))
+        }
+        let cloudRoot = Start.finished(ScanReport(
+            root: directoryEntry(name: rootName, container: rootContainer, cloudOnly: true), issues: []
+        ))
         let expected: stat
         do {
-            expected = try readMetadata(path: path, name: path, parent: nil, isProvider: rootIsProvider)
+            expected = try readMetadata(
+                metadata, path: path, name: path, parent: nil, isProvider: rootIsProvider
+            )
         } catch let error as MetadataUnavailable {
-            return unavailableRoot(path: path, name: rootName, container: rootContainer, error: error)
+            return unavailable(error)
         } catch let problem as DirectoryFailure {
             throw ScanFailure(path: path, reason: problem.message)
         }
@@ -157,91 +230,113 @@ private struct Traversal {
         default:
             throw ScanFailure(path: path, reason: "Choose a directory.")
         }
-
-        visited = 1
-        reportProgress(at: path, force: true)
-        if isCloudReference(expected) {
-            return ScanReport(root: directoryEntry(name: rootName, container: rootContainer, cloudOnly: true), issues: [])
-        }
-        let rootListing: DirectoryListing
+        if isCloudReference(expected) { return cloudRoot }
+        let identity = FileIdentity(expected)
+        let listing: DirectoryListing
         do {
-            rootListing = try readDirectory(path: path, name: path, parent: nil, expected: expected)
+            listing = try readDirectory(metadata, path: path, name: path, parent: nil, expected: identity)
         } catch let error as MetadataUnavailable {
-            return unavailableRoot(path: path, name: rootName, container: rootContainer, error: error)
+            return unavailable(error)
         } catch let problem as DirectoryFailure {
-            if problem.isCloudOnly {
-                return ScanReport(root: directoryEntry(name: rootName, container: rootContainer, cloudOnly: true), issues: [])
-            }
+            if problem.isCloudOnly { return cloudRoot }
             throw ScanFailure(path: path, reason: problem.message)
         }
-        if let error = rootListing.error {
-            if error.isCloudOnly {
-                return ScanReport(root: directoryEntry(name: rootName, container: rootContainer, cloudOnly: true), issues: [])
-            }
+        if let error = listing.error {
+            if error.isCloudOnly { return cloudRoot }
             throw ScanFailure(path: path, reason: error.message)
         }
-
-        let rootDevice = expected.st_dev
         #if os(macOS)
-        let canonicalScope = path == "/" ? "/" : try? canonicalDirectoryPath(parent: rootListing.directory.descriptor, name: ".")
-        let startupVolume = canonicalScope
-            .flatMap { StartupVolume(scope: path, canonicalScope: $0) }
+        let canonicalScope = path == "/" ? "/" : try? canonicalDirectoryPath(parent: listing.directory.descriptor, name: ".")
+        let startupVolume = canonicalScope.flatMap { StartupVolume(scope: path, canonicalScope: $0) }
         #endif
-        var ancestors = Set([FileIdentity(expected)])
-        var stack = [DirectoryFrame(
-            path: path,
-            name: rootName,
-            container: rootContainer,
-            directory: rootListing.directory,
-            names: rootListing.names
-        )]
+        #if os(macOS)
+        let walk = Walk(
+            excludes: excludes, excludeBase: excludeRoot ?? path, rootDevice: expected.st_dev,
+            startupVolume: startupVolume,
+            metadata: metadata, isCancelled: isCancelled, onRead: onRead
+        )
+        #else
+        let walk = Walk(
+            excludes: excludes, excludeBase: excludeRoot ?? path, rootDevice: expected.st_dev,
+            metadata: metadata, isCancelled: isCancelled, onRead: onRead
+        )
+        #endif
+        let root = Job(
+            path: path, name: rootName, identity: identity, parent: nil, listing: listing,
+            depth: 0, ancestors: [], container: rootContainer
+        )
+        return .walk(walk, root)
+    }
 
-        // A frame keeps the directory open while its children are inspected relative to it.
-        while let level = stack.indices.last {
-            try checkCancellation()
-            guard let name = stack[level].nextName() else {
-                let finished = stack.removeLast()
-                let entry = finished.entry
-                if finished.didOverflow {
-                    issues.append(ScanIssue(path: entry.path, message: "Directory totals exceed the supported byte range."))
+    /// Lists one directory and reads its children's metadata, with cloud downloads
+    /// turned off for this thread. A task's body doesn't suspend, so it stays on one
+    /// thread throughout.
+    func read(_ job: Job) throws -> DirectoryResult {
+        do {
+            return try withDatalessMaterializationDisabled { try readUnchecked(job) }
+        } catch let error as DatalessPolicyError {
+            throw ScanFailure(path: job.path, reason: error.localizedDescription)
+        }
+    }
+
+    private func readUnchecked(_ job: Job) throws -> DirectoryResult {
+        onRead?()
+        try checkCancellation()
+        var result = DirectoryResult(
+            name: job.name, container: job.container, location: ScanLocation(path: job.path)
+        )
+        let listing: DirectoryListing
+        if let prepared = job.listing {
+            listing = prepared
+        } else {
+            do {
+                listing = try Self.readDirectory(
+                    metadata, path: job.path, name: job.name, parent: job.parent, expected: job.identity
+                )
+                if let error = listing.error {
+                    if error.isCloudOnly { throw error }
+                    result.issues.append(ScanIssue(path: job.path, error: error))
                 }
-                guard let parent = stack.indices.last else {
-                    reportProgress(at: path, force: true)
-                    try checkCancellation()
-                    return ScanReport(root: entry, issues: issues, excludedCount: excludedCount)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                let cloudOnly = (error as? DirectoryFailure)?.isCloudOnly == true
+                if !cloudOnly {
+                    result.issues.append(ScanIssue(path: job.path, error: error))
                 }
-                ancestors.remove(finished.directory.identity)
-                add(entry, to: &stack[parent], parentDepth: parent)
-                continue
+                result.isCloudOnly = cloudOnly
+                return result
             }
+        }
 
-            let parentPath = stack[level].path
-            let childPath = parentPath == "/" ? "/" + name.displayName : parentPath + "/" + name.displayName
-            let base = excludeRoot ?? path
+        let parent = listing.directory
+        let chain = job.ancestors + [job.identity]
+        for name in listing.names {
+            try checkCancellation()
+            let childPath = job.path == "/" ? "/" + name.displayName : job.path + "/" + name.displayName
             let relative: [UInt8]? = excludes.isEmpty || !name.isUTF8
                 ? nil
-                : Array(childPath.utf8.dropFirst(base == "/" ? 1 : base.utf8.count + 1))
+                : Array(childPath.utf8.dropFirst(excludeBase == "/" ? 1 : excludeBase.utf8.count + 1))
             if let relative, excludes.matchesAnyType(relative: relative, name: Array(name.displayName.utf8)) {
-                excludedCount += 1
+                result.excluded += 1
                 continue
             }
-            visited += 1
-            reportProgress(at: childPath)
+            result.visited += 1
             guard name.isUTF8 else {
-                issues.append(ScanIssue(path: childPath, message: "Skipped a filename that is not valid UTF-8. Its bytes are percent-encoded here."))
+                result.issues.append(ScanIssue(path: childPath, message: "Skipped a filename that is not valid UTF-8. Its bytes are percent-encoded here."))
                 continue
             }
 
-            let parent = stack[level].directory
             let metadata: stat
             do {
-                metadata = try readMetadata(
-                    path: childPath, name: name.displayName, parent: parent, isProvider: parent.isProvider
+                metadata = try Self.readMetadata(
+                    self.metadata, path: childPath, name: name.displayName, parent: parent,
+                    isProvider: parent.isProvider
                 )
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                issues.append(ScanIssue(path: childPath, error: error))
+                result.issues.append(ScanIssue(path: childPath, error: error))
                 continue
             }
             guard metadata.st_dev == rootDevice else { continue }
@@ -249,12 +344,12 @@ private struct Traversal {
             switch metadata.st_mode & mode_t(S_IFMT) {
             case mode_t(S_IFDIR):
                 if let relative, excludes.matchesDirectory(relative: relative, name: Array(name.displayName.utf8)) {
-                    excludedCount += 1
+                    result.excluded += 1
                     continue
                 }
                 if isCloudReference(metadata) {
-                    let entry = directoryEntry(name: name.displayName, container: stack[level].location, cloudOnly: true)
-                    add(entry, to: &stack[level], parentDepth: level)
+                    let entry = directoryEntry(name: name.displayName, container: result.location, cloudOnly: true)
+                    result.children.append(.entry(entry))
                     continue
                 }
                 #if os(macOS)
@@ -267,66 +362,58 @@ private struct Traversal {
                     } catch is CancellationError {
                         throw CancellationError()
                     } catch {
-                        issues.append(ScanIssue(path: childPath, error: error))
+                        result.issues.append(ScanIssue(path: childPath, error: error))
                         continue
                     }
                 }
                 #endif
-                if let depthLimit, level + 1 >= depthLimit {
-                    stack[level].add(directoryEntry(name: name.displayName, container: stack[level].location, pending: true))
-                    continue
-                }
                 let identity = FileIdentity(metadata)
-                guard !ancestors.contains(identity) else {
-                    issues.append(ScanIssue(path: childPath, message: "Skipped a directory that points back to an ancestor."))
+                guard !chain.contains(identity) else {
+                    result.issues.append(ScanIssue(path: childPath, message: "Skipped a directory that points back to an ancestor."))
                     continue
                 }
-                do {
-                    let listing = try readDirectory(
-                        path: childPath, name: name.displayName, parent: parent, expected: metadata
-                    )
-                    if let error = listing.error {
-                        if error.isCloudOnly { throw error }
-                        issues.append(ScanIssue(path: childPath, error: error))
-                    }
-                    ancestors.insert(identity)
-                    stack.append(DirectoryFrame(
-                        path: childPath, name: name.displayName, container: stack[level].location,
-                        directory: listing.directory, names: listing.names
-                    ))
-                } catch is CancellationError {
-                    throw CancellationError()
-                } catch {
-                    let cloudOnly = (error as? DirectoryFailure)?.isCloudOnly == true
-                    if !cloudOnly {
-                        issues.append(ScanIssue(path: childPath, error: error))
-                    }
-                    let entry = directoryEntry(name: name.displayName, container: stack[level].location, cloudOnly: cloudOnly)
-                    add(entry, to: &stack[level], parentDepth: level)
-                }
+                result.children.append(.folder(result.subjobs.count, name: name.displayName))
+                result.subjobs.append(Job(
+                    path: childPath, name: name.displayName, identity: identity, parent: parent,
+                    listing: nil, depth: job.depth + 1, ancestors: chain, container: result.location
+                ))
             case mode_t(S_IFREG):
-                let entry = file(name: name.displayName, in: stack[level].location, path: childPath, metadata: metadata)
-                add(entry, to: &stack[level], parentDepth: level)
+                let child = file(name: name.displayName, in: result.location, path: childPath, metadata: metadata, issues: &result.issues)
+                if case .linked = child { result.hasLinks = true }
+                result.children.append(child)
             default:
                 // Symlinks, sockets, pipes, and device nodes have no counted bytes.
                 continue
             }
         }
-
-        preconditionFailure("Traversal must finish at the root directory.")
+        return result
     }
 
-    private func unavailableRoot(
-        path: String, name: String, container: ScanLocation?, error: MetadataUnavailable
-    ) -> ScanReport {
-        ScanReport(
-            root: directoryEntry(name: name, container: container),
-            issues: [ScanIssue(path: path, message: error.localizedDescription)]
+    private func file(
+        name: String, in folder: ScanLocation, path: String, metadata: stat, issues: inout [ScanIssue]
+    ) -> RawChild {
+        let cloudOnly = isCloudReference(metadata)
+        let logical = cloudOnly ? 0 : UInt64(max(0, metadata.st_size))
+        // st_blocks is expressed in 512-byte units on both supported platforms.
+        let blocks = cloudOnly ? 0 : UInt64(max(0, metadata.st_blocks))
+        let (allocated, overflow) = blocks.multipliedReportingOverflow(by: 512)
+        if overflow {
+            issues.append(ScanIssue(path: path, message: "Allocated size exceeds the supported byte range."))
+        }
+        let entry = ScanEntry(
+            name: name, container: folder, isDirectory: false, isHardLinkAlias: false,
+            isCloudOnly: cloudOnly, isPending: false,
+            logicalBytes: logical, allocatedBytes: overflow ? .max : allocated, itemCount: 0, children: []
         )
+        // Another path may own this inode. The depth-first assembly picks the first one.
+        if !cloudOnly && metadata.st_nlink > 1 { return .linked(entry, FileIdentity(metadata)) }
+        return .entry(entry)
     }
 
-    private func readMetadata(path: String, name: String, parent: DirectoryHandle?, isProvider: Bool) throws -> stat {
-        try metadata.perform(at: path, isProvider: isProvider) { _ in
+    private static func readMetadata(
+        _ access: MetadataAccess, path: String, name: String, parent: DirectoryHandle?, isProvider: Bool
+    ) throws -> stat {
+        try access.perform(at: path, isProvider: isProvider) { _ in
             var value = stat()
             let result = name.withCString { rawPath in
                 if let parent { return fstatat(parent.descriptor, rawPath, &value, AT_SYMLINK_NOFOLLOW) }
@@ -337,9 +424,11 @@ private struct Traversal {
         }
     }
 
-    private func readDirectory(path: String, name: String, parent: DirectoryHandle?, expected: stat) throws -> DirectoryListing {
+    private static func readDirectory(
+        _ access: MetadataAccess, path: String, name: String, parent: DirectoryHandle?, expected: FileIdentity
+    ) throws -> DirectoryListing {
         let isProvider = parent?.isProvider == true || MetadataAccess.isProviderPath(path)
-        return try metadata.perform(at: path, isProvider: isProvider) { check in
+        return try access.perform(at: path, isProvider: isProvider) { check in
             let directory = try DirectoryHandle(
                 parent: parent?.descriptor ?? AT_FDCWD, name: name, expected: expected, isProvider: isProvider
             )
@@ -348,49 +437,299 @@ private struct Traversal {
         }
     }
 
-    private mutating func file(name: String, in folder: ScanLocation, path: String, metadata: stat) -> ScanEntry {
-        let cloudOnly = isCloudReference(metadata)
-        // An unseen deeper path can own the inode. Defer these bytes until the full
-        // depth-first traversal assigns each hard link to its deterministic owner.
-        let pending = depthLimit != nil && metadata.st_nlink > 1 && !cloudOnly
-        let isAlias = !cloudOnly && !pending && metadata.st_nlink > 1
-            && !hardLinks.insert(FileIdentity(metadata)).inserted
-        let excluded = cloudOnly || pending || isAlias
-        let logical = excluded ? 0 : UInt64(max(0, metadata.st_size))
-        // st_blocks is expressed in 512-byte units on both supported platforms.
-        let blocks = excluded ? 0 : UInt64(max(0, metadata.st_blocks))
-        let (allocated, overflow) = blocks.multipliedReportingOverflow(by: 512)
-        if overflow {
-            issues.append(ScanIssue(path: path, message: "Allocated size exceeds the supported byte range."))
-        }
-        return ScanEntry(
-            name: name, container: folder, isDirectory: false, isHardLinkAlias: isAlias,
-            isCloudOnly: cloudOnly, isPending: pending,
-            logicalBytes: logical, allocatedBytes: overflow ? .max : allocated, itemCount: 0, children: []
-        )
-    }
-
-    private mutating func add(_ entry: ScanEntry, to parent: inout DirectoryFrame, parentDepth: Int) {
-        parent.add(entry)
-        if parentDepth < 2, previewUpdates?.record(entry, in: parent.path) == true {
-            previewUpdates?.publishIfReady(issues: issues, excludedCount: excludedCount)
-        }
-    }
-
-    private func checkCancellation() throws {
+    func checkCancellation() throws {
         if isCancelled() || Task.isCancelled {
             throw CancellationError()
         }
     }
+}
 
-    private mutating func reportProgress(at path: String, force: Bool = false) {
-        guard progress != nil || previewUpdates != nil else { return }
+/// A directory's read result, kept until its folder is assembled.
+private struct Record {
+    let name: String
+    let container: ScanLocation?
+    let location: ScanLocation
+    let isCloudOnly: Bool
+    let children: [RawChild]
+    /// The index of the first job this directory added.
+    let firstJob: Int
+}
+
+/// The scan's own task: schedules directory tasks, keeps their results, reports
+/// progress and previews, and assembles the report. It reads the root and its folders
+/// first, so a preview can show two levels, then everything below, newest first, which
+/// keeps the walk close to depth first and the number of open directories small.
+private final class Coordinator {
+    private let walk: Walk
+    private let concurrency: Int
+    private let progress: (@Sendable (ScanProgress) -> Void)?
+    private let preview: (@Sendable (ScanReport) -> Void)?
+
+    private var records: [Record?] = [nil]
+    private var depths: [Int] = [0]
+    /// The second-level folder each job belongs to.
+    private var segments: [Int?] = [nil]
+    /// Second-level folders with jobs still running or waiting.
+    private var outstanding: [Int: Int] = [:]
+    /// Finished second-level folders without hard links, assembled once.
+    private var finished: [Int: ScanEntry] = [:]
+    private var linkedSegments: Set<Int> = []
+    private var issues: [ScanIssue] = []
+    private var excluded: UInt64 = 0
+    private var visited: UInt64 = 1
+    private var currentPath: String
+    private var lastProgress: UInt64 = 0
+    /// With previews, progress starts once the two-level preview is out.
+    private var reportsProgress: Bool
+
+    init(
+        walk: Walk, concurrency: Int,
+        progress: (@Sendable (ScanProgress) -> Void)?, preview: (@Sendable (ScanReport) -> Void)?
+    ) {
+        self.walk = walk
+        self.concurrency = max(1, concurrency)
+        self.progress = progress
+        self.preview = preview
+        self.currentPath = ""
+        self.reportsProgress = preview == nil
+    }
+
+    func run(root: Job) async throws -> ScanReport {
+        let scope = root.path
+        currentPath = scope
+        var shallow: [(Int, Job)] = [(0, root)]
+        var nextShallow = 0
+        var deep: [(Int, Job)] = []
+        var open = preview == nil
+        var published: UInt64?
+        var changed = false
+        let walk = self.walk
+        try await withThrowingTaskGroup(of: (Int, DirectoryResult).self) { group in
+            var running = 0
+            while true {
+                while running < concurrency {
+                    let next: (Int, Job)
+                    if nextShallow < shallow.count {
+                        next = shallow[nextShallow]
+                        nextShallow += 1
+                    } else if open, let job = deep.popLast() {
+                        next = job
+                    } else {
+                        break
+                    }
+                    let (index, job) = next
+                    group.addTask { (index, try walk.read(job)) }
+                    running += 1
+                }
+                if running == 0 {
+                    guard !open else { break }
+                    // The root and its folders are read. Show them before going deeper.
+                    // Jobs queued so far are in name order, so the first comes out first.
+                    open = true
+                    deep.reverse()
+                    if let preview, !deep.isEmpty {
+                        published = DispatchTime.now().uptimeNanoseconds
+                        preview(snapshot())
+                        try walk.checkCancellation()
+                        reportsProgress = true
+                        report(force: true)
+                    }
+                    continue
+                }
+                guard let (index, result) = try await group.next() else { break }
+                running -= 1
+                let (added, segmentDone) = store(result, at: index)
+                for (jobIndex, job) in added where job.depth < 2 {
+                    shallow.append((jobIndex, job))
+                }
+                let deeper = added.filter { $0.1.depth >= 2 }
+                // Once open, the stack takes each directory's first child first.
+                deep.append(contentsOf: open ? deeper.reversed() : deeper)
+                changed = changed || segmentDone
+                report(force: false)
+                if let preview, changed, let last = published, running + deep.count > 0,
+                   DispatchTime.now().uptimeNanoseconds - last >= 400_000_000 {
+                    changed = false
+                    published = DispatchTime.now().uptimeNanoseconds
+                    preview(snapshot())
+                }
+            }
+        }
+        try walk.checkCancellation()
+        let (rootEntry, overflowed) = compose(from: 0, preview: false, consume: true)
+        issues += overflowed
+        currentPath = scope
+        report(force: true)
+        return ScanReport(root: rootEntry, issues: issues.sorted(by: pathOrder), excludedCount: excluded)
+    }
+
+    /// Keeps a result and numbers the jobs it added. Returns them and whether this
+    /// finished a second-level folder.
+    private func store(_ result: DirectoryResult, at index: Int) -> ([(Int, Job)], Bool) {
+        let firstJob = records.count
+        records[index] = Record(
+            name: result.name, container: result.container, location: result.location,
+            isCloudOnly: result.isCloudOnly, children: result.children, firstJob: firstJob
+        )
+        var added: [(Int, Job)] = []
+        added.reserveCapacity(result.subjobs.count)
+        for job in result.subjobs {
+            let jobIndex = records.count
+            records.append(nil)
+            depths.append(job.depth)
+            switch job.depth {
+            case ..<2:
+                segments.append(nil)
+            case 2:
+                segments.append(jobIndex)
+                outstanding[jobIndex] = 1
+            default:
+                let segment = segments[index]!
+                segments.append(segment)
+                outstanding[segment, default: 0] += 1
+            }
+            added.append((jobIndex, job))
+        }
+        issues += result.issues
+        excluded += result.excluded
+        visited += result.visited
+        currentPath = result.location.path
+
+        guard let segment = segments[index] else { return (added, false) }
+        if result.hasLinks { linkedSegments.insert(segment) }
+        let remaining = outstanding[segment, default: 1] - 1
+        guard remaining == 0 else {
+            outstanding[segment] = remaining
+            return (added, false)
+        }
+        outstanding[segment] = nil
+        // Without hard links, the folder doesn't depend on anything else in the scan.
+        if !linkedSegments.contains(segment) {
+            let (entry, overflowed) = compose(from: segment, preview: false, consume: true)
+            finished[segment] = entry
+            issues += overflowed
+        }
+        return (added, true)
+    }
+
+    private func report(force: Bool) {
+        guard reportsProgress, let progress else { return }
         let now = DispatchTime.now().uptimeNanoseconds
         guard force || now - lastProgress >= 100_000_000 else { return }
         lastProgress = now
-        progress?(ScanProgress(visitedEntries: visited, currentPath: path))
-        previewUpdates?.publishIfReady(issues: issues, excludedCount: excludedCount)
+        progress(ScanProgress(visitedEntries: visited, currentPath: currentPath))
     }
+
+    private func snapshot() -> ScanReport {
+        let (root, _) = compose(from: 0, preview: true, consume: false)
+        return ScanReport(
+            root: root, issues: issues.sorted(by: pathOrder), isPreview: true, excludedCount: excluded
+        )
+    }
+
+    /// Builds the folder for record `start` and everything below it, depth first. A
+    /// preview shows second-level folders that aren't finished as pending, and so are
+    /// hard-linked files that such a folder might own. Returns the folder and issues for
+    /// folders whose totals exceed the byte range.
+    private func compose(from start: Int, preview: Bool, consume: Bool) -> (ScanEntry, [ScanIssue]) {
+        var seen = Set<FileIdentity>()
+        var pendingBefore = false
+        var overflowed: [ScanIssue] = []
+        var stack = [Frame(index: start)]
+        while let top = stack.last {
+            guard let record = records[top.index] else {
+                preconditionFailure("A folder is assembled only after its directory is read.")
+            }
+            guard top.next < record.children.count else {
+                let frame = stack.removeLast()
+                let entry = ScanEntry(
+                    name: record.name, container: record.container, isDirectory: true,
+                    isHardLinkAlias: false, isCloudOnly: record.isCloudOnly, isPending: frame.isPending,
+                    logicalBytes: frame.logical, allocatedBytes: frame.allocated,
+                    itemCount: frame.items, children: frame.children
+                )
+                if frame.didOverflow {
+                    overflowed.append(ScanIssue(path: entry.path, message: "Directory totals exceed the supported byte range."))
+                }
+                if consume { records[frame.index] = nil }
+                guard !stack.isEmpty else { return (entry, overflowed) }
+                stack[stack.count - 1].add(entry)
+                continue
+            }
+            let child = record.children[top.next]
+            stack[stack.count - 1].next += 1
+            switch child {
+            case .entry(let entry):
+                stack[stack.count - 1].add(entry)
+            case .linked(let entry, let identity):
+                if !seen.insert(identity).inserted {
+                    stack[stack.count - 1].add(entry.uncounted(alias: true))
+                } else if pendingBefore {
+                    stack[stack.count - 1].add(entry.uncounted(alias: false))
+                } else {
+                    stack[stack.count - 1].add(entry)
+                }
+            case .folder(let offset, let name):
+                let job = record.firstJob + offset
+                if let entry = finished[job] {
+                    stack[stack.count - 1].add(entry)
+                } else if preview && (depths[job] == 2 && outstanding[job] != nil || records[job] == nil) {
+                    pendingBefore = true
+                    stack[stack.count - 1].add(directoryEntry(name: name, container: record.location, pending: true))
+                } else {
+                    stack.append(Frame(index: job))
+                }
+            }
+        }
+        preconditionFailure("Assembly finishes at the starting folder.")
+    }
+}
+
+/// A folder being assembled.
+private struct Frame {
+    let index: Int
+    var next = 0
+    var children: [ScanEntry] = []
+    var logical: UInt64 = 0
+    var allocated: UInt64 = 0
+    var items: UInt64 = 0
+    var isPending = false
+    var didOverflow = false
+
+    init(index: Int) {
+        self.index = index
+    }
+
+    mutating func add(_ entry: ScanEntry) {
+        isPending = isPending || entry.isPending
+        let (newLogical, logicalOverflow) = logical.addingReportingOverflow(entry.logicalBytes)
+        let (newAllocated, allocatedOverflow) = allocated.addingReportingOverflow(entry.allocatedBytes)
+        logical = logicalOverflow ? .max : newLogical
+        allocated = allocatedOverflow ? .max : newAllocated
+        didOverflow = didOverflow || logicalOverflow || allocatedOverflow
+        items = items.addingCounted(entry)
+        children.append(entry)
+    }
+}
+
+private extension ScanEntry {
+    /// This file without its bytes: an alias of a file counted at another path, or a
+    /// link whose first path isn't known yet.
+    func uncounted(alias: Bool) -> ScanEntry {
+        ScanEntry(
+            name: name, container: container, isDirectory: false, isHardLinkAlias: alias,
+            isCloudOnly: false, isPending: !alias, logicalBytes: 0, allocatedBytes: 0,
+            itemCount: 0, children: []
+        )
+    }
+}
+
+/// Orders issues by path, comparing components as a depth-first walk visits them, then
+/// by message.
+private func pathOrder(_ left: ScanIssue, _ right: ScanIssue) -> Bool {
+    guard left.path != right.path else { return left.message < right.message }
+    let components = { (path: String) in path.utf8.lazy.map { $0 == 0x2F ? 0 : $0 } }
+    return components(left.path).lexicographicallyPrecedes(components(right.path))
 }
 
 #if os(macOS)
@@ -450,7 +789,7 @@ func canonicalDirectoryPath(parent: Int32, name: String) throws -> String {
 }
 #endif
 
-private struct FileIdentity: Equatable, Hashable {
+private struct FileIdentity: Equatable, Hashable, Sendable {
     let device: dev_t
     let inode: ino_t
 
@@ -512,7 +851,7 @@ private final class DirectoryHandle: @unchecked Sendable {
     let identity: FileIdentity
     let isProvider: Bool
 
-    init(parent: Int32, name: String, expected: stat, isProvider: Bool) throws {
+    init(parent: Int32, name: String, expected: FileIdentity, isProvider: Bool) throws {
         let descriptor = name.withCString { openat(parent, $0, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC) }
         guard descriptor >= 0 else {
             throw DirectoryFailure(operation: "Opening directory", code: errno)
@@ -526,7 +865,7 @@ private final class DirectoryHandle: @unchecked Sendable {
             throw DirectoryFailure(operation: "Reading directory metadata", code: errno)
         }
         let identity = FileIdentity(actual)
-        guard identity == FileIdentity(expected) else {
+        guard identity == expected else {
             throw DirectoryFailure(operation: "Reopening directory after its identity changed", code: ESTALE)
         }
         guard let stream = fdopendir(descriptor) else {
@@ -568,125 +907,6 @@ private final class DirectoryHandle: @unchecked Sendable {
         }
         names.sort { $0.displayName.utf8.lexicographicallyPrecedes($1.displayName.utf8) }
         return (names, error)
-    }
-}
-
-/// Publishes completed branches against the shallow tree. Snapshots reuse finished
-/// subtrees and never copy or walk the full tree to report progress.
-private struct PreviewUpdates {
-    private var root: ScanEntry
-    private let callback: @Sendable (ScanReport) -> Void
-    private var unresolvedPaths: Set<String> = []
-    private var replacements: [String: [String: ScanEntry]] = [:]
-    private var lastPublication = DispatchTime.now().uptimeNanoseconds
-
-    init(root: ScanEntry, callback: @escaping @Sendable (ScanReport) -> Void) {
-        self.root = root
-        self.callback = callback
-        for child in root.children where child.isPending {
-            unresolvedPaths.insert(child.path)
-            for grandchild in child.children where grandchild.isPending {
-                unresolvedPaths.insert(grandchild.path)
-            }
-        }
-    }
-
-    mutating func record(_ entry: ScanEntry, in parent: String) -> Bool {
-        guard unresolvedPaths.remove(entry.path) != nil else { return false }
-        replacements[parent, default: [:]][entry.path] = entry
-        return true
-    }
-
-    mutating func publishIfReady(issues: [ScanIssue], excludedCount: UInt64) {
-        guard !replacements.isEmpty else { return }
-        let now = DispatchTime.now().uptimeNanoseconds
-        guard now - lastPublication >= 400_000_000 else { return }
-        let direct = replacements[root.path] ?? [:]
-        let children = root.children.map { child in
-            if let finished = direct[child.path] { return finished }
-            guard let nested = replacements[child.path] else { return child }
-            return child.withChildren(child.children.map { nested[$0.path] ?? $0 })
-        }
-        root = root.withChildren(children)
-        replacements.removeAll(keepingCapacity: true)
-        lastPublication = now
-        callback(ScanReport(root: root, issues: issues, isPreview: true, excludedCount: excludedCount))
-    }
-}
-
-private extension ScanEntry {
-    func withChildren(_ children: [ScanEntry]) -> ScanEntry {
-        var logical: UInt64 = 0
-        var allocated: UInt64 = 0
-        var items: UInt64 = 0
-        var pending = false
-        for entry in children {
-            let (nextLogical, logicalOverflow) = logical.addingReportingOverflow(entry.logicalBytes)
-            let (nextAllocated, allocatedOverflow) = allocated.addingReportingOverflow(entry.allocatedBytes)
-            logical = logicalOverflow ? .max : nextLogical
-            allocated = allocatedOverflow ? .max : nextAllocated
-            items = items.addingCounted(entry)
-            pending = pending || entry.isPending
-        }
-        return ScanEntry(
-            name: name, container: container, isDirectory: true, isHardLinkAlias: false,
-            isCloudOnly: false, isPending: pending, logicalBytes: logical,
-            allocatedBytes: allocated, itemCount: items, children: children
-        )
-    }
-}
-
-private struct DirectoryFrame {
-    let path: String
-    let name: String
-    /// The folder holding this one, and the location this folder's children share.
-    let container: ScanLocation?
-    let location: ScanLocation
-    let directory: DirectoryHandle
-    let names: [DirectoryName]
-    private var nextIndex = 0
-    private var logical: UInt64 = 0
-    private var allocated: UInt64 = 0
-    private var items: UInt64 = 0
-    private var children: [ScanEntry] = []
-    private(set) var didOverflow = false
-    private var isPending = false
-
-    var entry: ScanEntry {
-        ScanEntry(
-            name: name, container: container, isDirectory: true, isHardLinkAlias: false,
-            isCloudOnly: false, isPending: isPending,
-            logicalBytes: logical, allocatedBytes: allocated, itemCount: items, children: children
-        )
-    }
-
-    init(
-        path: String, name: String, container: ScanLocation?, directory: DirectoryHandle,
-        names: [DirectoryName]
-    ) {
-        self.path = path
-        self.name = name
-        self.container = container
-        self.location = ScanLocation(path: path)
-        self.directory = directory
-        self.names = names
-    }
-
-    mutating func nextName() -> DirectoryName? {
-        guard nextIndex < names.count else { return nil }
-        defer { nextIndex += 1 }
-        return names[nextIndex]
-    }
-
-    mutating func add(_ entry: ScanEntry) {
-        isPending = isPending || entry.isPending
-        let (newLogical, logicalOverflow) = logical.addingReportingOverflow(entry.logicalBytes)
-        let (newAllocated, allocatedOverflow) = allocated.addingReportingOverflow(entry.allocatedBytes)
-        logical = logicalOverflow ? .max : newLogical
-        allocated = allocatedOverflow ? .max : newAllocated
-        didOverflow = didOverflow || logicalOverflow || allocatedOverflow
-        items = items.addingCounted(entry)
-        children.append(entry)
     }
 }
 

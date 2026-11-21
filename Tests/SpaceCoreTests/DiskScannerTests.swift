@@ -45,15 +45,15 @@ final class DiskScannerTests: XCTestCase {
         XCTAssertEqual(try canonicalDirectoryPath(parent: mount, name: "."), data)
     }
 
-    func testOrdinaryDirectoryWithStartupVolumeLayoutCountsBothTrees() throws {
-        try withFixture { root in
+    func testOrdinaryDirectoryWithStartupVolumeLayoutCountsBothTrees() async throws {
+        try await withFixture { root in
             let users = try makeDirectory("Users", under: root)
             let dataUsers = root.appendingPathComponent("System/Volumes/Data/Users", isDirectory: true)
             try FileManager.default.createDirectory(at: dataUsers, withIntermediateDirectories: true)
             let visible = try makeFile("payload", bytes: 8_192, under: users)
             let backing = try makeFile("payload", bytes: 8_192, under: dataUsers)
 
-            let report = try DiskScanner.scan(path: root.path, preview: { _ in })
+            let report = try await DiskScanner.scan(path: root.path, preview: { _ in })
 
             XCTAssertFalse(report.isPartial)
             XCTAssertEqual(report.root.allocatedBytes, try allocatedBytes(of: visible) + allocatedBytes(of: backing))
@@ -61,8 +61,8 @@ final class DiskScannerTests: XCTestCase {
     }
     #endif
 
-    func testCountsRegularFileMetadataAndKeepsHardLinkOwnershipAtFirstPath() throws {
-        try withFixture { root in
+    func testCountsRegularFileMetadataAndKeepsHardLinkOwnershipAtFirstPath() async throws {
+        try await withFixture { root in
             let firstDirectory = try makeDirectory("a-first", under: root)
             let lastDirectory = try makeDirectory("z-last", under: root)
             let original = try makeFile("original.dat", bytes: 3_017, under: lastDirectory)
@@ -75,7 +75,7 @@ final class DiskScannerTests: XCTestCase {
             let pipe = root.appendingPathComponent("pipe")
             XCTAssertEqual(pipe.path.withCString { mkfifo($0, 0o600) }, 0)
 
-            let report = try DiskScanner.scan(path: root.path)
+            let report = try await DiskScanner.scan(path: root.path)
             let counted = try XCTUnwrap(report.root.children.first { $0.name == "a-first" })
             let uncounted = try XCTUnwrap(report.root.children.first { $0.name == "z-last" })
             let originalEntry = try XCTUnwrap(uncounted.children.first)
@@ -101,15 +101,15 @@ final class DiskScannerTests: XCTestCase {
         }
     }
 
-    func testSparseFileReportsLogicalAndAllocatedBytesSeparately() throws {
-        try withFixture { root in
+    func testSparseFileReportsLogicalAndAllocatedBytesSeparately() async throws {
+        try await withFixture { root in
             let file = try makeFile("sparse.img", bytes: 0, under: root)
             let handle = try FileHandle(forWritingTo: file)
             let logical: UInt64 = 64 * 1_024 * 1_024
             try handle.truncate(atOffset: logical)
             try handle.close()
 
-            let report = try DiskScanner.scan(path: root.path)
+            let report = try await DiskScanner.scan(path: root.path)
 
             XCTAssertEqual(report.root.logicalBytes, logical)
             XCTAssertEqual(report.root.allocatedBytes, try allocatedBytes(of: file))
@@ -119,8 +119,8 @@ final class DiskScannerTests: XCTestCase {
         }
     }
 
-    func testRankedFilesRespectLimitsMetricsAndPathTiesAcrossFolders() throws {
-        try withFixture { root in
+    func testRankedFilesRespectLimitsMetricsAndPathTiesAcrossFolders() async throws {
+        try await withFixture { root in
             let subfolder = try makeDirectory("nested", under: root)
             let fixtures = [
                 try makeFile("b.dat", bytes: 16, under: root),
@@ -130,7 +130,7 @@ final class DiskScannerTests: XCTestCase {
                 try makeFile("mid.dat", bytes: 32, under: root),
                 try makeFile("empty.dat", bytes: 0, under: root),
             ]
-            let report = try DiskScanner.scan(path: root.path)
+            let report = try await DiskScanner.scan(path: root.path)
             let sortedLogical = [fixtures[3], fixtures[4], fixtures[1], fixtures[0], fixtures[2], fixtures[5]].map(\.path)
             let sortedAllocated = try fixtures.map { ($0.path, try allocatedBytes(of: $0)) }.sorted {
                 $0.1 == $1.1 ? $0.0.utf8.lexicographicallyPrecedes($1.0.utf8) : $0.1 > $1.1
@@ -146,29 +146,30 @@ final class DiskScannerTests: XCTestCase {
         }
     }
 
-    func testDoesNotChooseASymlinkOrAFileAsRoot() throws {
-        try withFixture { root in
+    func testDoesNotChooseASymlinkOrAFileAsRoot() async throws {
+        try await withFixture { root in
             let file = try makeFile("file", bytes: 1, under: root)
             let directory = try makeDirectory("target", under: root)
             let link = root.appendingPathComponent("link")
             try FileManager.default.createSymbolicLink(at: link, withDestinationURL: directory)
 
             for path in [file.path, link.path, link.path + "/", root.path + "/missing", "", "bad\0path"] {
-                XCTAssertThrowsError(try DiskScanner.scan(path: path)) { error in
+                await assertThrowsAsync(try await DiskScanner.scan(path: path)) { error in
                     XCTAssertTrue(error is ScanFailure)
                 }
             }
-            XCTAssertEqual(try DiskScanner.scan(path: directory.path + "/./").root.path, directory.path)
+            let trailing = try await DiskScanner.scan(path: directory.path + "/./")
+            XCTAssertEqual(trailing.root.path, directory.path)
         }
     }
 
-    func testAcceptsPathComponentsThatBeginWithACombiningMark() throws {
-        try withFixture { root in
+    func testAcceptsPathComponentsThatBeginWithACombiningMark() async throws {
+        try await withFixture { root in
             let name = "\u{0301}target"
             let directory = try makeDirectory(name, under: root)
             _ = try makeFile("payload", bytes: 1, under: directory)
 
-            let report = try DiskScanner.scan(path: directory.path)
+            let report = try await DiskScanner.scan(path: directory.path)
 
             XCTAssertEqual(report.root.path, directory.path)
             XCTAssertEqual(report.root.name, name)
@@ -176,16 +177,16 @@ final class DiskScannerTests: XCTestCase {
         }
     }
 
-    func testUnreadableDescendantIsPartialAndUnreadableRootIsFatal() throws {
+    func testUnreadableDescendantIsPartialAndUnreadableRootIsFatal() async throws {
         guard geteuid() != 0 else { throw XCTSkip("Root can read mode-000 directories.") }
-        try withFixture { root in
+        try await withFixture { root in
             _ = try makeFile("visible", bytes: 11, under: root)
             let restricted = try makeDirectory("restricted", under: root)
             _ = try makeFile("secret", bytes: 17, under: restricted)
             XCTAssertEqual(restricted.path.withCString { chmod($0, 0) }, 0)
             defer { _ = restricted.path.withCString { chmod($0, 0o700) } }
 
-            let report = try DiskScanner.scan(path: root.path)
+            let report = try await DiskScanner.scan(path: root.path)
 
             XCTAssertTrue(report.isPartial)
             XCTAssertEqual(report.root.logicalBytes, 11)
@@ -194,15 +195,15 @@ final class DiskScannerTests: XCTestCase {
             XCTAssertEqual(report.issues.map(\.kind), [.permissionDenied])
             XCTAssertEqual(report.protectedIssues.count, 1)
             XCTAssertTrue(report.errorIssues.isEmpty)
-            XCTAssertThrowsError(try DiskScanner.scan(path: restricted.path)) { error in
+            await assertThrowsAsync(try await DiskScanner.scan(path: restricted.path)) { error in
                 XCTAssertTrue(error is ScanFailure)
             }
         }
     }
 
     #if os(Linux)
-    func testUndecodablePOSIXFilenameProducesEscapedIssue() throws {
-        try withFixture { root in
+    func testUndecodablePOSIXFilenameProducesEscapedIssue() async throws {
+        try await withFixture { root in
             _ = try makeFile("visible", bytes: 11, under: root)
             let directory = root.path.withCString { open($0, O_RDONLY | O_DIRECTORY) }
             guard directory >= 0 else {
@@ -216,7 +217,7 @@ final class DiskScannerTests: XCTestCase {
             _ = close(file)
             defer { name.withUnsafeBufferPointer { _ = unlinkat(directory, $0.baseAddress!, 0) } }
 
-            let report = try DiskScanner.scan(path: root.path)
+            let report = try await DiskScanner.scan(path: root.path)
 
             XCTAssertTrue(report.isPartial)
             XCTAssertEqual(report.root.children.map(\.name), ["visible"])
@@ -227,13 +228,13 @@ final class DiskScannerTests: XCTestCase {
     }
     #endif
 
-    func testReportsProgressFromRootThroughFinalCountAndHonorsCancellation() throws {
-        try withFixture { root in
+    func testReportsProgressFromRootThroughFinalCountAndHonorsCancellation() async throws {
+        try await withFixture { root in
             _ = try makeFile("one", bytes: 1, under: root)
             let folder = try makeDirectory("nested", under: root)
             _ = try makeFile("two", bytes: 2, under: folder)
             let progress = ScanRecorder<ScanProgress>()
-            let report = try DiskScanner.scan(path: root.path, progress: progress.record)
+            let report = try await DiskScanner.scan(path: root.path, progress: progress.record)
 
             XCTAssertEqual(report.root.logicalBytes, 3)
             let snapshots = progress.snapshots
@@ -243,7 +244,7 @@ final class DiskScannerTests: XCTestCase {
             XCTAssertEqual(snapshots.map(\.visitedEntries), snapshots.map(\.visitedEntries).sorted())
 
             let cancellation = ScanRecorder<ScanProgress>()
-            XCTAssertThrowsError(try DiskScanner.scan(
+            await assertThrowsAsync(try await DiskScanner.scan(
                 path: root.path, progress: cancellation.record,
                 isCancelled: { !cancellation.snapshots.isEmpty }
             )) { error in
@@ -252,8 +253,8 @@ final class DiskScannerTests: XCTestCase {
         }
     }
 
-    func testPreviewShowsTwoLevelsWithoutCountingUnresolvedHardLinks() throws {
-        try withFixture { root in
+    func testPreviewShowsTwoLevelsWithoutCountingUnresolvedHardLinks() async throws {
+        try await withFixture { root in
             let first = try makeDirectory("a-first", under: root)
             let boundary = try makeDirectory("nested", under: first)
             let deep = try makeFile("deep", bytes: 8_192, under: boundary)
@@ -261,7 +262,7 @@ final class DiskScannerTests: XCTestCase {
             try FileManager.default.linkItem(at: deep, to: root.appendingPathComponent("z-alias"))
             let previews = ScanRecorder<ScanReport>()
 
-            let final = try DiskScanner.scan(path: root.path, preview: previews.record)
+            let final = try await DiskScanner.scan(path: root.path, preview: previews.record)
             let preview = try XCTUnwrap(previews.snapshots.first)
             let firstFolder = try XCTUnwrap(preview.root.children.first)
             let nested = try XCTUnwrap(firstFolder.children.first)
@@ -273,7 +274,7 @@ final class DiskScannerTests: XCTestCase {
             XCTAssertEqual(preview.largestFiles(limit: 10, by: .allocated).map(\.path), [visible.path])
             XCTAssertEqual(preview.root.children.last?.isPending, true)
 
-            let direct = try DiskScanner.scan(path: root.path)
+            let direct = try await DiskScanner.scan(path: root.path)
             XCTAssertFalse(final.isPreview)
             XCTAssertFalse(final.root.isPending)
             XCTAssertEqual(final.root.allocatedBytes, direct.root.allocatedBytes)
@@ -284,20 +285,22 @@ final class DiskScannerTests: XCTestCase {
         }
     }
 
-    func testPreviewUpdatesFinishedFoldersAndKeepsOtherFoldersPending() throws {
-        try withFixture { root in
+    func testPreviewUpdatesFinishedFoldersAndKeepsOtherFoldersPending() async throws {
+        try await withFixture { root in
             for name in ["first", "second"] {
                 let folder = try makeDirectory(name, under: root)
                 let nested = try makeDirectory("nested", under: folder)
                 _ = try makeFile("payload", bytes: 10, under: nested)
             }
             let previews = ScanRecorder<ScanReport>()
-            _ = try DiskScanner.scan(path: root.path, progress: { update in
-                if update.visitedEntries == 1 {
-                    // Let the publication interval elapse before any branch completes.
+            // One directory at a time reads first/nested before second/nested.
+            _ = try await DiskScanner.scan(path: root.path, concurrency: 1, preview: { report in
+                if previews.snapshots.isEmpty {
+                    // Let the publication interval elapse before the first branch completes.
                     Thread.sleep(forTimeInterval: 0.45)
                 }
-            }, preview: previews.record)
+                previews.record(report)
+            })
 
             let refined = try XCTUnwrap(previews.snapshots.dropFirst().first)
             XCTAssertEqual(refined.root.children.first?.children.first?.children.first?.name, "payload")
@@ -307,15 +310,15 @@ final class DiskScannerTests: XCTestCase {
         }
     }
 
-    func testCancellationAfterPreviewStopsBeforeDeepScan() throws {
-        try withFixture { root in
+    func testCancellationAfterPreviewStopsBeforeDeepScan() async throws {
+        try await withFixture { root in
             let folder = try makeDirectory("first", under: root)
             let nested = try makeDirectory("second", under: folder)
             _ = try makeFile("payload", bytes: 10, under: nested)
             let previews = ScanRecorder<ScanReport>()
             let progress = ScanRecorder<ScanProgress>()
 
-            XCTAssertThrowsError(try DiskScanner.scan(
+            await assertThrowsAsync(try await DiskScanner.scan(
                 path: root.path, progress: progress.record, preview: previews.record,
                 isCancelled: { !previews.snapshots.isEmpty }
             )) { error in
@@ -356,8 +359,8 @@ final class DiskScannerTests: XCTestCase {
         XCTAssertEqual(try access.perform(at: "/Local", isProvider: false) { _ in 1 }, 1)
     }
 
-    func testDeepTreeCompletesWhenTheOpenFileLimitStartsAtTheLaunchdDefault() throws {
-        try withFixture { root in
+    func testDeepTreeCompletesWhenTheOpenFileLimitStartsAtTheLaunchdDefault() async throws {
+        try await withFixture { root in
             // Each traversal level keeps a directory open. Go deeper than the 256-descriptor
             // soft limit that launchd gives GUI apps, while staying under PATH_MAX.
             var deepest = root
@@ -371,30 +374,34 @@ final class DiskScannerTests: XCTestCase {
             launchdDefault.rlim_cur = min(256, original.rlim_cur)
             XCTAssertEqual(setrlimit(RLIMIT_NOFILE, &launchdDefault), 0)
 
-            let report = try DiskScanner.scan(path: root.path)
+            let report = try await DiskScanner.scan(path: root.path)
 
             XCTAssertFalse(report.isPartial, "Unexpected issues: \(report.issues.prefix(2).map(\.message))")
             XCTAssertEqual(report.root.allocatedBytes, try allocatedBytes(of: leaf))
         }
     }
 
-    func testScanDisablesCloudMaterializationAndRestoresTheThreadPolicy() throws {
-        try withFixture { root in
+    func testScanDisablesCloudMaterializationAndRestoresTheThreadPolicy() async throws {
+        try await withFixture { root in
+            for name in ["one", "two", "three"] {
+                _ = try makeDirectory(name, under: root)
+            }
             let kind = IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES
             let previous = getiopolicy_np(kind, IOPOL_SCOPE_THREAD)
             let policies = ScanRecorder<Int32>()
-            _ = try DiskScanner.scan(path: root.path, progress: { _ in
+            // Every directory task reads with cloud downloads off on its own thread.
+            _ = try await DiskScanner.scan(path: root.path, concurrency: 4, onRead: {
                 policies.record(getiopolicy_np(kind, IOPOL_SCOPE_THREAD))
             })
 
-            XCTAssertEqual(policies.snapshots, [IOPOL_MATERIALIZE_DATALESS_FILES_OFF, IOPOL_MATERIALIZE_DATALESS_FILES_OFF])
+            XCTAssertEqual(policies.snapshots, Array(repeating: IOPOL_MATERIALIZE_DATALESS_FILES_OFF, count: 4))
             XCTAssertEqual(getiopolicy_np(kind, IOPOL_SCOPE_THREAD), previous)
         }
     }
     #endif
 
-    func testCountsNestedItemsAndLogicalBytesOncePerHardLink() throws {
-        try withFixture { root in
+    func testCountsNestedItemsAndLogicalBytesOncePerHardLink() async throws {
+        try await withFixture { root in
             let one = try makeDirectory("one", under: root)
             let two = try makeDirectory("two", under: one)
             let three = try makeDirectory("three", under: two)
@@ -404,7 +411,7 @@ final class DiskScannerTests: XCTestCase {
             _ = try makeDirectory("empty", under: root)
             XCTAssertEqual(link(c.path, root.appendingPathComponent("zlink").path), 0)
 
-            let report = try DiskScanner.scan(path: root.path)
+            let report = try await DiskScanner.scan(path: root.path)
 
             let oneEntry = try XCTUnwrap(report.root.children.first { $0.name == "one" })
             XCTAssertEqual(oneEntry.itemCount, 5)
@@ -418,8 +425,8 @@ final class DiskScannerTests: XCTestCase {
     }
 
     /// Mirrors `skips_excluded_entries_without_reading_them` in the Rust scanner tests.
-    func testSkipsExcludedEntriesWithoutReadingThem() throws {
-        try withFixture { root in
+    func testSkipsExcludedEntriesWithoutReadingThem() async throws {
+        try await withFixture { root in
             let app = try makeDirectory("app", under: root)
             let package = root.appendingPathComponent("app/node_modules/pkg", isDirectory: true)
             try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
@@ -434,7 +441,7 @@ final class DiskScannerTests: XCTestCase {
             defer { chmod(blocked.path, 0o700) }
             let excludes = try ExcludeRules(patterns: ["node_modules", "*.log", "/cache/", "/private"])
 
-            let report = try DiskScanner.scan(path: root.path, excludes: excludes)
+            let report = try await DiskScanner.scan(path: root.path, excludes: excludes)
 
             XCTAssertTrue(report.issues.isEmpty, "\(report.issues)")
             XCTAssertEqual(report.excludedCount, 4)
@@ -443,18 +450,79 @@ final class DiskScannerTests: XCTestCase {
             XCTAssertEqual(report.root.children.first { $0.name == "app" }?.children.count, 2)
 
             let previews = ScanRecorder<UInt64>()
-            let progressive = try DiskScanner.scan(
+            let progressive = try await DiskScanner.scan(
                 path: root.path, excludes: excludes, preview: { previews.record($0.excludedCount) }
             )
             XCTAssertEqual(progressive.excludedCount, 4)
         }
     }
 
-    private func withFixture(_ body: (URL) throws -> Void) throws {
+    func testParallelScansMatchASingleDirectoryAtATime() async throws {
+        try await withFixture { root in
+            for group in 0..<5 {
+                for folder in 0..<10 {
+                    let inner = root.appendingPathComponent("g\(group)/f\(folder)/inner")
+                    try FileManager.default.createDirectory(at: inner, withIntermediateDirectories: true)
+                    for file in 0..<4 {
+                        _ = try makeFile("\(file).bin", bytes: 1 + 977 * (folder * 4 + file), under: inner)
+                    }
+                }
+            }
+            // The first path in depth-first order owns each hard-linked file.
+            let shared = try makeFile("shared.bin", bytes: 20_000, under: root.appendingPathComponent("g4/f9/inner"))
+            let owner = root.appendingPathComponent("g0/f3/inner/z.bin")
+            try FileManager.default.linkItem(at: shared, to: owner)
+            try FileManager.default.linkItem(at: shared, to: root.appendingPathComponent("g2/f0/link.bin"))
+            let top = try makeFile("top.bin", bytes: 10_000, under: root)
+            let late = root.appendingPathComponent("g1/f5/inner/late.bin")
+            try FileManager.default.linkItem(at: top, to: late)
+
+            let expected = try await DiskScanner.scan(path: root.path, concurrency: 1)
+            let alias = { (report: ScanReport, path: String) -> Bool? in
+                self.entry(at: path, in: report.root)?.isHardLinkAlias
+            }
+            XCTAssertEqual(alias(expected, owner.path), false)
+            XCTAssertEqual(alias(expected, shared.path), true)
+            XCTAssertEqual(alias(expected, late.path), false)
+            XCTAssertEqual(alias(expected, top.path), true)
+            for concurrency in [2, 3, 8] {
+                for _ in 0..<3 {
+                    let report = try await DiskScanner.scan(path: root.path, concurrency: concurrency)
+                    assertSameTree(report.root, expected.root)
+                }
+            }
+        }
+    }
+
+    private func entry(at path: String, in root: ScanEntry) -> ScanEntry? {
+        var current = root
+        while current.path != path {
+            guard let next = current.children.first(where: { path.hasPrefix($0.path + "/") || $0.path == path }) else {
+                return nil
+            }
+            current = next
+        }
+        return current
+    }
+
+    private func assertSameTree(_ left: ScanEntry, _ right: ScanEntry, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(left.path, right.path, file: file, line: line)
+        XCTAssertEqual(left.allocatedBytes, right.allocatedBytes, left.path, file: file, line: line)
+        XCTAssertEqual(left.logicalBytes, right.logicalBytes, left.path, file: file, line: line)
+        XCTAssertEqual(left.itemCount, right.itemCount, left.path, file: file, line: line)
+        XCTAssertEqual(left.isHardLinkAlias, right.isHardLinkAlias, left.path, file: file, line: line)
+        XCTAssertEqual(left.isPending, right.isPending, left.path, file: file, line: line)
+        XCTAssertEqual(left.children.map(\.name), right.children.map(\.name), left.path, file: file, line: line)
+        for (leftChild, rightChild) in zip(left.children, right.children) {
+            assertSameTree(leftChild, rightChild, file: file, line: line)
+        }
+    }
+
+    private func withFixture(_ body: (URL) async throws -> Void) async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("space16x-tests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: folder) }
-        try body(folder)
+        try await body(folder)
     }
 
     private func makeDirectory(_ name: String, under folder: URL) throws -> URL {
@@ -488,5 +556,19 @@ private final class ScanRecorder<Value: Sendable>: @unchecked Sendable {
 
     func record(_ value: Value) {
         lock.withLock { values.append(value) }
+    }
+}
+
+/// XCTAssertThrowsError for expressions that await.
+func assertThrowsAsync<T>(
+    _ expression: @autoclosure () async throws -> T,
+    file: StaticString = #filePath, line: UInt = #line,
+    _ handler: (Error) -> Void = { _ in }
+) async {
+    do {
+        _ = try await expression()
+        XCTFail("Expected an error.", file: file, line: line)
+    } catch {
+        handler(error)
     }
 }
