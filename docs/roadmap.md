@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — Paused for owner review after v0.6.0. Don't start M5 until the owner says so. Milestone 4 (Carry, compare, editions) is complete and published: ncdu export and import in the CLI and the Mac app, `volumes`, the Basic and Pro editions (Pro archives, `install.sh --pro`, Settings → Pro features), and Pro's `diff` and Mac Compare. When M5 resumes, read §5 M5 and put Pro per-node data (mtime, owner, type) in side tables keyed by the arena's `NodeId` under `cli/src/pro/` and in `SpacePro`. Basic's Linux x86-64 archive is about 589 KB against its 600 KB budget.
+**Resume here** — Milestone 5 (Pro analysis, v0.7.0) is in progress. The owner reviewed v0.6.0 and approved M5 and M6 on 2026-11-21. Work one milestone per session: release v0.7.0 when every M5 item has landed and CI on `main` is green, then stop. A fresh session starts M6 (v0.8.0). Everything in M5 is Pro: Rust code goes under `cli/src/pro/` behind the `pro` feature, and Mac code in `SpacePro`, shown when **Settings → Pro features** is on. Pro per-node data (modification time, owner) lives in side tables keyed by the arena's `NodeId`, so Basic's tree and memory don't grow, and Basic only gains hints for the new Pro subcommands and flags. Next: M5.1 on `feature/m5-modified`. Basic's Linux x86-64 archive is about 589 KB against its 600 KB budget.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -44,8 +44,15 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 - [x] M4.6 Promo refresh (an import piped from `ssh` and Pro's Compare, 29 s), manual QA rows, benchmarks and both editions' archive sizes in `docs/qa.md`
 - [x] M4.7 Release v0.6.0
 
+### M5 (v0.7.0) Pro analysis [Pro]
+- [ ] M5.1 Newest modification time: Rust side tables keyed by `NodeId` with each entry's modification time and owner, read by the same `fstatat` and `getattrlistbulk` calls (empty in Basic), a TUI **Modified** column, `newestModified` in Pro JSON, and `scan --older-than DAYS` in `cli/src/pro/`; a Mac **Modified** column with the same rule, and a shared fixture
+- [ ] M5.2 File types: `scan --types N` and the TUI `t` view (the largest types by extension in the open folder) in `cli/src/pro/types.rs`, and a Mac **Types** view in `SpacePro` with the same grouping
+- [ ] M5.3 Owners: `scan --by-owner` (bytes and items per user, names from the user database) in `cli/src/pro/owners.rs`. CLI only: the Mac app scans one user's files.
+- [ ] M5.4 Scan history: `space16x history` (save a scan, list saved scans, compare a folder with its saved scans through `diff`) under `$XDG_STATE_HOME/space16x/history`, and Mac saved scans (**Save to History**, Compare with a saved scan) under `~/Library/Application Support/Space 16X/History`. Only an explicit save writes anything.
+- [ ] M5.5 Promo refresh, manual QA rows, benchmarks and both editions' archive sizes in `docs/qa.md`
+- [ ] M5.6 Release v0.7.0
+
 ### Later milestones
-- [ ] M5 (v0.7) Pro analysis: mtime and `--older-than`, file types, `--by-owner`, history
 - [ ] M6 (v0.8+) Pro deep: explain my disk, smart cleanup, exclusive size, duplicates, HTML report, terminal treemap, Mac menu bar
 
 ## Working agreement
