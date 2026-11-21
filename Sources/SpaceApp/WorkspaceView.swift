@@ -68,6 +68,9 @@ struct WorkspaceView: View {
         .sheet(item: $workspace.explanation) { explanation in
             ExplainDiskView(explanation: explanation)
         }
+        .sheet(isPresented: $workspace.showsReceiptSheet) {
+            ReceiptSheet(workspace: workspace)
+        }
         // Returning from System Settings may have changed Full Disk Access.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             workspace.refreshFullDiskAccess()

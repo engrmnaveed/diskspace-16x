@@ -63,6 +63,8 @@ struct Space16XApp: App {
                         .disabled(!workspace.canCompare)
                     Button("Stop Comparing", action: workspace.stopComparing)
                         .disabled(workspace.comparison == nil)
+                    Button("Save Footprint Receipt…") { workspace.showsReceiptSheet = true }
+                        .disabled(!workspace.canSaveReceipt)
                     Menu("Compare with History") {
                         ForEach(workspace.savedScans) { record in
                             Button(record.date.formatted(date: .abbreviated, time: .shortened)) {

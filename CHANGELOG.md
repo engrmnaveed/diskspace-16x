@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Save Build Footprint receipts in Space 16X Pro on the Mac. While comparing with a saved scan, **Scan → Save Footprint Receipt…** or the receipt button beside the comparison asks what you measured, such as "first Xcode build", and saves a Markdown receipt: both scan times, the totals and item counts, what files gained and lost, and the largest file changes, with paths relative to the scanned folder. It notes partial scans and comparisons of different folders.
 - Watch free space from the menu bar in Space 16X Pro on the Mac. **Settings → Pro features → Show free space in the menu bar** shows the startup disk's free space in the menu bar, with every volume's free space in its menu, and posts one notification when free space drops below the threshold you pick (10 GB by default, or never). It checks once a minute while it's shown and does nothing when it's off.
 - Share a scan as a web page in Space 16X Pro. `space16x scan --html FILE` also writes one self-contained HTML page with the totals, a treemap of the largest items, the scan root's contents, the largest files, file types and, on shared servers, owners. It has no scripts, loads nothing and follows light or dark mode. `--html -` writes only the page to standard output.
 - See a folder as a treemap in the CLI explorer of Space 16X Pro. Press `m` to draw the open folder's contents as boxes in proportion to their size, with the selection highlighted, and `m` again for the list.

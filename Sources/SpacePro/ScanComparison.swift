@@ -38,10 +38,13 @@ public struct ScanComparison: Sendable {
     /// The saved scan's file name.
     public let name: String
     public let baseline: ScanReport
+    /// When the saved scan was made, if known.
+    public let date: Date?
 
-    public init(name: String, baseline: ScanReport) {
+    public init(name: String, baseline: ScanReport, date: Date? = nil) {
         self.name = name
         self.baseline = baseline
+        self.date = date
     }
 
     /// The changes in `folder`, which `names` locate below the current root.
