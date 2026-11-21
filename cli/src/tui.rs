@@ -2,7 +2,7 @@ mod explorer;
 mod ranker;
 mod view;
 
-use crate::scanner::{self, Entry, EntryKind, Event as ScanEvent, Excludes, Report};
+use crate::scanner::{self, EntryKind, Event as ScanEvent, Excludes, Report};
 use crossterm::{
     cursor::Show,
     event::{
@@ -12,7 +12,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use explorer::{Action, Explorer};
+use explorer::{Action, Explorer, TrashItem};
 use ranker::RankWorker;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::{
@@ -87,9 +87,9 @@ pub fn run(path: &Path, excludes: Excludes, plain: bool, read_only: bool) -> io:
                     Action::Trash(items) => {
                         let results = items
                             .into_iter()
-                            .map(|entry| {
-                                let result = move_to_trash(&entry);
-                                (entry, result)
+                            .map(|item| {
+                                let result = move_to_trash(&item);
+                                (item, result)
                             })
                             .collect();
                         explorer.finish_trash(results);
@@ -113,12 +113,12 @@ pub fn run(path: &Path, excludes: Excludes, plain: bool, read_only: bool) -> io:
 
 /// Moves a scanned item to the Trash after checking that it is still the same kind of
 /// item. The check doesn't follow a symbolic link, and the move never does either.
-fn move_to_trash(entry: &Entry) -> io::Result<PathBuf> {
-    let metadata = std::fs::symlink_metadata(&entry.path)?;
-    if metadata.is_dir() != (entry.kind == EntryKind::Directory) {
+fn move_to_trash(item: &TrashItem) -> io::Result<PathBuf> {
+    let metadata = std::fs::symlink_metadata(&item.path)?;
+    if metadata.is_dir() != (item.kind == EntryKind::Directory) {
         return Err(io::Error::other("it changed since the scan"));
     }
-    crate::trash::move_to_trash(&entry.path)
+    crate::trash::move_to_trash(&item.path)
 }
 
 struct TerminalMode;

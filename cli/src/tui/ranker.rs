@@ -1,22 +1,27 @@
 use super::explorer::{LARGEST_LIMIT, Mode, RankKey, Sort};
-use crate::{report::largest_files, scanner::Entry};
+use crate::{
+    report::largest_files,
+    scanner::{Entry, NodeId, Tree},
+};
 use std::{
     io,
-    path::PathBuf,
-    sync::{Arc, Condvar, Mutex, Weak},
+    os::unix::ffi::OsStrExt,
+    sync::{Arc, Condvar, Mutex},
     thread::{self, JoinHandle},
 };
 
 pub(super) struct RankRequest {
     pub(super) key: RankKey,
-    pub(super) source: Arc<Entry>,
+    pub(super) tree: Arc<Tree>,
+    /// The folder to rank, or the whole scan for the largest files.
+    pub(super) scope: NodeId,
 }
 
 pub(super) struct Ranked {
     pub(super) key: RankKey,
-    pub(super) folder: PathBuf,
-    pub(super) snapshot: Weak<Entry>,
-    pub(super) items: Vec<Arc<Entry>>,
+    pub(super) tree: Arc<Tree>,
+    pub(super) folder: NodeId,
+    pub(super) items: Vec<NodeId>,
 }
 
 #[derive(Default)]
@@ -99,44 +104,40 @@ impl Drop for RankWorker {
 
 pub(super) fn rank(request: RankRequest) -> Ranked {
     let RankKey { mode, sort, metric } = request.key;
+    let scope = request.tree.entry(request.scope);
     let items = match mode {
         Mode::Folders => {
-            let mut items = request.source.children.clone();
-            let by_path = |left: &Arc<Entry>, right: &Arc<Entry>| {
-                left.path.as_os_str().cmp(right.path.as_os_str())
+            let mut items: Vec<Entry<'_>> = scope.children().collect();
+            // Siblings share a parent, so their names order them as their paths would.
+            let by_name = |left: &Entry<'_>, right: &Entry<'_>| {
+                left.name().as_bytes().cmp(right.name().as_bytes())
             };
             match sort {
                 Sort::Size => items.sort_unstable_by(|left, right| {
                     metric
-                        .bytes(right)
-                        .cmp(&metric.bytes(left))
-                        .then_with(|| by_path(left, right))
+                        .bytes(*right)
+                        .cmp(&metric.bytes(*left))
+                        .then_with(|| by_name(left, right))
                 }),
                 Sort::Items => items.sort_unstable_by(|left, right| {
                     right
-                        .item_count
-                        .cmp(&left.item_count)
-                        .then_with(|| by_path(left, right))
+                        .item_count()
+                        .cmp(&left.item_count())
+                        .then_with(|| by_name(left, right))
                 }),
                 Sort::Name => items.sort_by_cached_key(|entry| {
-                    let name = entry.path.file_name().unwrap_or(entry.path.as_os_str());
-                    (
-                        name.to_string_lossy().to_lowercase(),
-                        entry.path.as_os_str().to_owned(),
-                    )
+                    let name = entry.name();
+                    (name.to_string_lossy().to_lowercase(), name.to_owned())
                 }),
             }
-            items
+            items.into_iter().map(Entry::id).collect()
         }
-        Mode::Largest => largest_files(&request.source, LARGEST_LIMIT, metric)
-            .into_iter()
-            .cloned()
-            .collect(),
+        Mode::Largest => largest_files(scope, LARGEST_LIMIT, metric),
     };
     Ranked {
         key: request.key,
-        folder: request.source.path.clone(),
-        snapshot: Arc::downgrade(&request.source),
+        folder: request.scope,
+        tree: request.tree,
         items,
     }
 }

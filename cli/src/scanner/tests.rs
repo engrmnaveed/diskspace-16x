@@ -2,6 +2,7 @@ use super::*;
 use std::fs::{self, File};
 use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
 use std::sync::atomic::AtomicU64;
+use std::time::Duration;
 
 static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
 
@@ -43,11 +44,10 @@ impl Drop for Fixture {
     }
 }
 
-fn child<'a>(directory: &'a Entry, name: &str) -> &'a Entry {
+fn child<'a>(directory: Entry<'a>, name: &str) -> Entry<'a> {
     directory
-        .children
-        .iter()
-        .find(|entry| entry.path.file_name().is_some_and(|entry| entry == name))
+        .children()
+        .find(|entry| entry.name() == name)
         .unwrap_or_else(|| panic!("missing child {name}"))
 }
 
@@ -68,22 +68,22 @@ fn counts_metadata_and_hard_links_in_bytewise_order() -> io::Result<()> {
     let report = fixture.report()?;
 
     assert!(report.issues.is_empty());
-    assert_eq!(report.root.children.len(), 3);
-    assert_eq!(report.root.allocated_bytes, file_bytes + hidden_bytes);
-    let counted = child(child(&report.root, "A"), "alias");
-    assert_eq!(counted.state, EntryState::Local);
-    assert_eq!(counted.allocated_bytes, file_bytes);
-    let uncounted = child(child(&report.root, "z"), "original");
-    assert_eq!(uncounted.state, EntryState::HardLinkAlias);
-    assert_eq!(uncounted.allocated_bytes, 0);
+    assert_eq!(report.root().children().count(), 3);
+    assert_eq!(report.root().allocated_bytes(), file_bytes + hidden_bytes);
+    let counted = child(child(report.root(), "A"), "alias");
+    assert_eq!(counted.state(), EntryState::Local);
+    assert_eq!(counted.allocated_bytes(), file_bytes);
+    let uncounted = child(child(report.root(), "z"), "original");
+    assert_eq!(uncounted.state(), EntryState::HardLinkAlias);
+    assert_eq!(uncounted.allocated_bytes(), 0);
     // Apparent sizes and item counts follow the same hard-link rule.
-    assert_eq!(counted.apparent_bytes, 4_097);
-    assert_eq!(uncounted.apparent_bytes, 0);
-    assert_eq!(report.root.apparent_bytes, 4_097 + 13);
+    assert_eq!(counted.apparent_bytes(), 4_097);
+    assert_eq!(uncounted.apparent_bytes(), 0);
+    assert_eq!(report.root().apparent_bytes(), 4_097 + 13);
     // A, A/alias, z and .hidden. The second link and the symlinks aren't items.
-    assert_eq!(report.root.item_count, 4);
-    assert_eq!(child(&report.root, "A").item_count, 1);
-    assert_eq!(child(&report.root, "z").item_count, 0);
+    assert_eq!(report.root().item_count(), 4);
+    assert_eq!(child(report.root(), "A").item_count(), 1);
+    assert_eq!(child(report.root(), "z").item_count(), 0);
     Ok(())
 }
 
@@ -98,13 +98,13 @@ fn counts_nested_items_and_apparent_bytes() -> io::Result<()> {
 
     let report = fixture.report()?;
 
-    let one = child(&report.root, "one");
-    assert_eq!(one.item_count, 5);
-    assert_eq!(one.apparent_bytes, 60);
-    assert_eq!(child(one, "two").item_count, 3);
-    assert_eq!(child(&report.root, "empty").item_count, 0);
-    assert_eq!(report.root.item_count, 7);
-    assert_eq!(report.root.apparent_bytes, 60);
+    let one = child(report.root(), "one");
+    assert_eq!(one.item_count(), 5);
+    assert_eq!(one.apparent_bytes(), 60);
+    assert_eq!(child(one, "two").item_count(), 3);
+    assert_eq!(child(report.root(), "empty").item_count(), 0);
+    assert_eq!(report.root().item_count(), 7);
+    assert_eq!(report.root().apparent_bytes(), 60);
     Ok(())
 }
 
@@ -137,10 +137,10 @@ fn skips_excluded_entries_without_reading_them() -> io::Result<()> {
     assert!(report.issues.is_empty(), "{:?}", report.issues);
     assert_eq!(report.excluded_count, 4);
     // app, app/main.rs and app/cache, a file that the folder-only /cache/ doesn't match.
-    assert_eq!(report.root.item_count, 3);
-    assert_eq!(report.root.apparent_bytes, 17);
-    let app = child(&report.root, "app");
-    assert_eq!(app.children.len(), 2);
+    assert_eq!(report.root().item_count(), 3);
+    assert_eq!(report.root().apparent_bytes(), 17);
+    let app = child(report.root(), "app");
+    assert_eq!(app.children().count(), 2);
     Ok(())
 }
 
@@ -160,9 +160,9 @@ fn does_not_count_sparse_file_length() -> io::Result<()> {
 
     let report = fixture.report()?;
 
-    assert_eq!(report.root.allocated_bytes, metadata.blocks() * 512);
-    assert!(report.root.allocated_bytes < logical);
-    assert_eq!(report.root.apparent_bytes, logical);
+    assert_eq!(report.root().allocated_bytes(), metadata.blocks() * 512);
+    assert!(report.root().allocated_bytes() < logical);
+    assert_eq!(report.root().apparent_bytes(), logical);
     Ok(())
 }
 
@@ -187,7 +187,7 @@ fn ordinary_directory_with_startup_volume_layout_counts_both_trees() -> io::Resu
 
     assert!(report.issues.is_empty());
     assert_eq!(
-        report.root.allocated_bytes,
+        report.root().allocated_bytes(),
         (fs::metadata(visible)?.blocks() + fs::metadata(backing)?.blocks()) * 512
     );
     Ok(())
@@ -212,7 +212,7 @@ fn rejects_non_directory_roots_and_root_symlinks_with_trailing_slash() -> io::Re
         &cancelled,
         |_| {},
     )?;
-    assert_eq!(report.root.path, fixture.join("local"));
+    assert_eq!(report.tree.root_path(), fixture.join("local"));
     Ok(())
 }
 
@@ -243,10 +243,13 @@ fn reports_unreadable_descendants_and_fails_for_an_unreadable_root() -> io::Resu
     assert_eq!(report.issues[0].path, private);
     // A permission refusal is an expected, protected path rather than a scan error.
     assert_eq!(report.issues[0].kind, IssueKind::PermissionDenied);
-    assert_eq!(report.root.state, EntryState::Protected);
-    assert_eq!(child(&report.root, "private").state, EntryState::Protected);
+    assert_eq!(report.root().state(), EntryState::Protected);
     assert_eq!(
-        report.root.allocated_bytes,
+        child(report.root(), "private").state(),
+        EntryState::Protected
+    );
+    assert_eq!(
+        report.root().allocated_bytes(),
         fs::metadata(fixture.join("visible"))?.blocks() * 512
     );
     assert_eq!(failed.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
@@ -266,9 +269,9 @@ fn retains_non_utf8_names_and_counts_their_bytes() -> io::Result<()> {
     let report = fixture.report()?;
 
     assert!(report.issues.is_empty());
-    assert_eq!(report.root.children[0].path, file);
+    assert_eq!(report.root().children().next().unwrap().path(), file);
     assert_eq!(
-        report.root.allocated_bytes,
+        report.root().allocated_bytes(),
         fs::metadata(file)?.blocks() * 512
     );
     Ok(())
@@ -278,6 +281,8 @@ fn retains_non_utf8_names_and_counts_their_bytes() -> io::Result<()> {
 fn previews_leave_deep_and_hard_link_bytes_unassigned_until_dfs() -> io::Result<()> {
     let fixture = Fixture::new()?;
     fs::create_dir_all(fixture.join("A/deeper"))?;
+    // A second pending folder keeps the walk going after A/deeper finishes.
+    fs::create_dir_all(fixture.join("B/more"))?;
     fs::write(fixture.join("A/deeper/payload"), [0x40; 8_000])?;
     fs::hard_link(fixture.join("A/deeper/payload"), fixture.join("z-link"))?;
     let mut snapshots = Vec::new();
@@ -304,33 +309,46 @@ fn previews_leave_deep_and_hard_link_bytes_unassigned_until_dfs() -> io::Result<
 
     let initial = &snapshots[0];
     assert!(initial.is_preview);
-    assert_eq!(initial.root.state, EntryState::Pending);
+    assert_eq!(initial.root().state(), EntryState::Pending);
     assert_eq!(
-        child(child(&initial.root, "A"), "deeper").state,
+        child(child(initial.root(), "A"), "deeper").state(),
         EntryState::Pending
     );
     assert!(
-        child(child(&initial.root, "A"), "deeper")
-            .children
-            .is_empty()
+        child(child(initial.root(), "A"), "deeper")
+            .children()
+            .next()
+            .is_none()
     );
-    assert_eq!(child(&initial.root, "z-link").state, EntryState::Pending);
-    assert_eq!(initial.root.allocated_bytes, 0);
+    assert_eq!(child(initial.root(), "z-link").state(), EntryState::Pending);
+    assert_eq!(initial.root().allocated_bytes(), 0);
 
     let update = &snapshots[1];
     assert!(update.is_preview);
-    let deeper = child(child(&update.root, "A"), "deeper");
-    assert_eq!(deeper.state, EntryState::Local);
-    assert_eq!(child(deeper, "payload").kind, EntryKind::File);
-    assert_eq!(deeper.allocated_bytes, final_report.root.allocated_bytes);
+    let deeper = child(child(update.root(), "A"), "deeper");
+    assert_eq!(deeper.state(), EntryState::Local);
+    assert_eq!(child(deeper, "payload").kind(), EntryKind::File);
+    assert_eq!(
+        deeper.allocated_bytes(),
+        final_report.root().allocated_bytes()
+    );
+    assert_eq!(
+        child(child(update.root(), "B"), "more").state(),
+        EntryState::Pending
+    );
+    // The earlier link in A/deeper is known, so the later one is already an alias.
+    assert_eq!(
+        child(update.root(), "z-link").state(),
+        EntryState::HardLinkAlias
+    );
 
     assert!(!snapshots.last().unwrap().is_preview);
     assert!(Arc::ptr_eq(
-        &snapshots.last().unwrap().root,
-        &final_report.root
+        &snapshots.last().unwrap().tree,
+        &final_report.tree
     ));
     assert_eq!(
-        child(&final_report.root, "z-link").state,
+        child(final_report.root(), "z-link").state(),
         EntryState::HardLinkAlias
     );
     assert_eq!(progress.first().unwrap().1, fixture.path());
@@ -374,12 +392,13 @@ fn keeps_the_most_serious_state_when_merging_skipped_descendants() {
     assert_eq!(Protected.degrade(Local), Protected);
     assert_eq!(Pending.degrade(Incomplete), Pending);
 
-    let protected = empty_directory(PathBuf::from("/a/protected"), Protected);
-    let failed = empty_directory(PathBuf::from("/a/failed"), Incomplete);
-    let (calm, _) = directory_entry(PathBuf::from("/a"), Local, vec![Arc::clone(&protected)]);
-    assert_eq!(calm.state, Protected);
-    let (mixed, _) = directory_entry(PathBuf::from("/a"), Local, vec![protected, failed]);
-    assert_eq!(mixed.state, Incomplete);
+    let mut calm = TreeBuilder::new(PathBuf::from("/a"), Local);
+    calm.folder(b"protected", Protected);
+    assert_eq!(calm.finish().0.root().state(), Protected);
+    let mut mixed = TreeBuilder::new(PathBuf::from("/a"), Local);
+    mixed.folder(b"failed", Incomplete);
+    mixed.folder(b"protected", Protected);
+    assert_eq!(mixed.finish().0.root().state(), Incomplete);
 }
 
 #[test]
@@ -401,22 +420,20 @@ fn rescan_folder(root: &Path, folder: &Path, excludes: &Excludes) -> io::Result<
     rescan(root, folder, excludes, &AtomicBool::new(false), |_| {})
 }
 
-fn assert_same_tree(left: &Entry, right: &Entry) {
-    assert_eq!(left.path, right.path);
+fn assert_same_tree(left: Entry<'_>, right: Entry<'_>) {
+    let path = left.path();
+    assert_eq!(path, right.path());
+    assert_eq!(left.allocated_bytes(), right.allocated_bytes(), "{path:?}");
+    assert_eq!(left.apparent_bytes(), right.apparent_bytes(), "{path:?}");
+    assert_eq!(left.item_count(), right.item_count(), "{path:?}");
+    assert_eq!(left.state(), right.state(), "{path:?}");
+    assert_eq!(left.kind(), right.kind(), "{path:?}");
     assert_eq!(
-        left.allocated_bytes, right.allocated_bytes,
-        "{:?}",
-        left.path
+        left.children().count(),
+        right.children().count(),
+        "{path:?}"
     );
-    assert_eq!(left.apparent_bytes, right.apparent_bytes, "{:?}", left.path);
-    assert_eq!(left.item_count, right.item_count, "{:?}", left.path);
-    assert_eq!(left.state, right.state, "{:?}", left.path);
-    let mut left_children: Vec<_> = left.children.iter().collect();
-    let mut right_children: Vec<_> = right.children.iter().collect();
-    left_children.sort_by(|a, b| a.path.cmp(&b.path));
-    right_children.sort_by(|a, b| a.path.cmp(&b.path));
-    assert_eq!(left_children.len(), right_children.len(), "{:?}", left.path);
-    for (left, right) in left_children.into_iter().zip(right_children) {
+    for (left, right) in left.children().zip(right.children()) {
         assert_same_tree(left, right);
     }
 }
@@ -440,11 +457,11 @@ fn rescanning_a_folder_matches_a_full_scan() -> io::Result<()> {
         .replacing(subtree)
         .expect("the folder is in the report");
 
-    assert_same_tree(&merged.root, &fixture.report()?.root);
+    assert_same_tree(merged.root(), fixture.report()?.root());
     assert!(merged.issues.is_empty());
     // The whole scope can be rescanned too.
     let whole = rescan_folder(fixture.path(), fixture.path(), &Excludes::default())?;
-    assert_same_tree(&before.replacing(whole).unwrap().root, &merged.root);
+    assert_same_tree(before.replacing(whole).unwrap().root(), merged.root());
     Ok(())
 }
 
@@ -468,7 +485,7 @@ fn rescanning_keeps_exclude_patterns_relative_to_the_scan_root() -> io::Result<(
     let subtree = rescan_folder(fixture.path(), &app, &excludes)?;
     assert_eq!(subtree.excluded_count, 1);
     let merged = full.replacing(subtree).unwrap();
-    assert_same_tree(&merged.root, &full.root);
+    assert_same_tree(merged.root(), full.root());
     assert_eq!(merged.excluded_count, 1);
     assert!(rescan_folder(&app, fixture.path(), &excludes).is_err());
     Ok(())
@@ -495,17 +512,17 @@ fn rescanning_recomputes_states_above_the_folder() -> io::Result<()> {
 
     let before = before?;
     assert_eq!(before.issues.len(), 2);
-    assert_eq!(child(&before.root, "sub").state, EntryState::Protected);
+    assert_eq!(child(before.root(), "sub").state(), EntryState::Protected);
     let merged = before.replacing(subtree?).unwrap();
-    let sub = child(&merged.root, "sub");
-    assert_eq!(sub.state, EntryState::Local);
+    let sub = child(merged.root(), "sub");
+    assert_eq!(sub.state(), EntryState::Local);
     assert_eq!(
-        sub.allocated_bytes,
+        sub.allocated_bytes(),
         fs::metadata(private.join("hidden"))?.blocks() * 512
     );
-    assert_eq!(sub.item_count, 2);
+    assert_eq!(sub.item_count(), 2);
     // The unreadable sibling still keeps the scope protected.
-    assert_eq!(merged.root.state, EntryState::Protected);
+    assert_eq!(merged.root().state(), EntryState::Protected);
     assert_eq!(merged.issues.len(), 1);
     assert_eq!(merged.issues[0].path, other);
     Ok(())
@@ -522,21 +539,19 @@ fn replacing_needs_a_folder_in_the_report() -> io::Result<()> {
         &fixture.join("folder"),
         &Excludes::default(),
     )?;
-    let missing = Report {
-        root: Arc::new(Entry {
-            path: fixture.join("gone/folder"),
-            ..Entry::clone(&folder.root)
-        }),
+    let elsewhere = |path: PathBuf| Report {
+        tree: Arc::new(TreeBuilder::new(path, EntryState::Local).finish().0),
         ..folder.clone()
     };
-    assert!(report.replacing(missing).is_none());
-    let file = Report {
-        root: Arc::new(Entry {
-            path: fixture.join("file.bin"),
-            ..Entry::clone(&folder.root)
-        }),
-        ..folder
-    };
-    assert!(report.replacing(file).is_none());
+    assert!(
+        report
+            .replacing(elsewhere(fixture.join("gone/folder")))
+            .is_none()
+    );
+    assert!(
+        report
+            .replacing(elsewhere(fixture.join("file.bin")))
+            .is_none()
+    );
     Ok(())
 }

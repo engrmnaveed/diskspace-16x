@@ -4,9 +4,9 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — M3 (v0.5) Speed is in progress. M3.1 moved the Rust scanner to a flat arena (`cli/src/scanner/tree.rs`) built from per-directory records (`cli/src/scanner/walk.rs`). Next: M3.2 runs that record walk on worker threads with `--threads N`.
 
-**Resume here** — v0.4.0 is published, and Milestone 2 (Act) is complete. Next: start M3 (v0.5) Speed in a new session, after reading its section: lean arena tree, parallel walk `--threads`, Swift TaskGroup walk, 1M-file benchmark. The owner asked for M3 to start in a fresh session.
+**Resume here** — M3 (v0.5) Speed is in progress on `feature/m3-lean-tree` (M3.1). The Rust scanner now builds a flat arena (`cli/src/scanner/tree.rs`) from per-directory records (`cli/src/scanner/walk.rs`). Next: land M3.1, then M3.2 adds worker threads to the same record walk.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -26,8 +26,15 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 - [x] M2.6 Docs (`docs/cli.md`, README, CHANGELOG, manual QA rows for Trash; check on a Mac whether Finder offers Put Back for items moved with `trashItem` and document the answer) and the promo refresh showing Move to Trash
 - [x] M2.7 Release v0.4.0
 
+### M3 (v0.5.0) Speed [Basic]
+- [x] M3.1 Rust: lean arena tree, with name-only nodes in depth-first order, parent indices and subtree sizes, and paths rebuilt on demand. The walk stores one record per directory and a compose pass builds the tree, assigning each hard-linked file to its first path in depth-first order. Reports, the TUI, Move to Trash and rescan use the arena.
+- [ ] M3.2 Rust: parallel walk with `--threads N` (default `min(cores, 8)`, `1` for HDDs and NFS), std threads and a shared work queue. Output stays deterministic because hard links are assigned in the compose pass, so workers share no hard-link set. Tests cover repeated runs and hard links across threads.
+- [ ] M3.3 Swift: entries keep their name and a shared parent location instead of a full path
+- [ ] M3.4 Swift: TaskGroup walk with the same deterministic hard-link rule
+- [ ] M3.5 Benchmarks at 100K and 1M files in `docs/qa.md`; `--threads` in `docs/cli.md`, README and CHANGELOG
+- [ ] M3.6 Release v0.5.0
+
 ### Later milestones
-- [ ] M3 (v0.5) Speed: lean arena tree, parallel walk `--threads`, Swift TaskGroup walk, 1M-file benchmark
 - [ ] M4 (v0.6) Carry, compare, editions: ncdu export/import, `volumes`, Pro edition scaffolding, `diff` and Mac Compare, promo
 - [ ] M5 (v0.7) Pro analysis: mtime and `--older-than`, file types, `--by-owner`, history
 - [ ] M6 (v0.8+) Pro deep: explain my disk, smart cleanup, exclusive size, duplicates, HTML report, terminal treemap, Mac menu bar

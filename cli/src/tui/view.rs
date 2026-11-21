@@ -69,7 +69,7 @@ pub(super) fn draw(frame: &mut Frame<'_>, explorer: &mut Explorer, tick: usize) 
     if bottom + 1 < area.height
         && let Some(entry) = explorer.current()
     {
-        labeled_path(frame, line_at(area, bottom), "Selected  ", &entry.path);
+        labeled_path(frame, line_at(area, bottom), "Selected  ", &entry.path());
     }
 }
 
@@ -167,11 +167,12 @@ fn draw_scope(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
         labeled_path(frame, area, "Scope  ", &explorer.requested_path);
         return;
     };
+    let root = report.tree.root_path();
     let path = explorer
         .scope()
-        .map_or(report.root.path.as_path(), |entry| &entry.path);
-    let mut crumbs = terminal_path(&report.root.path);
-    if let Ok(child) = path.strip_prefix(&report.root.path) {
+        .map_or_else(|| root.to_path_buf(), Entry::path);
+    let mut crumbs = terminal_path(root);
+    if let Ok(child) = path.strip_prefix(root) {
         for component in child.iter() {
             crumbs.push_str(" › ");
             crumbs.push_str(&terminal_path(Path::new(component)));
@@ -308,7 +309,7 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         } else if !explorer.query.is_empty() {
             "No matching items."
         } else if let Some(scope) = explorer.scope() {
-            match scope.state {
+            match scope.state() {
                 EntryState::CloudOnly => "Cloud-only folder. Local contents were not expanded.",
                 EntryState::Pending if explorer.is_active() => {
                     "This folder is waiting to be scanned."
@@ -349,16 +350,20 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
     let total = explorer
         .scope()
         .map_or(0, |scope| explorer.metric.bytes(scope));
+    let Some(tree) = explorer.rows_tree() else {
+        return;
+    };
     let visible = explorer
         .rows
         .iter()
         .skip(explorer.offset)
         .take(usize::from(area.height - 1));
-    for (index, entry) in visible.enumerate() {
+    for (index, &id) in visible.enumerate() {
+        let entry = tree.entry(id);
         let selected = explorer.offset + index == explorer.selected;
         let row = line_at(area, index as u16 + 1);
-        let path = terminal_path(explorer.row_path(entry));
-        let marked = explorer.marked.contains(&entry.path);
+        let path = terminal_path(&explorer.row_path(entry));
+        let marked = explorer.marked.contains(&entry.path());
         let line = columns.entry(entry, &path, total, selected, marked);
         let style = if selected { SELECTED } else { Style::default() };
         frame.render_widget(Paragraph::new(line).style(style), row);
@@ -447,14 +452,14 @@ impl Columns {
 
     fn entry(
         &self,
-        entry: &Entry,
+        entry: Entry<'_>,
         name: &str,
         total: u64,
         selected: bool,
         marked: bool,
     ) -> Line<'static> {
         let style = |value| if selected { SELECTED } else { value };
-        let state = match entry.state {
+        let state = match entry.state() {
             EntryState::Local => "",
             EntryState::Pending => "Pending",
             EntryState::CloudOnly => "Cloud only",
@@ -462,7 +467,7 @@ impl Columns {
             EntryState::Incomplete => "Incomplete",
             EntryState::HardLinkAlias => "Hard link",
         };
-        let state_style = match entry.state {
+        let state_style = match entry.state() {
             EntryState::Pending | EntryState::Incomplete => WARNING,
             EntryState::CloudOnly => ACCENT,
             _ => MUTED,
@@ -473,7 +478,7 @@ impl Columns {
             (false, true) => " ✓",
             (false, false) => "  ",
         };
-        let kind = match (entry.kind, entry.state, self.state) {
+        let kind = match (entry.kind(), entry.state(), self.state) {
             (_, EntryState::CloudOnly, 0) => "○",
             (_, EntryState::Pending, 0) => "~",
             (_, EntryState::Protected, 0) => "×",
@@ -495,7 +500,7 @@ impl Columns {
             Span::styled(marker, style(if marked { WARNING } else { ACCENT })),
             Span::styled(
                 kind,
-                style(if entry.kind == EntryKind::Directory {
+                style(if entry.kind() == EntryKind::Directory {
                     ACCENT
                 } else {
                     MUTED
@@ -509,8 +514,8 @@ impl Columns {
             )),
         ];
         if self.items != 0 {
-            let count = if entry.kind == EntryKind::Directory {
-                format_count(entry.item_count)
+            let count = if entry.kind() == EntryKind::Directory {
+                format_count(entry.item_count())
             } else {
                 String::new()
             };
@@ -568,13 +573,7 @@ fn format_count(count: u64) -> String {
 fn draw_footer(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
     if let Some(plan) = &explorer.prompt {
         let what = match plan.items.as_slice() {
-            [entry] => {
-                let name = entry
-                    .path
-                    .file_name()
-                    .map_or(entry.path.as_path(), Path::new);
-                format!("“{}”", terminal_path(name))
-            }
+            [item] => item.quoted_name(),
             items => format!("{} items", items.len()),
         };
         let question = format!(" Move {what} ({}) to the Trash? ", format_bytes(plan.bytes));
@@ -823,7 +822,7 @@ fn draw_details(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
     let Some(entry) = explorer.current() else {
         return;
     };
-    let state = match entry.state {
+    let state = match entry.state() {
         EntryState::Local => "Local file",
         EntryState::Pending => "Pending",
         EntryState::CloudOnly => "Cloud-only reference",
@@ -842,11 +841,11 @@ fn draw_details(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
     };
     frame.render_widget(
         Paragraph::new(vec![
-            Line::styled(size_line(entry.allocated_bytes, "allocated"), ACCENT),
-            Line::raw(size_line(entry.apparent_bytes, "apparent")),
+            Line::styled(size_line(entry.allocated_bytes(), "allocated"), ACCENT),
+            Line::raw(size_line(entry.apparent_bytes(), "apparent")),
             Line::styled(state, MUTED),
             Line::raw(""),
-            Line::raw(terminal_path(&entry.path)),
+            Line::raw(terminal_path(&entry.path())),
         ])
         .wrap(Wrap { trim: false }),
         area,
