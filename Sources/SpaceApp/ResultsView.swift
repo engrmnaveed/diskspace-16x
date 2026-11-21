@@ -20,7 +20,26 @@ struct ResultsView: View {
                 }
                 selectionBar
             }
+            .alert(trashTitle, isPresented: trashAlertShown) {
+                Button("Move to Trash", role: .destructive, action: workspace.confirmTrash)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                let bytes = workspace.pendingTrash.reduce(UInt64(0)) { $0 + $1.allocatedBytes }
+                Text("\(ScanFormat.size(bytes)) of allocated space. Space is freed when you empty the Trash.")
+            }
         }
+    }
+
+    private var trashTitle: String {
+        let items = workspace.pendingTrash
+        return items.count == 1 ? "Move “\(items[0].name)” to the Trash?" : "Move \(items.count) items to the Trash?"
+    }
+
+    private var trashAlertShown: Binding<Bool> {
+        Binding(
+            get: { !workspace.pendingTrash.isEmpty },
+            set: { if !$0 { workspace.pendingTrash = [] } }
+        )
     }
 
     private func scopeHeader(_ scope: ScanEntry) -> some View {
@@ -229,7 +248,7 @@ struct ResultsView: View {
     }
 
     private func resultsTable(scope: ScanEntry) -> some View {
-        Table(workspace.rows, selection: $workspace.selection, sortOrder: $workspace.sortOrder) {
+        Table(workspace.rows, selection: $workspace.selectedPaths, sortOrder: $workspace.sortOrder) {
             TableColumn("Name", sortUsing: EntrySort(key: .name, order: .forward)) { entry in
                 nameCell(entry, scope: scope)
             }
@@ -253,7 +272,12 @@ struct ResultsView: View {
         }
         .tableStyle(.inset(alternatesRowBackgrounds: false))
         .contextMenu(forSelectionType: String.self) { identifiers in
-            if let entry = entry(for: identifiers) {
+            if identifiers.count > 1 {
+                Button("Move \(identifiers.count) Items to Trash…") {
+                    workspace.requestTrash(workspace.rows.filter { identifiers.contains($0.path) })
+                }
+                .disabled(workspace.isScanning)
+            } else if let entry = entry(for: identifiers) {
                 rowActions(entry)
             }
         } primaryAction: { identifiers in
@@ -433,7 +457,11 @@ struct ResultsView: View {
 
     private var selectionBar: some View {
         HStack(spacing: 12) {
-            if let entry = workspace.selectedEntry {
+            if workspace.selectedPaths.count > 1 {
+                let selected = workspace.selectedEntries
+                let bytes = selected.reduce(UInt64(0)) { $0 + $1.bytes(for: workspace.sizeMetric) }
+                Text("\(selected.count) items selected · \(ScanFormat.size(bytes))")
+            } else if let entry = workspace.selectedEntry {
                 Text(entry.path)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -460,6 +488,11 @@ struct ResultsView: View {
             }
             .help("Copy the selected path (⌥⌘C)")
             .disabled(workspace.selectedEntry == nil)
+            Button { workspace.requestTrash() } label: {
+                Label("Move to Trash", systemImage: "trash")
+            }
+            .help("Move the selected items to the Trash after you confirm (⌘⌫)")
+            .disabled(!workspace.canMoveToTrash)
         }
         .font(.subheadline)
         .foregroundStyle(.secondary)
@@ -482,5 +515,8 @@ struct ResultsView: View {
         }
         Button("Reveal in Finder") { workspace.reveal(entry) }
         Button("Copy Path") { workspace.copyPath(of: entry) }
+        Divider()
+        Button("Move to Trash…") { workspace.requestTrash([entry]) }
+            .disabled(workspace.isScanning)
     }
 }

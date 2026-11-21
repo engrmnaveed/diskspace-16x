@@ -82,6 +82,13 @@ struct Space16XApp: App {
                 Button("Copy Path", action: workspace.copySelectedPath)
                     .keyboardShortcut("c", modifiers: [.command, .option])
                     .disabled(workspace.selectedEntry == nil || !workspace.canBrowse)
+                Divider()
+                Button(workspace.selectedPaths.count > 1
+                    ? "Move \(workspace.selectedPaths.count) Items to Trash…"
+                    : "Move to Trash…"
+                ) { workspace.requestTrash() }
+                    .keyboardShortcut(.delete, modifiers: .command)
+                    .disabled(!workspace.canMoveToTrash)
             }
         }
 

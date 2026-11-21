@@ -101,11 +101,26 @@ final class ScanWorkspace {
         }
     }
 
-    var selection: String? {
+    /// The selected rows. The table allows several, for Move to Trash.
+    var selectedPaths: Set<String> = [] {
         didSet {
             selectedEntry = selection.flatMap(entry(withPath:))
         }
     }
+
+    /// The one selected item, for Open, Reveal, Copy Path, and the charts. Nil when
+    /// several items are selected.
+    var selection: String? {
+        get { selectedPaths.count == 1 ? selectedPaths.first : nil }
+        set { selectedPaths = newValue.map { [$0] } ?? [] }
+    }
+
+    var selectedEntries: [ScanEntry] { rows.filter { selectedPaths.contains($0.path) } }
+
+    /// Items waiting for the user to confirm Move to Trash. A nonempty list shows the alert.
+    var pendingTrash: [ScanEntry] = []
+    private(set) var isTrashing = false
+    var canMoveToTrash: Bool { canBrowse && !isScanning && !isTrashing && !selectedPaths.isEmpty }
 
     var mode: BrowseMode = .folders {
         didSet {
@@ -296,6 +311,87 @@ final class ScanWorkspace {
 
     func dismissNotice() { notice = nil }
 
+    /// Asks to move `entries`, or the selected items, to the Trash after checking that
+    /// each one can go.
+    func requestTrash(_ entries: [ScanEntry]? = nil) {
+        guard let report, canBrowse, !isTrashing else { return }
+        let entries = entries ?? selectedEntries
+        guard !entries.isEmpty else { return }
+        if isScanning {
+            notice = Notice(
+                title: "Let the scan finish first",
+                message: "Wait for the scan to finish, or cancel it, before moving items to the Trash.",
+                isError: true
+            )
+            return
+        }
+        for entry in entries {
+            if let blocker = report.trashBlocker(for: entry) {
+                notice = Notice(
+                    title: "“\(entry.name)” stays where it is",
+                    message: "It \(blocker.reason)",
+                    isError: true
+                )
+                return
+            }
+        }
+        pendingTrash = entries
+    }
+
+    /// Moves the confirmed items to the Trash, then removes them from the results in place.
+    func confirmTrash() {
+        let entries = pendingTrash
+        pendingTrash = []
+        guard !entries.isEmpty, !isTrashing, !isScanning else { return }
+        isTrashing = true
+        Task {
+            let results = await Task.detached(priority: .userInitiated) {
+                entries.map { entry in (entry: entry, failure: Self.moveToTrash(entry)) }
+            }.value
+            finishTrash(results)
+        }
+    }
+
+    /// Returns nil once the item is in the Trash, or why it isn't.
+    private nonisolated static func moveToTrash(_ entry: ScanEntry) -> String? {
+        let url = URL(filePath: entry.path, directoryHint: entry.isDirectory ? .isDirectory : .notDirectory)
+        do {
+            // The scan saw this kind of item. Don't move something else that took its place.
+            let isDirectory = try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory ?? false
+            guard isDirectory == entry.isDirectory else { return "It changed since the scan." }
+            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    private func finishTrash(_ results: [(entry: ScanEntry, failure: String?)]) {
+        isTrashing = false
+        let moved = results.filter { $0.failure == nil }.map(\.entry)
+        if !moved.isEmpty, let report {
+            acceptReport(report.removing(Set(moved.map(\.path))))
+        }
+        let freed = moved.reduce(UInt64(0)) { $0 + $1.allocatedBytes }
+        let what = moved.count == 1 ? "“\(moved[0].name)”" : ScanFormat.items(moved.count)
+        if let failed = results.first(where: { $0.failure != nil }) {
+            let failures = results.count - moved.count
+            notice = Notice(
+                title: moved.isEmpty
+                    ? "Couldn’t move “\(failed.entry.name)” to the Trash"
+                    : "Moved \(moved.count) of \(results.count) items to the Trash",
+                message: (failures > 1 ? "\(failures) items stayed. " : "")
+                    + "“\(failed.entry.name)”: \(failed.failure ?? "")",
+                isError: true
+            )
+        } else {
+            notice = Notice(
+                title: "Moved \(what) to the Trash",
+                message: "\(ScanFormat.size(freed)). Space is freed when you empty the Trash."
+            )
+        }
+    }
+
     func browse(_ entry: ScanEntry) {
         guard canBrowse, entry.isDirectory, mode == .folders,
               let current = currentFolder?.children.first(where: { $0.id == entry.id && $0.isDirectory })
@@ -418,7 +514,8 @@ final class ScanWorkspace {
             rankedScope = mode == .folders ? folder : report.root
             rows = result.rows
             chartRows = result.chart
-            if let selection, entry(withPath: selection) == nil { self.selection = nil }
+            let rowPaths = Set(rows.map(\.path))
+            if !selectedPaths.isSubset(of: rowPaths) { selectedPaths.formIntersection(rowPaths) }
             selectedEntry = selection.flatMap(entry(withPath:))
             isLoadingRows = false
             rowsTask = nil
