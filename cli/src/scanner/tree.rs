@@ -490,7 +490,7 @@ impl TreeBuilder {
         &mut self,
         source: &Tree,
         id: NodeId,
-        visit: &mut impl FnMut(NodeId) -> Visit<'a>,
+        visit: &mut dyn FnMut(NodeId) -> Visit<'a>,
     ) {
         let start = id.0 + 1;
         let end = id.0 + source.node(id).size;

@@ -591,15 +591,15 @@ fn compose(
 
 /// Runs the walk on the calling thread: first the root and its folders, so a preview
 /// can show two levels, then everything below depth first.
-pub(super) struct Inline<'s, 'a, F> {
+pub(super) struct Inline<'s, 'a, 'n> {
     pub(super) scope: &'s Scope<'a>,
-    pub(super) notify: F,
+    pub(super) notify: &'n mut dyn FnMut(Event),
     pub(super) previews: bool,
     pub(super) visited: u64,
     pub(super) last_progress: Option<Instant>,
 }
 
-impl<F: FnMut(Event)> Inline<'_, '_, F> {
+impl Inline<'_, '_, '_> {
     pub(super) fn run(&mut self, task: Task, root: Arc<Slot>) -> io::Result<Report> {
         let scope = self.scope;
         let mut worker = Worker::new(scope.cancelled, self.previews);
