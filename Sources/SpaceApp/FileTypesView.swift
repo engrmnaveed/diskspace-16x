@@ -6,8 +6,8 @@ import SwiftUI
 struct FileTypesView: View {
     @Bindable var workspace: ScanWorkspace
     let folder: ScanEntry
-    @State private var types: [FileTypeTotal] = []
-    @State private var isLoading = true
+    @ViewState private var types: [FileTypeTotal] = []
+    @ViewState private var isLoading = true
 
     /// Changes whenever the folder's contents or the size metric do.
     private var key: String {

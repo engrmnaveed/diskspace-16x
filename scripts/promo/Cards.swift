@@ -58,9 +58,9 @@ struct Cards {
                   detail: "Press Space to mark, d to move to the Trash.", progress: 2) { canvas in
             explorerPanel("trash", on: canvas, x: 74, top: 646, width: 916)
         }
-        try short("report", section: "CLI  /  macOS + LINUX", title: ["Get a report", "in one command."],
-                  detail: "Print your top five files.", progress: 2) { canvas in
-            terminal(on: canvas, top: 646)
+        try short("report", section: "CLI  /  PRO", title: ["See which", "types fill it."],
+                  detail: "List the largest file types.", progress: 2) { canvas in
+            terminal("$ space16x scan Projects --types 4", on: canvas, top: 646)
         }
         try short("carry", section: "CLI  /  macOS + LINUX", title: ["Scan a server.", "Browse it here."],
                   detail: "Pipe a saved scan into the explorer.", progress: 2) { canvas in
@@ -76,7 +76,7 @@ struct Cards {
             appPanel("donut", on: canvas, top: 646)
         }
         try short("compare", section: "DESKTOP  /  PRO", title: ["See what grew", "since Monday."],
-                  detail: "Compare with a saved scan.", progress: 5) { canvas in
+                  detail: "Compare with a scan in your history.", progress: 5) { canvas in
             appPanel("compare", on: canvas, top: 646)
         }
         try short("end", section: "DISK SPACE ANALYZER", title: ["Find the", "space hogs."],
@@ -202,17 +202,18 @@ struct Cards {
         }
     }
 
-    private func terminal(on canvas: PromoCanvas, top: CGFloat) {
+    private func terminal(_ command: String, on canvas: PromoCanvas, top: CGFloat) {
         let frame = CGRect(x: 74, y: top, width: 916, height: 213 + CGFloat(report.count) * 58)
         terminalWindow(frame, on: canvas)
-        canvas.text("$ space16x scan Projects --top 5", x: 102, y: top + 92,
-                    size: 33, weight: .semibold, ink: mint, mono: true)
+        canvas.text(command, x: 102, y: top + 92, size: 33, weight: .semibold, ink: mint, mono: true)
+        // A report with a column heading highlights the first row below it.
+        let first = report.first?.hasPrefix("      Size") == true ? 1 : 0
         for (index, row) in report.enumerated() {
             let y = top + 161 + 58 * CGFloat(index)
-            if index == 0 {
+            if index == first {
                 canvas.panel(CGRect(x: 93, y: y - 6, width: frame.width - 38, height: 55), fill: 0x163A45, radius: 11)
             }
-            canvas.text(row, x: 102, y: y, size: 31, ink: index == 0 ? white : muted, mono: true)
+            canvas.text(row, x: 102, y: y, size: 31, ink: index == first ? white : muted, mono: true)
         }
     }
 }

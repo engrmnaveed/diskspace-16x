@@ -1,5 +1,25 @@
 # Space 16X verification
 
+## 0.7.0
+
+Milestone 5 (Pro analysis) on the Apple M5 Pro MacBook Pro with macOS 27.2.1, APFS and Rust 1.100.0.
+
+- The Rust CLI passed 73 unit tests in the Basic edition and 90 with `--features pro`. New Pro tests cover modification times on a real scan with 1 and 4 threads (the shared `fixtures/modified-times.json`, with a hard link, a pre-1970 time and empty folders), the details side table through Trash and rescan rebuilds, `--older-than` (kept files, kept protected folders, recomputed totals and times), local and UTC time formatting, the shared `fixtures/file-types.json` table, type ranking and reports, the explorer's `t` panel, owner sums, reports and user lookup, history files, the index (damaged lines, missing files, permissions) and file names, and parsing of every new option in both editions.
+- `scripts/check-cli.py` checks, with the Pro archive, `newestModified` against the shared fixture's times, `--older-than` on real file times, `--types`, `--by-owner` against the scan's totals, and `history` (nothing written before a save, listing, permissions, excludes kept, `diff` and `--since`). With the Basic archive, it checks that each Pro option and `history` print the install hint. `scripts/check-tui.py` checks Pro's Modified column and `t` panel.
+- All 47 Swift tests passed (42 in SpaceCore and 5 in SpacePro). New ones read the same modification-time and file-type fixtures as the Rust tests, check that `ScanEntry` stays 64 bytes with its modification time, and cover the saved-scan history, including file names that match the CLI's.
+- Offscreen renders of the shipping views, in the promo, show the folder list with the **Modified** column and dates, **Types** in the Contents picker, and Compare against a saved scan. The history menus and the Types table haven't been checked by hand. See the manual QA rows.
+- Basic's tree nodes stay 40 bytes and its walk records are unchanged, since `Details` has no fields in Basic. Pro keeps 8 bytes per node in the side table.
+- Local release archives (macOS `tar` and `gzip`), Basic and Pro: `aarch64-apple-darwin` 507,308 and 607,158 bytes (0.6.0: 504,101 and 527,196). Linux `x86_64-unknown-linux-musl` binaries linked with `rust-lld` and archived alone: Basic 581,621 bytes against 580,071 before M5 (+1.5 KB), and Pro 695,456. The release archive adds about 8 KB of other files, so Basic's Linux x86-64 archive stays near 590 KB, under the 600 KB budget, with no new dependencies. Pro grew by about 70 KB, mostly for reading the history index. Pro has no size budget or dependencies of its own.
+
+Rust release CLI, `scripts/benchmark.py`, the same day:
+
+| Fixture | 0.6.0 | 0.7.0 Basic | 0.7.0 Pro |
+| --- | --- | --- | --- |
+| 100,000 files | 0.0406, 0.0395, 0.0412 s; 18.7 MB | 0.0399, 0.0396, 0.0394 s; 18.6–18.7 MB | 0.0406, 0.0398, 0.0396 s; 19.5 MB |
+| 1,000,000 files | 1.165, 1.155, 1.155 s; 120.1–120.2 MB | 1.155, 1.149, 1.151 s; 120.1–120.2 MB | 1.164, 1.146, 1.138 s; 128.3–128.5 MB |
+
+Basic scans as fast as 0.6.0, with the same memory. Pro reads modification times and owners with the same calls, so it's as fast, and its side table adds about 8 bytes per entry, 8 MB at 1,000,000 files.
+
 ## 0.6.0
 
 Milestone 4 (Carry, compare, editions) on the Apple M5 Pro MacBook Pro with macOS 27.2.1, APFS and Rust 1.100.0.

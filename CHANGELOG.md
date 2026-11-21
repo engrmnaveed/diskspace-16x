@@ -6,6 +6,7 @@
 - See which file types use the most space in Space 16X Pro. `space16x scan --types N` lists the N largest types by extension with their size and file count, then the rest in one line, and `--json` writes them as `types`. Press `t` in the CLI explorer for the open folder's types. In the Mac app, with **Settings → Pro features** on, **Types** joins List, Treemap and Donut (or **Browse → File Types**, ⌘5). Both apps group files the same way: `Clip.MOV` and `clip.mov` are `.mov`, and `.bashrc` has no extension.
 - See who fills a shared server in Space 16X Pro. `space16x scan --by-owner` lists the space and items each user owns, largest first, and `--json` writes them as `owners` with each `uid` and user name.
 - Keep a scan history in Space 16X Pro. `space16x history save PATH` keeps a scan in `$XDG_STATE_HOME/space16x/history` (by default `~/.local/state/space16x/history`), `space16x history` lists the kept scans, and `space16x history diff PATH [--since DAYS]` shows what changed since the newest kept scan, or since the newest one at least DAYS days old. In the Mac app, **Save to History** (⌥⌘S, or from **Compare…**) keeps the results in `~/Library/Application Support/Space 16X/History`, and **Compare…** and **Scan → Compare with History** list the folder's saved scans. Only an explicit save writes anything, and kept scans are ordinary exports that `--import`, `diff` and **Open Scan…** read.
+- Refresh the promo Short to show Pro's file-type report in the CLI and the Mac app's Compare with a saved scan and the **Modified** column.
 
 ## 0.6.0
 
