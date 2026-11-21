@@ -4,7 +4,9 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — Roadmap complete: paused for owner review after v0.8.0. Milestones 1–6 shipped as v0.3.0–v0.8.0. M6 (Pro deep) added `space16x explain`, cleanup suggestions, clone-aware exclusive size, opt-in duplicates, the HTML report and the explorer's treemap, and in the Mac app the menu-bar free-space monitor, Build Footprint receipts and multiple windows. Don't start new work until the owner reviews it. The **Later** list below holds what M6 cut.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
+
+**Resume here** — Roadmap complete: paused for owner review after v0.8.0. Milestones 1–6 shipped as v0.3.0–v0.8.0. M6 (Pro deep) added `space16x explain`, cleanup suggestions, clone-aware exclusive size, opt-in duplicates, the HTML report and the explorer's treemap, and in the Mac app the menu-bar free-space monitor, Build Footprint receipts and multiple windows. Don't start new work until the owner reviews it. The **Later** list below holds what M6 cut.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
