@@ -38,7 +38,6 @@ impl Details {
         (self.modified != 0).then_some(self.modified)
     }
 
-    #[allow(dead_code, reason = "scan --by-owner reads owners")]
     pub fn owner(self) -> u32 {
         self.owner
     }

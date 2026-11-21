@@ -61,8 +61,8 @@ Scan exit codes: 0 complete, 1 error, 2 partial.
 #[cfg(not(feature = "pro"))]
 const EDITION_HELP: &str = "
 This is Space 16X Basic. Space 16X Pro, also free, adds space16x diff to compare scans,
-modification dates, scan --older-than and scan --types. Install it with install.sh --pro.
-See docs/install.md.
+modification dates, and scan --older-than, --types and --by-owner. Install it with
+install.sh --pro. See docs/install.md.
 ";
 
 #[cfg(feature = "pro")]
@@ -78,6 +78,8 @@ This is Space 16X Pro. It adds:
   scan --types N
              List the N file types (extensions) that use the most space instead of
              entries, with their file counts.
+  scan --by-owner
+             List the space and items each user owns instead of entries.
 The explorer adds a Modified column with each item's newest modification date, and t
 lists the file types in the open folder.
 ";
@@ -86,7 +88,7 @@ lists the file types in the open folder.
 const PRO_COMMANDS: &[&str] = &["diff"];
 
 /// Options only Space 16X Pro's scan takes. Basic builds answer them with an install hint.
-const PRO_SCAN_OPTIONS: &[&str] = &["--older-than", "--types"];
+const PRO_SCAN_OPTIONS: &[&str] = &["--older-than", "--types", "--by-owner"];
 
 #[cfg(feature = "pro")]
 use pro::ScanOptions as ProScanOptions;
@@ -893,6 +895,10 @@ mod tests {
                 args(&["scan", "--types", "10"]),
                 Ok(Command::ProOnly("--types"))
             );
+            assert_eq!(
+                args(&["scan", "--by-owner"]),
+                Ok(Command::ProOnly("--by-owner"))
+            );
         }
         #[cfg(feature = "pro")]
         {
@@ -906,7 +912,11 @@ mod tests {
             };
             assert_eq!(scan.pro.older_than_days(), Some(30));
             assert!(args(&["scan", "--types", "10", "--older-than", "9", "--json"]).is_ok());
+            assert!(args(&["scan", "/srv", "--by-owner", "--apparent"]).is_ok());
             for invalid in [
+                &["scan", "--by-owner", "--by-owner"][..],
+                &["scan", "--by-owner", "--types", "2"],
+                &["scan", "--by-owner", "--depth", "2"],
                 &["scan", "--types"][..],
                 &["scan", "--types", "3", "--depth", "2"],
                 &["scan", "--top", "3", "--types", "3"],

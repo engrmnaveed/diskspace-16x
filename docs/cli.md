@@ -234,6 +234,26 @@ A file's type is the text after the last dot of its name, in lowercase for ASCII
 
 JSON reports put `typeLimit`, `typeCount` (the number of distinct types in the scan) and `types` in place of `depth` and `entries`. Each type has `type` (the extension without its dot, or an empty string), `allocatedBytes`, `apparentBytes` and `fileCount`. `--apparent` ranks types by apparent size, and `--older-than` counts only older files.
 
+### Owners
+
+```text
+space16x scan [PATH] --by-owner [--apparent] [--older-than DAYS] [--json] ...
+```
+
+`--by-owner` lists the space and the files and folders each user owns, largest first, in place of entries, which shows who fills a shared server. Run it as a user who can read the folders, such as root, to count everyone's files.
+
+```text
+      Size      Items  Owner
+ 412.30 GB    981,204  alice
+  96.02 GB    120,388  postgres
+   3.10 GB      1,004  1007
+ 511.42 GB  1,102,596  /srv  [total]
+```
+
+Owners come from the user database. The Linux release builds are static and read `/etc/passwd` only, so users from a directory service such as LDAP show their numeric ID. A folder counts as an item of its owner but has no bytes of its own, and each hard-linked file counts once, for the owner of the path the scan counts. `--by-owner` takes no `--depth`, `--top` or `--types`.
+
+JSON reports put `owners` in place of `depth` and `entries`. Each owner has `owner` (the user name, or `null` without one), `uid`, `allocatedBytes`, `apparentBytes` and `itemCount`.
+
 ## Scan exit codes
 
 | Code | Meaning |

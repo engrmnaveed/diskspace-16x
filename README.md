@@ -74,7 +74,7 @@ space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercont
 space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
-Add `--pro` after `sh -s --` to install Space 16X Pro, a free edition with more analysis: `space16x diff` shows what grew or shrank since a saved scan, the explorer's **Modified** column shows when anything in a folder last changed, `scan --older-than DAYS` counts only files you haven't touched in that long, and `scan --types N` (or `t` in the explorer) shows which file types use the most space. It replaces Basic, and installing without `--pro` switches back.
+Add `--pro` after `sh -s --` to install Space 16X Pro, a free edition with more analysis: `space16x diff` shows what grew or shrank since a saved scan, the explorer's **Modified** column shows when anything in a folder last changed, `scan --older-than DAYS` counts only files you haven't touched in that long, `scan --types N` (or `t` in the explorer) shows which file types use the most space, and `scan --by-owner` shows who fills a shared server. It replaces Basic, and installing without `--pro` switches back.
 
 To uninstall and clean up this shell's PATH, run the same installer with `--uninstall`.
 
