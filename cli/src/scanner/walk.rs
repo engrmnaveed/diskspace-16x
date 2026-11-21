@@ -14,7 +14,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-use super::fs::{self, Directory, Identity, MetadataAccess, Operation, is_cloud_error};
+use super::fs::{
+    self, Directory, FileMetadata, Identity, Listed, MetadataAccess, Operation, is_cloud_error,
+};
 #[cfg(target_os = "macos")]
 use super::startup_volume::StartupVolume;
 use super::tree::{NodeId, Tree, TreeBuilder};
@@ -251,14 +253,22 @@ impl<'a> Worker<'a> {
         let mut ancestors = None;
         let fd = directory.fd;
         // Most names become children, so size the record once rather than grow it.
-        record.children.reserve_exact(directory.names.len());
+        record.children.reserve_exact(directory.entries.len());
         record
             .names
-            .reserve_exact(directory.names.iter().map(|name| name.len()).sum());
-        for name in &directory.names {
+            .reserve_exact(directory.entries.iter().map(|entry| entry.name.len()).sum());
+        for entry in &directory.entries {
             check_cancelled(scope.cancelled)?;
-            self.path.push(name);
-            let result = self.read_child(scope, task, &fd, name, record, tasks, &mut ancestors);
+            self.path.push(&entry.name);
+            let result = self.read_child(
+                scope,
+                task,
+                &fd,
+                (&entry.name, entry.listed),
+                record,
+                tasks,
+                &mut ancestors,
+            );
             self.path.pop();
             result?;
         }
@@ -271,7 +281,7 @@ impl<'a> Worker<'a> {
         scope: &Scope<'_>,
         task: &Task,
         fd: &Arc<OwnedFd>,
-        name: &OsStr,
+        (name, listed): (&OsStr, Listed),
         record: &mut Record,
         tasks: &mut Vec<Task>,
         ancestors: &mut Option<Arc<Ancestor>>,
@@ -287,6 +297,16 @@ impl<'a> Worker<'a> {
             return Ok(());
         }
         self.visited += 1;
+        match listed {
+            Listed::File(file) => {
+                if file.device == scope.device {
+                    self.add_file(record, name, file);
+                }
+                return Ok(());
+            }
+            Listed::Special => return Ok(()),
+            Listed::Unknown => {}
+        }
         let metadata = match self.metadata.stat(&self.path, Some(fd), name) {
             Ok(metadata) => metadata,
             Err(error) => {
@@ -300,7 +320,7 @@ impl<'a> Worker<'a> {
             return Ok(());
         }
         match metadata.st_mode & libc::S_IFMT {
-            libc::S_IFREG => self.add_file(record, name, &metadata),
+            libc::S_IFREG => self.add_file(record, name, FileMetadata::from(&metadata)),
             libc::S_IFDIR => {
                 if relative.is_some_and(|relative| {
                     scope
@@ -380,17 +400,15 @@ impl<'a> Worker<'a> {
         Ok(())
     }
 
-    fn add_file(&mut self, record: &mut Record, name: &OsStr, metadata: &libc::stat) {
+    fn add_file(&mut self, record: &mut Record, name: &OsStr, metadata: FileMetadata) {
         let mut state = EntryState::Local;
         let mut allocated = 0;
         let mut apparent = 0;
-        if fs::is_dataless(metadata) {
+        if metadata.dataless {
             state = EntryState::CloudOnly;
         } else {
-            apparent = metadata.st_size.max(0) as u64;
-            // POSIX st_blocks describes 512-byte units, regardless of the filesystem block size.
-            let blocks = metadata.st_blocks.max(0) as u64;
-            allocated = blocks.checked_mul(512).unwrap_or_else(|| {
+            apparent = metadata.size;
+            allocated = metadata.allocated.unwrap_or_else(|| {
                 self.issues.push(Issue::error(
                     self.path.clone(),
                     "Allocated size exceeds the supported byte range.",
@@ -398,11 +416,11 @@ impl<'a> Worker<'a> {
                 state = EntryState::Incomplete;
                 u64::MAX
             });
-            if metadata.st_nlink > 1 {
+            if metadata.linked {
                 // Another path may own this inode. `compose` picks the first one.
                 record
                     .links
-                    .push((record.children.len() as u32, Identity::from(metadata)));
+                    .push((record.children.len() as u32, metadata.identity));
             }
         }
         record.names.extend_from_slice(name.as_bytes());
