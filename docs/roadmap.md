@@ -4,9 +4,9 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — M3 (v0.5) Speed is complete on `main`. At 1M files the Rust CLI takes 1.24 s instead of 5.5 s and peaks at 119 MB instead of 342 MB; the Swift scanner takes 2.1–2.5 s instead of 5.6 s. Results are in `docs/qa.md`. Next: M3.7, release v0.5.0.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — M3 (v0.5) Speed is in progress on `feature/m3-lean-tree` (M3.1). The Rust scanner now builds a flat arena (`cli/src/scanner/tree.rs`) from per-directory records (`cli/src/scanner/walk.rs`). Next: land M3.1, then M3.2 adds worker threads to the same record walk.
+**Resume here** — v0.5.0 is published, and Milestone 3 (Speed) is complete. Next: start M4 in a new session, after reading its section (§5): ncdu export/import, `volumes`, the Pro edition scaffolding, `diff` and Mac Compare, and the promo. Pro per-node data goes in side tables keyed by the arena's `NodeId` (§4). The published Linux x86-64 archive is 588,488 bytes, so the Basic build has only about 11 KB left under its 600 KB budget.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -33,7 +33,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** —
 - [x] M3.4 Swift: entries keep their name and a shared parent location instead of a full path
 - [x] M3.5 Swift: TaskGroup walk with the same deterministic hard-link rule
 - [x] M3.6 Benchmarks at 100K and 1M files in `docs/qa.md`
-- [ ] M3.7 Release v0.5.0
+- [x] M3.7 Release v0.5.0
 
 ### Later milestones
 - [ ] M4 (v0.6) Carry, compare, editions: ncdu export/import, `volumes`, Pro edition scaffolding, `diff` and Mac Compare, promo
