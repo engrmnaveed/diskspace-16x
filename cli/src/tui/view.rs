@@ -248,8 +248,27 @@ fn draw_summary(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
             Span::styled(quantity, MUTED),
             Span::styled(sorted, MUTED),
             Span::styled(excluded_note(explorer), MUTED),
+            Span::styled(marked_note(explorer), WARNING),
+            Span::styled(
+                if explorer.read_only {
+                    " · read-only"
+                } else {
+                    ""
+                },
+                MUTED,
+            ),
         ]),
     );
+}
+
+fn marked_note(explorer: &Explorer) -> String {
+    match explorer.marked.len() {
+        0 => String::new(),
+        count => format!(
+            " · {count} marked ({})",
+            format_bytes(explorer.marked_bytes())
+        ),
+    }
 }
 
 fn metric_word(metric: Metric) -> &'static str {
@@ -334,7 +353,8 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         let selected = explorer.offset + index == explorer.selected;
         let row = line_at(area, index as u16 + 1);
         let path = terminal_path(explorer.row_path(entry));
-        let line = columns.entry(entry, &path, total, selected);
+        let marked = explorer.marked.contains(&entry.path);
+        let line = columns.entry(entry, &path, total, selected, marked);
         let style = if selected { SELECTED } else { Style::default() };
         frame.render_widget(Paragraph::new(line).style(style), row);
     }
@@ -420,7 +440,14 @@ impl Columns {
         )
     }
 
-    fn entry(&self, entry: &Entry, name: &str, total: u64, selected: bool) -> Line<'static> {
+    fn entry(
+        &self,
+        entry: &Entry,
+        name: &str,
+        total: u64,
+        selected: bool,
+        marked: bool,
+    ) -> Line<'static> {
         let style = |value| if selected { SELECTED } else { value };
         let state = match entry.state {
             EntryState::Local => "",
@@ -435,7 +462,12 @@ impl Columns {
             EntryState::CloudOnly => ACCENT,
             _ => MUTED,
         };
-        let marker = if selected { "› " } else { "  " };
+        let marker = match (selected, marked) {
+            (true, true) => "›✓",
+            (true, false) => "› ",
+            (false, true) => " ✓",
+            (false, false) => "  ",
+        };
         let kind = match (entry.kind, entry.state, self.state) {
             (_, EntryState::CloudOnly, 0) => "○",
             (_, EntryState::Pending, 0) => "~",
@@ -455,7 +487,7 @@ impl Columns {
         let bytes = self.metric.bytes(entry);
         let amount = format_bytes(bytes);
         let mut spans = vec![
-            Span::styled(marker, style(ACCENT)),
+            Span::styled(marker, style(if marked { WARNING } else { ACCENT })),
             Span::styled(
                 kind,
                 style(if entry.kind == EntryKind::Directory {
@@ -529,6 +561,40 @@ fn format_count(count: u64) -> String {
 }
 
 fn draw_footer(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
+    if let Some(plan) = &explorer.prompt {
+        let what = match plan.items.as_slice() {
+            [entry] => {
+                let name = entry
+                    .path
+                    .file_name()
+                    .map_or(entry.path.as_path(), Path::new);
+                format!("“{}”", terminal_path(name))
+            }
+            items => format!("{} items", items.len()),
+        };
+        let question = format!(" Move {what} ({}) to the Trash? ", format_bytes(plan.bytes));
+        let answer = "y/N";
+        let budget = usize::from(area.width).saturating_sub(answer.width());
+        paint(
+            frame,
+            area,
+            Line::from(vec![
+                Span::styled(shorten(&question, budget, false), WARNING),
+                Span::styled(answer, ACCENT),
+            ]),
+        );
+        return;
+    }
+    if let Some(notice) = &explorer.notice {
+        let style = if notice.warning { WARNING } else { ACCENT };
+        let text = format!(" {}", terminal_text(&notice.text));
+        paint(
+            frame,
+            area,
+            Line::styled(shorten(&text, usize::from(area.width), false), style),
+        );
+        return;
+    }
     if explorer.original_query.is_some() {
         let simple = "/ ";
         let suffix = "   Enter apply · Esc restore";
@@ -568,6 +634,8 @@ fn draw_footer(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
     }
     let text = if explorer.panel.is_some() {
         " Esc back   ↑↓ scroll   q quit"
+    } else if !explorer.is_active() && !explorer.read_only && area.width >= 98 {
+        " ↑↓ move  ↵ open  ← back  / filter  f largest  s sort  a size  ␣ mark  d trash  e issues  ? help"
     } else if explorer.is_active() && area.width >= 90 {
         " ↑↓ move  ↵ open  ← back  / filter  f largest  s sort  a size  e issues  c cancel  ? help"
     } else if area.width >= 80 {
@@ -619,6 +687,17 @@ fn draw_panel(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
 }
 
 fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
+    let trash = if explorer.read_only {
+        [
+            ("Read-only", "Move to Trash is off"),
+            ("", "Unset SPACE16X_READ_ONLY or --read-only"),
+        ]
+    } else {
+        [
+            ("Space", "Mark or unmark an item for the Trash"),
+            ("d / Delete", "Move marked items, or the selected one"),
+        ]
+    };
     let lines = [
         ("↑↓ / j k", "Move through the size ranking"),
         ("Page ↑↓", "Move one screen at a time"),
@@ -630,6 +709,8 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         ("f", "Toggle largest files for the scan"),
         ("s", "Sort folders by size, items, or name"),
         ("a", "Switch between allocated and apparent sizes"),
+        trash[0],
+        trash[1],
         ("e / i", "Show skipped paths and errors"),
         ("c / x", "Cancel the scan and keep its preview"),
         ("Esc", "Go back or clear the filter"),
@@ -637,7 +718,8 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         ("○ / ~", "Cloud only / pending"),
         ("× / !", "Protected / incomplete"),
         ("=", "Hard link"),
-        ("16X Brains", "Read-only metadata"),
+        ("✓", "Marked for the Trash"),
+        ("16X Brains", "Scans read metadata only"),
     ];
     explorer.set_panel_page(lines.len(), usize::from(area.height));
     let positions = if area.width >= 50 { 20 } else { 14 };

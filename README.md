@@ -4,7 +4,7 @@
 
 # Space 16X
 
-Find the file or folder using your disk space. Space 16X is a read-only analyzer with a native macOS app and a Rust terminal explorer for macOS and Linux. Both rank by allocated size, use filesystem metadata, and work offline without an account.
+Find the file or folder using your disk space. Space 16X is a disk analyzer with a native macOS app and a Rust terminal explorer for macOS and Linux. Both rank by allocated size, scan read-only filesystem metadata, and work offline without an account. The only change Space 16X makes to your files is moving items you choose to the Trash, after you confirm.
 
 Space 16X is a project by Muhammad Naveed Akram, developed under the [16X Brains](https://16xbrains.com/) banner.
 
@@ -33,7 +33,7 @@ space16x scan --top 10 --json > report.json
 space16x --exclude node_modules --exclude '*.log' ~/Projects
 ```
 
-Use the arrow keys and Enter to drill into a folder, `/` to filter, `f` for the largest files, `s` to sort by size, item count, or name, `a` for apparent sizes, and `?` for help. The `scan` command provides plain text and JSON for scripts.
+Use the arrow keys and Enter to drill into a folder, `/` to filter, `f` for the largest files, `s` to sort by size, item count, or name, `a` for apparent sizes, and `?` for help. Press Space to mark items and `d` to move them to the Trash after you confirm. Space is freed when you empty the Trash. Pass `--read-only` to turn this off. The `scan` command provides plain text and JSON for scripts.
 
 Exit code `0` means the scan completed, `2` means it returned partial results, and `1` means the scan could not start or complete. A partial JSON report carries its issues and totals on standard output. See the [CLI reference](docs/cli.md) and [example report](docs/example-report.json).
 

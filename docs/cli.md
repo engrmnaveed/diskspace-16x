@@ -1,7 +1,7 @@
 # CLI reference
 
 ```text
-space16x [--no-color] [EXCLUDES] [PATH]
+space16x [--no-color] [--read-only] [EXCLUDES] [PATH]
 space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [EXCLUDES]
 space16x --version
 space16x --help
@@ -22,12 +22,26 @@ Run `space16x` or `space16x PATH` from an interactive terminal. Scan progress an
 | `f` | Switch between browsing and the largest-files view. |
 | `s` | Sort folder contents by size, item count, or name. The sorted column is marked in the heading. |
 | `a` | Switch between allocated and apparent sizes, in both views. |
+| Space | Mark or unmark the selected item for the Trash, then move down. |
+| `d` or Delete | Move the marked items, or the selected item if none are marked, to the Trash after you confirm with `y`. |
 | `e` | Show scan issues. |
 | `c` | Cancel an active scan and keep the available preview. |
 | ? | Show keyboard help. |
 | `q` or Ctrl-C | Exit the explorer. |
 
 Wide terminals show an **Items** column with the number of files and folders inside each folder, which helps find folders that use up inodes. File details show both the allocated and the apparent size. Set `NO_COLOR` to any value, or pass `--no-color`, to draw the explorer without colors. The selection then uses reverse video.
+
+## Move items to the Trash
+
+Moving items to the Trash is the only change Space 16X makes to your files. Press Space to mark items in any folder or in the largest-files view. The heading shows how many are marked and their allocated size. Press `d`, and the footer asks you to confirm the item count and size. Press `y` to move them, or any other key to keep them. With nothing marked, `d` offers the selected item.
+
+Moved items leave the results at once. Folder totals, rankings, and item counts update without a rescan. **Space is freed when you empty the Trash.** Moving a hard-linked file, an APFS clone, or a file that a snapshot keeps may free nothing, because another path or the snapshot still uses its blocks.
+
+- On macOS, items go to the Trash on their volume, through the same macOS API that Finder uses for Move to Trash.
+- On Linux, items go to the [FreeDesktop.org Trash](https://specifications.freedesktop.org/trash-spec/latest/) that desktop file managers use. Items on your home disk go to `~/.local/share/Trash`, or `$XDG_DATA_HOME/Trash`. Items on other disks go to `.Trash/UID` or `.Trash-UID` at the top of that disk. Restore them from a file manager's Trash or with a tool such as `gio trash --restore`.
+- Items are renamed within their own disk and never copied. If a disk has no Trash you can use, such as a read-only mount, the item stays where it is and the footer says why.
+
+The explorer doesn't move items while a scan is running, or items it couldn't fully read: cloud-only, protected, unscanned, or incomplete ones. Pass `--read-only`, or set `SPACE16X_READ_ONLY=1`, to turn marking and trashing off, for example on a shared server.
 
 ## Exclude files and folders
 

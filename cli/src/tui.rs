@@ -2,7 +2,7 @@ mod explorer;
 mod ranker;
 mod view;
 
-use crate::scanner::{self, Event as ScanEvent, Excludes, Report};
+use crate::scanner::{self, Entry, EntryKind, Event as ScanEvent, Excludes, Report};
 use crossterm::{
     cursor::Show,
     event::{
@@ -26,7 +26,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub fn run(path: &Path, excludes: Excludes, plain: bool) -> io::Result<()> {
+pub fn run(path: &Path, excludes: Excludes, plain: bool, read_only: bool) -> io::Result<()> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -39,6 +39,7 @@ pub fn run(path: &Path, excludes: Excludes, plain: bool) -> io::Result<()> {
     let worker = ScanWorker::start(path.to_path_buf(), excludes)?;
     let ranking = RankWorker::start()?;
     let mut explorer = Explorer::new(path);
+    explorer.read_only = read_only;
     let started = Instant::now();
     let mut last_tick = 0;
     let mut dirty = true;
@@ -83,6 +84,16 @@ pub fn run(path: &Path, excludes: Excludes, plain: bool) -> io::Result<()> {
                 match explorer.key(key) {
                     Action::Stay => {}
                     Action::CancelScan => worker.cancel(),
+                    Action::Trash(items) => {
+                        let results = items
+                            .into_iter()
+                            .map(|entry| {
+                                let result = move_to_trash(&entry);
+                                (entry, result)
+                            })
+                            .collect();
+                        explorer.finish_trash(results);
+                    }
                     Action::Quit => return explorer.quit(),
                 }
                 dirty = true;
@@ -95,6 +106,16 @@ pub fn run(path: &Path, excludes: Excludes, plain: bool) -> io::Result<()> {
             _ => {}
         }
     }
+}
+
+/// Moves a scanned item to the Trash after checking that it is still the same kind of
+/// item. The check doesn't follow a symbolic link, and the move never does either.
+fn move_to_trash(entry: &Entry) -> io::Result<PathBuf> {
+    let metadata = std::fs::symlink_metadata(&entry.path)?;
+    if metadata.is_dir() != (entry.kind == EntryKind::Directory) {
+        return Err(io::Error::other("it changed since the scan"));
+    }
+    crate::trash::move_to_trash(&entry.path)
 }
 
 struct TerminalMode;

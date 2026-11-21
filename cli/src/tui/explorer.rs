@@ -1,11 +1,12 @@
 use super::ranker::{RankRequest, Ranked};
 use super::{Progress, ScanUpdate};
 use crate::{
-    report::{Metric, terminal_path},
-    scanner::{Entry, EntryKind, Report},
+    report::{Metric, format_bytes, terminal_path},
+    scanner::{Entry, EntryKind, EntryState, Report},
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::{
+    collections::BTreeSet,
     io,
     path::{Path, PathBuf},
     sync::{Arc, Weak},
@@ -64,8 +65,40 @@ pub(super) enum Panel {
 pub(super) enum Action {
     Stay,
     CancelScan,
+    /// Move these entries to the Trash, then report the results to `finish_trash`.
+    Trash(Vec<Arc<Entry>>),
     Quit,
 }
+
+/// Items waiting for the user to confirm Move to Trash, with their allocated bytes.
+pub(super) struct TrashPlan {
+    pub(super) items: Vec<Arc<Entry>>,
+    pub(super) bytes: u64,
+}
+
+/// A message shown in the footer until the next key press.
+pub(super) struct Notice {
+    pub(super) text: String,
+    pub(super) warning: bool,
+}
+
+impl Notice {
+    fn info(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            warning: false,
+        }
+    }
+
+    fn warning(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            warning: true,
+        }
+    }
+}
+
+const READ_ONLY_NOTICE: &str = "Read-only mode: Move to Trash is off.";
 
 pub(super) struct Explorer {
     pub(super) requested_path: PathBuf,
@@ -85,6 +118,12 @@ pub(super) struct Explorer {
     pub(super) panel_offset: usize,
     pub(super) panel_items: usize,
     pub(super) panel_page: usize,
+    /// Set by `--read-only` or `SPACE16X_READ_ONLY`: marking and trashing are off.
+    pub(super) read_only: bool,
+    /// Paths marked for the Trash. They can span folders and both views.
+    pub(super) marked: BTreeSet<PathBuf>,
+    pub(super) prompt: Option<TrashPlan>,
+    pub(super) notice: Option<Notice>,
     folder: Option<Arc<Entry>>,
     requested_ranking: Option<(RankKey, Weak<Entry>)>,
     ranking: Option<Ranked>,
@@ -111,6 +150,10 @@ impl Explorer {
             panel_offset: 0,
             panel_items: 0,
             panel_page: 1,
+            read_only: false,
+            marked: BTreeSet::new(),
+            prompt: None,
+            notice: None,
             folder: None,
             requested_ranking: None,
             ranking: None,
@@ -481,7 +524,160 @@ impl Explorer {
         }
     }
 
+    /// Marks or unmarks the selected item, then moves to the next row.
+    fn toggle_mark(&mut self) {
+        let Some(entry) = self.rows.get(self.selected).cloned() else {
+            return;
+        };
+        if self.read_only {
+            self.notice = Some(Notice::warning(READ_ONLY_NOTICE));
+            return;
+        }
+        if !self.marked.remove(&entry.path) {
+            if let Some(reason) = kept_reason(&entry) {
+                self.notice = Some(Notice::warning(reason));
+                return;
+            }
+            self.marked.insert(entry.path.clone());
+        }
+        self.move_selection(1);
+    }
+
+    /// Total allocated bytes of the marked items, counting nested marks once.
+    pub(super) fn marked_bytes(&self) -> u64 {
+        self.trash_items(self.marked.iter())
+            .iter()
+            .map(|entry| entry.allocated_bytes)
+            .sum()
+    }
+
+    /// Resolves paths to entries in the current report. A path inside another chosen
+    /// folder is left out, since moving the folder moves it too.
+    fn trash_items<'a>(&self, paths: impl Iterator<Item = &'a PathBuf>) -> Vec<Arc<Entry>> {
+        let Some(report) = &self.report else {
+            return Vec::new();
+        };
+        let mut items: Vec<Arc<Entry>> = Vec::new();
+        // Sorted paths put every folder before its contents.
+        let paths: BTreeSet<_> = paths.collect();
+        for path in paths {
+            if *path == report.root.path || items.iter().any(|item| path.starts_with(&item.path)) {
+                continue;
+            }
+            if let Some(entry) = find(&report.root, path) {
+                items.push(Arc::clone(entry));
+            }
+        }
+        items
+    }
+
+    /// Asks to move the marked items, or the selected one, to the Trash.
+    fn plan_trash(&mut self) {
+        if self.read_only {
+            self.notice = Some(Notice::warning(READ_ONLY_NOTICE));
+            return;
+        }
+        if self.is_active() {
+            self.notice = Some(Notice::warning(
+                "Let the scan finish, or press c to stop it, before moving items to the Trash.",
+            ));
+            return;
+        }
+        let current = self.current().map(|entry| entry.path.clone());
+        let items = if self.marked.is_empty() {
+            self.trash_items(current.iter())
+        } else {
+            self.trash_items(self.marked.iter())
+        };
+        if let Some(reason) = items.iter().find_map(|entry| kept_reason(entry)) {
+            self.notice = Some(Notice::warning(reason));
+            return;
+        }
+        if !items.is_empty() {
+            let bytes = items.iter().map(|entry| entry.allocated_bytes).sum();
+            self.prompt = Some(TrashPlan { items, bytes });
+        }
+    }
+
+    /// Removes the moved items from the tree in place, so totals, rankings, and item
+    /// counts update without a rescan, and reports the outcome in the footer.
+    pub(super) fn finish_trash(&mut self, results: Vec<(Arc<Entry>, io::Result<PathBuf>)>) {
+        let Some(report) = &self.report else { return };
+        let mut root = Arc::clone(&report.root);
+        let mut moved = Vec::new();
+        let mut freed = 0;
+        let mut failed = Vec::new();
+        for (entry, result) in results {
+            match result {
+                Ok(_) => {
+                    root = without(&root, &entry.path).unwrap_or(root);
+                    freed += entry.allocated_bytes;
+                    moved.push(entry);
+                }
+                Err(error) => failed.push((entry, error)),
+            }
+        }
+        if !moved.is_empty() {
+            let gone = |path: &Path| moved.iter().any(|entry| path.starts_with(&entry.path));
+            self.marked.retain(|path| !gone(path));
+            let updated = Report {
+                root,
+                issues: report
+                    .issues
+                    .iter()
+                    .filter(|issue| !gone(&issue.path))
+                    .cloned()
+                    .collect(),
+                excluded_count: report.excluded_count,
+                is_preview: report.is_preview,
+            };
+            self.install(updated);
+        }
+        let named = |entry: &Entry| {
+            format!(
+                "“{}”",
+                terminal_path(
+                    entry
+                        .path
+                        .file_name()
+                        .map_or(entry.path.as_path(), Path::new)
+                )
+            )
+        };
+        self.notice = Some(match (moved.as_slice(), failed.first()) {
+            (moved, None) => Notice::info(format!(
+                "Moved {} ({}) to the Trash. Space is freed when you empty the Trash.",
+                match moved {
+                    [entry] => named(entry),
+                    _ => format!("{} items", moved.len()),
+                },
+                format_bytes(freed)
+            )),
+            ([], Some((entry, error))) => {
+                Notice::warning(format!("{} wasn't moved: {error}", named(entry)))
+            }
+            (moved, Some((entry, error))) => Notice::warning(format!(
+                "Moved {} of {} items. {} wasn't moved: {error}",
+                moved.len(),
+                moved.len() + failed.len(),
+                named(entry)
+            )),
+        });
+    }
+
     pub(super) fn key(&mut self, key: KeyEvent) -> Action {
+        self.notice = None;
+        if let Some(plan) = self.prompt.take() {
+            if matches!(key.code, KeyCode::Char('y' | 'Y'))
+                && !key
+                    .modifiers
+                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+            {
+                return Action::Trash(plan.items);
+            }
+            self.notice = Some(Notice::info("Nothing was moved."));
+            return Action::Stay;
+        }
         if self.original_query.is_some()
             && key.code == KeyCode::Char('u')
             && key.modifiers.contains(KeyModifiers::CONTROL)
@@ -524,12 +720,70 @@ impl Explorer {
             KeyCode::Char('f') => self.toggle_largest(),
             KeyCode::Char('s') => self.cycle_sort(),
             KeyCode::Char('a') => self.toggle_metric(),
+            KeyCode::Char(' ') => self.toggle_mark(),
+            KeyCode::Char('d') | KeyCode::Delete => self.plan_trash(),
             KeyCode::Char('e' | 'i') => self.open_panel(Panel::Issues),
             KeyCode::Char('?') => self.open_panel(Panel::Help),
             _ => {}
         }
         Action::Stay
     }
+}
+
+/// Why an item can't be moved to the Trash, or None if it can.
+fn kept_reason(entry: &Entry) -> Option<String> {
+    let reason = match entry.state {
+        EntryState::Local | EntryState::HardLinkAlias => return None,
+        EntryState::CloudOnly => "is cloud-only. Remove it in Finder or its cloud app.",
+        EntryState::Protected => "is protected, so Space 16X couldn't see all of it.",
+        EntryState::Pending => "wasn't scanned, so its size is unknown.",
+        EntryState::Incomplete => "had read errors, so its size is uncertain.",
+    };
+    let name = entry
+        .path
+        .file_name()
+        .map_or(entry.path.as_path(), Path::new);
+    Some(format!(
+        "“{}” {reason} It stays where it is.",
+        terminal_path(name)
+    ))
+}
+
+/// Files and folders that `entry` adds to its parent's item count.
+fn items_in(entry: &Entry) -> u64 {
+    if entry.state == EntryState::HardLinkAlias {
+        0
+    } else {
+        entry.item_count.saturating_add(1)
+    }
+}
+
+/// A copy of `node` without the descendant at `path`, with every total on the way
+/// reduced by what it held. None if `path` isn't below `node`.
+fn without(node: &Arc<Entry>, path: &Path) -> Option<Arc<Entry>> {
+    let index = node
+        .children
+        .iter()
+        .position(|child| path.starts_with(&child.path))?;
+    let child = &node.children[index];
+    let mut updated = Entry::clone(node);
+    let (bytes, apparent, items) = if child.path == path {
+        updated.children.remove(index);
+        (child.allocated_bytes, child.apparent_bytes, items_in(child))
+    } else {
+        let replacement = without(child, path)?;
+        let removed = (
+            child.allocated_bytes - replacement.allocated_bytes,
+            child.apparent_bytes - replacement.apparent_bytes,
+            child.item_count - replacement.item_count,
+        );
+        updated.children[index] = replacement;
+        removed
+    };
+    updated.allocated_bytes = updated.allocated_bytes.saturating_sub(bytes);
+    updated.apparent_bytes = updated.apparent_bytes.saturating_sub(apparent);
+    updated.item_count = updated.item_count.saturating_sub(items);
+    Some(Arc::new(updated))
 }
 
 fn find<'a>(root: &'a Arc<Entry>, path: &Path) -> Option<&'a Arc<Entry>> {
@@ -610,6 +864,172 @@ mod tests {
             .iter()
             .map(|row| row.path.file_name().unwrap().to_string_lossy().into_owned())
             .collect()
+    }
+
+    /// A finished scan of big (500 B in two files), mid (100 B), and small (10 B).
+    fn trash_fixture() -> Explorer {
+        let mut explorer = Explorer::new(Path::new("/r"));
+        let big = folder("/r/big", vec![file("/r/big/1", 300), file("/r/big/2", 200)]);
+        show(
+            &mut explorer,
+            folder("/r", vec![big, file("/r/mid", 100), file("/r/small", 10)]),
+        );
+        explorer.status = Status::Complete;
+        explorer
+    }
+
+    fn confirm(explorer: &mut Explorer) -> Vec<Arc<Entry>> {
+        match key(explorer, KeyCode::Char('y')) {
+            Action::Trash(items) => items,
+            _ => panic!("y should confirm the prompt"),
+        }
+    }
+
+    fn moved(items: Vec<Arc<Entry>>) -> Vec<(Arc<Entry>, io::Result<PathBuf>)> {
+        let trashed = |entry: &Entry| Path::new("/Trash").join(entry.path.file_name().unwrap());
+        items
+            .into_iter()
+            .map(|entry| (Arc::clone(&entry), Ok(trashed(&entry))))
+            .collect()
+    }
+
+    fn notice(explorer: &Explorer) -> (&str, bool) {
+        let notice = explorer.notice.as_ref().expect("a notice");
+        (notice.text.as_str(), notice.warning)
+    }
+
+    #[test]
+    fn marks_items_and_trashes_them_in_place() {
+        let mut explorer = trash_fixture();
+        assert_eq!(names(&explorer), ["big", "mid", "small"]);
+        key(&mut explorer, KeyCode::Char(' '));
+        assert_eq!(names(&explorer)[explorer.selected], "mid");
+        key(&mut explorer, KeyCode::Down);
+        key(&mut explorer, KeyCode::Char(' '));
+        assert_eq!(explorer.marked_bytes(), 510);
+
+        key(&mut explorer, KeyCode::Char('d'));
+        let plan = explorer.prompt.as_ref().expect("a confirmation prompt");
+        assert_eq!((plan.items.len(), plan.bytes), (2, 510));
+        let items = confirm(&mut explorer);
+        explorer.finish_trash(moved(items));
+        settle_ranking(&mut explorer);
+
+        assert_eq!(names(&explorer), ["mid"]);
+        let root = &explorer.report.as_ref().unwrap().root;
+        assert_eq!((root.allocated_bytes, root.item_count), (100, 1));
+        assert!(explorer.marked.is_empty());
+        assert_eq!(
+            notice(&explorer),
+            (
+                "Moved 2 items (510 B) to the Trash. Space is freed when you empty the Trash.",
+                false
+            )
+        );
+    }
+
+    #[test]
+    fn trashing_a_nested_file_updates_every_total() {
+        let mut explorer = trash_fixture();
+        key(&mut explorer, KeyCode::Enter);
+        settle_ranking(&mut explorer);
+        assert_eq!(names(&explorer), ["1", "2"]);
+        key(&mut explorer, KeyCode::Char('d'));
+        let items = confirm(&mut explorer);
+        explorer.finish_trash(moved(items));
+        settle_ranking(&mut explorer);
+
+        assert_eq!(names(&explorer), ["2"]);
+        assert_eq!(explorer.scope().unwrap().allocated_bytes, 200);
+        let root = &explorer.report.as_ref().unwrap().root;
+        let totals = (root.allocated_bytes, root.apparent_bytes, root.item_count);
+        assert_eq!(totals, (310, 310, 4));
+        assert!(
+            notice(&explorer)
+                .0
+                .starts_with("Moved “1” (300 B) to the Trash.")
+        );
+    }
+
+    #[test]
+    fn nested_marks_count_once_and_failures_stay_marked() {
+        let mut explorer = trash_fixture();
+        key(&mut explorer, KeyCode::Char(' '));
+        key(&mut explorer, KeyCode::Up);
+        key(&mut explorer, KeyCode::Enter);
+        settle_ranking(&mut explorer);
+        key(&mut explorer, KeyCode::Char(' '));
+        assert_eq!(explorer.marked.len(), 2);
+        assert_eq!(explorer.marked_bytes(), 500);
+
+        key(&mut explorer, KeyCode::Char('d'));
+        let items = confirm(&mut explorer);
+        assert_eq!(items.len(), 1, "moving big moves big/1 too");
+        let denied = io::Error::new(io::ErrorKind::PermissionDenied, "Permission denied");
+        explorer.finish_trash(vec![(Arc::clone(&items[0]), Err(denied))]);
+        assert_eq!(explorer.marked.len(), 2);
+        assert_eq!(
+            notice(&explorer),
+            ("“big” wasn't moved: Permission denied", true)
+        );
+        assert_eq!(explorer.report.as_ref().unwrap().root.allocated_bytes, 610);
+    }
+
+    #[test]
+    fn the_prompt_needs_y_and_trashing_waits_for_the_scan() {
+        let mut explorer = trash_fixture();
+        key(&mut explorer, KeyCode::Char('d'));
+        assert!(explorer.prompt.is_some());
+        // Any other key, even q, answers no rather than acting.
+        assert!(matches!(
+            key(&mut explorer, KeyCode::Char('q')),
+            Action::Stay
+        ));
+        assert!(explorer.prompt.is_none());
+        assert_eq!(notice(&explorer), ("Nothing was moved.", false));
+
+        explorer.status = Status::Scanning;
+        key(&mut explorer, KeyCode::Char('d'));
+        assert!(explorer.prompt.is_none());
+        assert!(notice(&explorer).0.starts_with("Let the scan finish"));
+        explorer.status = Status::Complete;
+
+        explorer.read_only = true;
+        key(&mut explorer, KeyCode::Char(' '));
+        assert!(explorer.marked.is_empty());
+        key(&mut explorer, KeyCode::Delete);
+        assert!(explorer.prompt.is_none());
+        assert_eq!(notice(&explorer), (READ_ONLY_NOTICE, true));
+    }
+
+    #[test]
+    fn cloud_only_and_protected_items_stay_put() {
+        let mut explorer = Explorer::new(Path::new("/r"));
+        let with_state = |entry: Arc<Entry>, state| {
+            Arc::new(Entry {
+                state,
+                ..(*entry).clone()
+            })
+        };
+        let cloud = with_state(file("/r/cloud", 0), EntryState::CloudOnly);
+        let locked = with_state(folder("/r/locked", Vec::new()), EntryState::Protected);
+        show(
+            &mut explorer,
+            folder("/r", vec![cloud, locked, file("/r/plain", 5)]),
+        );
+        explorer.status = Status::Complete;
+        assert_eq!(names(&explorer), ["plain", "cloud", "locked"]);
+
+        key(&mut explorer, KeyCode::Down);
+        key(&mut explorer, KeyCode::Char(' '));
+        assert!(explorer.marked.is_empty());
+        assert_eq!(names(&explorer)[explorer.selected], "cloud");
+        assert!(notice(&explorer).0.contains("is cloud-only"));
+
+        key(&mut explorer, KeyCode::Down);
+        key(&mut explorer, KeyCode::Char('d'));
+        assert!(explorer.prompt.is_none());
+        assert!(notice(&explorer).0.contains("is protected"));
     }
 
     #[test]
