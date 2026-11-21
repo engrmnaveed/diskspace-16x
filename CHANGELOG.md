@@ -6,6 +6,7 @@
 - Move files and folders to the Trash from the Mac app. Select one or more rows with ⌘-click or ⇧-click, then press ⌘⌫, choose **Browse → Move to Trash…**, use the row's context menu, or click **Move to Trash** in the selection bar. An alert confirms the item count and allocated size. The list, charts, and totals update in place without a rescan. Cloud-only, protected, unscanned, and incompletely read items stay where they are, as in the CLI explorer.
 - Rescan one folder without rescanning everything. Press `r` in the CLI explorer, or choose **Scan → Rescan Folder** (⌥⌘R) or **Rescan Folder** in a folder's context menu in the Mac app. The new results replace that folder in place, and the totals and item counts above it update. Exclude patterns keep applying relative to the scanned folder. Cancelling keeps the earlier results.
 - Preview the selected file or folder with Quick Look in the Mac app. Press Space, or choose **Browse → Quick Look** (⌘Y) or **Quick Look** in the context menu. The preview follows the selection, as in Finder, and Space closes it. Cloud-only items aren't previewed, because that would download them.
+- Refresh the promo Short to show marking items in the CLI explorer and the Move to Trash prompt.
 
 ## 0.3.0
 

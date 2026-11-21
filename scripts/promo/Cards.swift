@@ -54,6 +54,10 @@ struct Cards {
                   detail: "Go back and press f to rank files.", progress: 2) { canvas in
             explorerPanel("rank", on: canvas, x: 74, top: 646, width: 916)
         }
+        try short("trash", section: "CLI  /  macOS + LINUX", title: ["Free up", "the space."],
+                  detail: "Press Space to mark, d to move to the Trash.", progress: 2) { canvas in
+            explorerPanel("trash", on: canvas, x: 74, top: 646, width: 916)
+        }
         try short("report", section: "CLI  /  macOS + LINUX", title: ["Get a report", "in one command."],
                   detail: "Print your top five files.", progress: 2) { canvas in
             terminal(on: canvas, top: 646)
