@@ -114,6 +114,11 @@ final class ScanWorkspace {
     private(set) var volumes: [VolumeSummary] = []
     /// Pro: the saved scan the results are compared with, and the open folder's changes.
     private(set) var comparison: ScanComparison?
+    /// When the results were scanned, for Build Footprint receipts. Nil for opened scans.
+    private(set) var scannedAt: Date?
+    /// Pro: the sheet that names a Build Footprint receipt before saving it.
+    var showsReceiptSheet = false
+    var canSaveReceipt: Bool { comparison != nil && canExport && ProFeatures.isEnabled }
     private(set) var folderChanges: FolderChanges?
     private var isPresentingPicker = false
     private(set) var notice: Notice?
@@ -393,20 +398,22 @@ final class ScanWorkspace {
     /// Pro: compares the results with a scan saved in the history.
     func compare(with record: SavedScanRecord) {
         let name = record.date.formatted(date: .abbreviated, time: .shortened)
-        compare(with: ScanHistory.standard.url(for: record), name: name)
+        compare(with: ScanHistory.standard.url(for: record), name: name, date: record.date)
     }
 
     /// Pro: compares the results with the saved scan at `url`, called `name` in messages.
-    func compare(with url: URL, name: String? = nil) {
+    /// `date` is when it was made, or else the file's modification date.
+    func compare(with url: URL, name: String? = nil, date: Date? = nil) {
         guard canCompare else { return }
         let name = name ?? url.lastPathComponent
         Task {
             let loaded = await Task.detached(priority: .userInitiated) {
                 Result { try SavedScan(contentsOf: url) }
             }.value
+            let saved = date ?? (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
             switch loaded {
-            case let .success(saved):
-                comparison = ScanComparison(name: name, baseline: saved.report)
+            case let .success(scan):
+                comparison = ScanComparison(name: name, baseline: scan.report, date: saved)
                 notice = Notice(
                     title: "Comparing with “\(name)”",
                     message: "The Change column shows what grew or shrank since that scan. Click its header to rank by change."
@@ -486,6 +493,42 @@ final class ScanWorkspace {
     }
 
     /// Saves the results in ncdu's JSON format, which the CLI, ncdu, and gdu also open.
+    /// Pro: saves a Build Footprint receipt of the comparison, labelled `label`, as Markdown.
+    func saveReceipt(label: String) {
+        guard canSaveReceipt, let comparison, let report else { return }
+        let panel = NSSavePanel()
+        panel.title = "Save Footprint Receipt"
+        panel.message = "The receipt lists what changed since “\(comparison.name)”, with paths relative to the scanned folder."
+        panel.prompt = "Save"
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        panel.nameFieldStringValue = "Footprint – \(trimmed.isEmpty ? report.root.name : trimmed).md"
+        let metric = sizeMetric
+        let scannedAt = scannedAt
+        isPresentingPicker = true
+        Task {
+            let result = await panel.begin()
+            isPresentingPicker = false
+            guard result == .OK, let url = panel.url else { return }
+            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+            let outcome = await Task.detached(priority: .userInitiated) {
+                Result {
+                    let text = FootprintReceipt.markdown(
+                        label: label, comparison: comparison, after: report, afterDate: scannedAt,
+                        metric: metric, version: version
+                    )
+                    try Data(text.utf8).write(to: url, options: .atomic)
+                }
+            }.value
+            switch outcome {
+            case .success:
+                notice = Notice(title: "Saved “\(url.lastPathComponent)”", message: "Open it in any text or Markdown editor.")
+            case let .failure(error):
+                notice = Notice(title: "Couldn’t save the receipt", message: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
     func exportScan() {
         guard canExport, let report else { return }
         let saved = SavedScan(report: report, excludes: reportExcludes)
@@ -926,9 +969,11 @@ final class ScanWorkspace {
         case let .scan(excludes):
             importedFile = nil
             reportExcludes = excludes
+            scannedAt = Date()
         case let .file(name, excludes):
             importedFile = name
             reportExcludes = excludes
+            scannedAt = nil
         case nil:
             break
         }

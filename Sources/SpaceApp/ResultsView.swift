@@ -303,6 +303,14 @@ struct ResultsView: View {
                         .foregroundStyle(.secondary)
                         .help(removed.prefix(12).map(\.name).joined(separator: "\n"))
                 }
+                Button { workspace.showsReceiptSheet = true } label: {
+                    Image(systemName: "doc.text")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Save a Build Footprint receipt of these changes")
+                .accessibilityLabel("Save Footprint Receipt")
+                .disabled(!workspace.canSaveReceipt)
                 Button(action: workspace.stopComparing) {
                     Image(systemName: "xmark.circle.fill")
                 }
