@@ -1,6 +1,6 @@
 # Promotional video
 
-The Space 16X promo is a 29-second vertical Short. It opens with “What’s eating your disk space?”, launches the interactive terminal explorer by typing `space16x`, and shows folder navigation, file ranking, Move to Trash, Pro's file-type report, a server's scan piped into the explorer, the Mac app's charts, and Pro's Compare with a saved scan and the Modified column. The README uses a six-second loop with the terminal explorer and desktop side by side.
+The Space 16X promo is a 29-second vertical Short. It opens with “What’s eating your disk space?”, launches the interactive terminal explorer by typing `space16x`, and shows folder navigation, file ranking, Move to Trash, Pro's cleanup suggestions, a server's scan piped into the explorer, the Mac app's charts, and Pro's duplicate finder. The README uses a six-second loop with the terminal explorer and desktop side by side.
 
 ## Build locally
 
@@ -12,7 +12,7 @@ python3 -m venv .build/promo-venv
 .build/promo-venv/bin/python scripts/build-promo.py
 ```
 
-For subsequent builds, run just the last command. The script builds the Pro edition of the Rust CLI with the pinned toolchain and starts it with no arguments in a pseudo-terminal. It renders the real terminal screens with [pyte](https://pypi.org/project/pyte/0.8.2/), records a plain-text CLI report, and captures the shipping SwiftUI views in an offscreen window. Both scanners read the same synthetic folder. The import scene pipes that folder's export, with its root renamed to `/srv`, into `space16x --import -`. The Compare scene compares the folder with a real export of an earlier version of it, made at the start of the build, as if saved to the history on Monday. The fixture's files get modification dates from today back to last year, which the Modified column shows. FFmpeg adds the motion, cuts, and original synthesized music. Once dependencies are installed, rendering runs offline and needs no screen-recording permissions.
+For subsequent builds, run just the last command. The script builds the Pro edition of the Rust CLI with the pinned toolchain and starts it with no arguments in a pseudo-terminal. It renders the real terminal screens with [pyte](https://pypi.org/project/pyte/0.8.2/), records a plain-text CLI report, and captures the shipping SwiftUI views in an offscreen window. Both scanners read the same synthetic folder. The import scene pipes that folder's export, with its root renamed to `/srv`, into `space16x --import -`. The folder holds a Cargo `target` folder and a `node_modules` folder, which the cleanup report lists, and one video saved twice, which the Duplicates scene finds after clicking **Find Duplicates**. The fixture's files get modification dates from today back to last year, which the Modified column shows. FFmpeg adds the motion, cuts, and original synthesized music. Once dependencies are installed, rendering runs offline and needs no screen-recording permissions.
 
 | Output | Use |
 | --- | --- |
@@ -28,10 +28,10 @@ Pass `--cli path/to/space16x` to reuse a built binary or `--output path/to/folde
 | 6–8 s | Press Enter to open Exports |
 | 8–10.5 s | Press `f` to rank the largest files |
 | 10.5–13 s | Mark two files with Space and press `d` for the Move to Trash prompt |
-| 13–15 s | Pro's report of the largest file types with `--types 4` |
+| 13–15 s | Pro's cleanup suggestions with `scan --cleanup`: Rust build output and Node packages |
 | 15–18 s | Pipe a server's saved scan from `ssh` into `space16x --import -`, which opens it read-only |
 | 18–23 s | Mac app treemap and donut chart |
-| 23–26 s | Pro's Compare: the folder list with Change and Modified columns, ranked by growth since Monday's saved scan |
+| 23–26 s | Pro's Duplicates: a video saved twice, each copy with its folder, after **Find Duplicates** |
 | 26–29 s | Free and open-source call to action with the GitHub handle |
 
 ## Refresh for a major change

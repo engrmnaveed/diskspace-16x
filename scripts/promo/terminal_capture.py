@@ -96,7 +96,7 @@ def capture_explorer(binary, fixture, saved):
     environment.pop("NO_COLOR", None)
     # Running the executable with no arguments exercises the default htop-style explorer.
     with Terminal([binary], cwd=fixture, columns=COLUMNS, rows=ROWS, env=environment) as terminal:
-        wait_for(terminal, stream, screen, "Scan complete", "Exports", "Media", "4 items")
+        wait_for(terminal, stream, screen, "Scan complete", "Exports", "Media", "6 items")
         frames["folders"] = snapshot(screen, fixture)
 
         terminal.send(b"\r")
@@ -104,9 +104,9 @@ def capture_explorer(binary, fixture, saved):
         frames["drill"] = snapshot(screen, fixture)
 
         terminal.send(b"\x7f")
-        wait_for(terminal, stream, screen, "Exports", "Media", "4 items")
+        wait_for(terminal, stream, screen, "Exports", "Media", "6 items")
         terminal.send(b"f")
-        wait_for(terminal, stream, screen, "Largest files", "55 shown", "interview.wav")
+        wait_for(terminal, stream, screen, "Largest files", "60 shown", "interview.wav")
         frames["rank"] = snapshot(screen, fixture)
 
         # Mark the two largest files and ask to move them. Answer n, so nothing moves.

@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROMO = ROOT / "scripts" / "promo"
 SHOTS = [
     ("opening", 75), ("launch", 30), ("folders", 75), ("drill", 60), ("rank", 75), ("trash", 75),
-    ("report", 60), ("carry", 90), ("map", 75), ("share", 75), ("compare", 90), ("end", 90),
+    ("report", 60), ("carry", 90), ("map", 75), ("share", 75), ("duplicates", 90), ("end", 90),
 ]
 FPS = 30
 FIXTURE = {
@@ -32,7 +32,14 @@ FIXTURE = {
     "Backups/archive.zip": 9,
     "Assets/texture.psd": 5,
     "Assets/cover.png": 1,
+    # Folders that tools recreate, which Pro's cleanup suggestions list.
+    "App/Cargo.toml": 0,
+    "App/target/debug/app": 8,
+    "Site/package.json": 0,
+    "Site/node_modules/react/react.js": 6,
 }
+# A copy saved twice, which the Mac app's Duplicates scene finds.
+COPIES = {"Backups/teaser-final.mp4": "Exports/teaser.mp4"}
 # Days since each file last changed, which Pro's Modified column shows.
 AGES = {
     "Exports/launch.mov": 0,
@@ -43,23 +50,12 @@ AGES = {
     "Assets/texture.psd": 61,
     "Assets/cover.png": 61,
 }
-# The same folder a few days earlier, which the Mac app's Compare scene compares with.
-BASELINE = {
-    "Exports/launch.mov": 12,
-    "Media/interview.wav": 16,
-    "Media/b-roll.mov": 11,
-    "Backups/archive.zip": 9,
-    "Backups/old-backup.zip": 14,
-    "Assets/texture.psd": 9,
-    "Assets/cover.png": 1,
-}
-
 
 ICONS = 48
 
 
-def create_fixture(root, files=FIXTURE, icons=True):
-    for relative, mib in files.items():
+def create_fixture(root):
+    for relative, mib in FIXTURE.items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("wb") as file:
@@ -67,8 +63,8 @@ def create_fixture(root, files=FIXTURE, icons=True):
                 file.write(os.urandom(1024 * 1024))
         modified = time.time() - AGES.get(relative, 0) * 86_400
         os.utime(path, (modified, modified))
-    if not icons:
-        return
+    for copy, original in COPIES.items():
+        (root / copy).write_bytes((root / original).read_bytes())
     # Many small files give the item-count sort something to show.
     folder = root / "Assets" / "icons"
     folder.mkdir()
@@ -82,13 +78,6 @@ def create_fixture(root, files=FIXTURE, icons=True):
 def capture(binary, work):
     from promo.terminal_capture import capture_explorer
 
-    # Save the earlier version of the folder as the scan the Mac app compares with.
-    earlier = work / "earlier" / "Projects"
-    create_fixture(earlier, BASELINE, icons=False)
-    baseline = work / "projects-monday.json"
-    subprocess.run([binary, "scan", earlier, "--export", baseline], check=True, stdout=subprocess.DEVNULL)
-    shutil.rmtree(earlier.parent)
-
     projects = work / "Projects"
     create_fixture(projects)
     # The import scene browses this folder's scan as if it came from a server's /srv.
@@ -99,10 +88,10 @@ def capture(binary, work):
     explorer = capture_explorer(binary, projects, saved)
     explorer_path = work / "explorer.json"
     explorer_path.write_text(json.dumps(explorer), encoding="utf-8")
-    # The plain-text CLI prints absolute paths. Show the command's relative path on screen.
+    # The plain-text CLI prints absolute paths. Show them relative to the folder on screen.
     report = subprocess.check_output(
-        [binary, "scan", "Projects", "--types", "4"], cwd=work, text=True,
-    ).replace(f"{work}/", "")
+        [binary, "scan", "--cleanup"], cwd=projects, text=True, stderr=subprocess.DEVNULL,
+    ).replace(f"{projects}/", "")
     report_path = work / "report.txt"
     report_path.write_text(report, encoding="utf-8")
 
@@ -126,7 +115,7 @@ def capture(binary, work):
         *sorted(PROMO.glob("*.swift")), *(path for path in views if path.name != "Space16XApp.swift"),
     ], check=True)
     subprocess.run([
-        executable, projects, work, report_path, explorer_path, ROOT / "Branding" / "AppIcon.icns", baseline,
+        executable, projects, work, report_path, explorer_path, ROOT / "Branding" / "AppIcon.icns",
     ], check=True)
 
 
