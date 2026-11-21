@@ -1,4 +1,6 @@
 mod ncdu;
+#[cfg(target_os = "macos")]
+mod objc;
 #[cfg(feature = "pro")]
 mod pro;
 mod report;
@@ -60,9 +62,9 @@ Scan exit codes: 0 complete, 1 error, 2 partial.
 
 #[cfg(not(feature = "pro"))]
 const EDITION_HELP: &str = "
-This is Space 16X Basic. Space 16X Pro, also free, adds space16x diff and history to
-compare scans over time, modification dates, and scan --older-than, --types and
---by-owner. Install it with install.sh --pro. See docs/install.md.
+This is Space 16X Basic. Space 16X Pro, also free, adds scan history and comparison,
+modification dates, file types, owners, disk explanations, cleanup suggestions,
+duplicates and reports. Install it with install.sh --pro. See docs/install.md.
 ";
 
 #[cfg(feature = "pro")]
@@ -89,12 +91,16 @@ This is Space 16X Pro. It adds:
                         [--json] [--threads N]
              Compare PATH now with its newest kept scan, or the newest one at least
              DAYS days old.
+  space16x explain [PATH] [--json]
+             Show the space on PATH's volume that a scan can't see: on macOS, the
+             APFS container's volumes, purgeable space and local snapshots, and on
+             Linux, space reserved for root and deleted files still held open.
 The explorer adds a Modified column with each item's newest modification date, and t
 lists the file types in the open folder.
 ";
 
 /// Subcommands only Space 16X Pro has. Basic builds answer them with an install hint.
-const PRO_COMMANDS: &[&str] = &["diff", "history"];
+const PRO_COMMANDS: &[&str] = &["diff", "history", "explain"];
 
 /// Options only Space 16X Pro's scan takes. Basic builds answer them with an install hint.
 const PRO_SCAN_OPTIONS: &[&str] = &["--older-than", "--types", "--by-owner"];
@@ -896,6 +902,7 @@ mod tests {
                 args(&["diff", "old.json", "new.json"]),
                 Ok(Command::ProOnly("diff"))
             );
+            assert_eq!(args(&["explain"]), Ok(Command::ProOnly("explain")));
             assert_eq!(
                 args(&["scan", "--older-than", "30"]),
                 Ok(Command::ProOnly("--older-than"))

@@ -6,6 +6,7 @@
 //! lean.
 
 mod diff;
+mod explain;
 mod history;
 mod modified;
 mod owners;
@@ -27,6 +28,7 @@ use crate::scanner;
 pub enum Command {
     Diff(DiffOptions),
     History(history::HistoryCommand),
+    Explain { path: PathBuf, json: bool },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -163,8 +165,32 @@ pub fn parse(
     match name {
         "diff" => parse_diff(arguments),
         "history" => parse_history(arguments),
+        "explain" => parse_explain(arguments),
         _ => Err(format!("Unknown Pro command {name:?}.")),
     }
+}
+
+/// Parses `explain [PATH] [--json]`.
+fn parse_explain(arguments: impl Iterator<Item = OsString>) -> Result<crate::Command, String> {
+    let mut path = None;
+    let mut json = false;
+    let mut literal = false;
+    for argument in arguments {
+        if literal || !crate::is_option(&argument) {
+            crate::set_path(&mut path, crate::checked_path(argument)?)?;
+            continue;
+        }
+        match argument.to_str() {
+            Some("-h" | "--help") if path.is_none() && !json => return Ok(crate::Command::Help),
+            Some("--") => literal = true,
+            Some("--json") if !json => json = true,
+            _ => return Err(format!("Unknown or repeated option {argument:?}.")),
+        }
+    }
+    Ok(crate::Command::Pro(Command::Explain {
+        path: path.unwrap_or_else(|| PathBuf::from(".")),
+        json,
+    }))
 }
 
 /// Parses `history [PATH]`, `history save [PATH]` and `history diff [PATH]`.
@@ -298,6 +324,7 @@ pub fn run(command: Command) -> io::Result<u8> {
     match command {
         Command::Diff(options) => run_diff(options),
         Command::History(command) => history::run(command),
+        Command::Explain { path, json } => explain::run(&path, json),
     }
 }
 
@@ -410,6 +437,29 @@ mod tests {
             &["list", "--exclude", "x"],
         ] {
             assert!(history(invalid).is_err(), "{invalid:?}");
+        }
+    }
+
+    #[test]
+    fn parses_explain() {
+        let explain = |values: &[&str]| parse("explain", values.iter().map(OsString::from));
+        assert_eq!(
+            explain(&[]),
+            Ok(crate::Command::Pro(Command::Explain {
+                path: ".".into(),
+                json: false
+            }))
+        );
+        assert_eq!(
+            explain(&["--json", "--", "-disk"]),
+            Ok(crate::Command::Pro(Command::Explain {
+                path: "-disk".into(),
+                json: true
+            }))
+        );
+        assert_eq!(explain(&["--help"]), Ok(crate::Command::Help));
+        for invalid in [&["a", "b"][..], &["--json", "--json"], &["--all"]] {
+            assert!(explain(invalid).is_err(), "{invalid:?}");
         }
     }
 

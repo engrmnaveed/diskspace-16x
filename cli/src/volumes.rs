@@ -53,10 +53,10 @@ fn percent(part: u64, whole: u64) -> u64 {
 }
 
 /// A mount from the system's mount table.
-struct Mount {
-    path: PathBuf,
-    device: String,
-    kind: String,
+pub(crate) struct Mount {
+    pub(crate) path: PathBuf,
+    pub(crate) device: String,
+    pub(crate) kind: String,
     /// Shown by default. Hidden mounts are system volumes, memory filesystems, snap
     /// images, and bind mounts of a device already listed.
     shown: bool,
@@ -84,7 +84,7 @@ pub fn list(all: bool) -> io::Result<(Vec<Volume>, Vec<Issue>)> {
 }
 
 #[cfg(target_os = "linux")]
-fn mounts() -> io::Result<Vec<Mount>> {
+pub(crate) fn mounts() -> io::Result<Vec<Mount>> {
     let table = std::fs::read("/proc/self/mounts")?;
     let mut devices = Vec::new();
     let mut mounts = Vec::new();
@@ -138,7 +138,7 @@ fn unescape(field: &[u8]) -> Vec<u8> {
 }
 
 #[cfg(target_os = "linux")]
-fn usage(mount: Mount) -> Result<Volume, (PathBuf, io::Error)> {
+pub(crate) fn usage(mount: Mount) -> Result<Volume, (PathBuf, io::Error)> {
     let path = CString::new(mount.path.as_os_str().as_bytes())
         .map_err(|error| (mount.path.clone(), io::Error::other(error)))?;
     let mut stats = std::mem::MaybeUninit::<libc::statvfs>::uninit();
@@ -166,7 +166,7 @@ fn usage(mount: Mount) -> Result<Volume, (PathBuf, io::Error)> {
 }
 
 #[cfg(target_os = "macos")]
-fn mounts() -> io::Result<Vec<Mount>> {
+pub(crate) fn mounts() -> io::Result<Vec<Mount>> {
     let mut table = std::ptr::null_mut();
     // SAFETY: getmntinfo points `table` at its own buffer of `count` entries, which
     // stays valid until the next call.
@@ -198,7 +198,7 @@ fn mounts() -> io::Result<Vec<Mount>> {
 }
 
 #[cfg(target_os = "macos")]
-fn usage(mount: Mount) -> Result<Volume, (PathBuf, io::Error)> {
+pub(crate) fn usage(mount: Mount) -> Result<Volume, (PathBuf, io::Error)> {
     let path = CString::new(mount.path.as_os_str().as_bytes())
         .map_err(|error| (mount.path.clone(), io::Error::other(error)))?;
     let mut stats = std::mem::MaybeUninit::<libc::statfs>::uninit();
