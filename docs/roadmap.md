@@ -4,9 +4,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
-
-**Resume here** — Milestone 5 (Pro analysis) is complete and published as v0.7.0: newest modification times with the Modified column and `scan --older-than`, file types (`scan --types`, the explorer's `t`, the Mac Types view), `scan --by-owner`, and the scan history (`space16x history` and the Mac app's saved scans), with the promo refreshed. Next is Milestone 6 (Pro deep, v0.8.0), which the owner approved on 2026-11-21. A fresh session starts it: first split M6 into items in Progress from §5, as M5 is, then build them one PR at a time and release v0.8.0. Nothing comes after M6. Pro per-node data lives in the tree's details side table keyed by `NodeId` (`cli/src/scanner/details.rs`, zero-sized in Basic). Read file contents only on an explicit user action (M6 duplicates are opt-in). Basic's published Linux x86-64 archive is 592,316 bytes against its 600 KB budget, so watch it closely.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — Milestone 6 (Pro deep, v0.8.0), the last milestone the owner approved on 2026-11-21, is split into M6.1–M6.10 below. Build them one PR at a time (`feature/m6-…`), in order, then release v0.8.0, tick M6, and pause the roadmap for the owner's review: nothing comes after M6. All of M6 is Pro: CLI code in `cli/src/pro/` behind the `pro` feature, Mac code in `SpacePro` behind **Settings → Pro features**, and Basic gains only install hints. Per-node data goes in the details side table keyed by `NodeId` (`cli/src/scanner/details.rs`, zero-sized in Basic). Only `space16x duplicates` and the Mac's **Find Duplicates** read file contents, on that explicit command and never during a scan. Cleanup suggestions only suggest: removal goes through Basic's confirmed Move to Trash. Basic's published Linux x86-64 archive is 592,316 bytes against its 600 KB budget, so keep the hints short and find savings before raising it.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -52,8 +50,20 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 - [x] M5.5 Promo refresh, manual QA rows, benchmarks and both editions' archive sizes in `docs/qa.md`
 - [x] M5.6 Release v0.7.0
 
-### Later milestones
-- [ ] M6 (v0.8+) Pro deep: explain my disk, smart cleanup, exclusive size, duplicates, HTML report, terminal treemap, Mac menu bar
+### M6 (v0.8.0) Pro deep [Pro]
+- [ ] M6.1 Explain my disk: `space16x explain [PATH] [--json]` in `cli/src/pro/explain.rs` shows the space a scan can't see on PATH's volume. On macOS: the APFS container's volumes with each one's used space (`ATTR_VOL_SPACEUSED`), purgeable space (important-usage capacity minus free space) and Time Machine local snapshots (`tmutil listlocalsnapshots`). On Linux: deleted files that processes still hold open (`/proc/*/fd`). System queries and metadata only. Mac: **Explain Disk** in `SpacePro` with the same figures.
+- [ ] M6.2 Smart cleanup suggestions: one rule table (Xcode DerivedData and archives, simulator caches, `node_modules`, Cargo `target`, Gradle, pip and npm caches, `~/Library/Caches`, `~/.cache`) matched against the finished scan by name and, where needed, a marker beside it, such as `target` next to `Cargo.toml`, with no extra reads. `scan --cleanup` lists them, and the explorer's `x` view lists them for Space and `d`, Basic's confirmed Move to Trash. Mac: a **Cleanup** view in `SpacePro` that feeds the same confirmation sheet. A shared fixture for both. It suggests and never deletes.
+- [ ] M6.3 Clone-aware exclusive size: `scan --exclusive` reads each file's private size (`ATTR_CMNEXT_PRIVATESIZE` on macOS, `FIEMAP` shared extents on Linux filesystems with reflinks) into the details side table and reports `exclusiveBytes`, the space that moving an item to the Trash and emptying it frees at least: clone-shared blocks and hard-linked files don't count. Mac: the Move to Trash sheet shows the same figure for the selection.
+- [ ] M6.4 Opt-in duplicates: `space16x duplicates [PATH] [--min-size BYTES] [--json] [--threads N] [EXCLUDES]` in `cli/src/pro/duplicates.rs` scans metadata, groups files by size, and reads only the same-size candidates, first 64 KB and then whole files, hashed with std's SipHash under random keys. Groups are ranked by the space the extra copies use. Mac: **Find Duplicates** in `SpacePro` on the current scan, with Move to Trash. Contents are read only by this explicit command.
+- [ ] M6.5 HTML report and terminal treemap: `scan --html FILE` writes one self-contained page (summary, a treemap of the largest entries, the entries and the largest files, with no scripts or network), and the explorer's `m` shows the open folder as a treemap, both from one squarified layout in `cli/src/pro/treemap.rs`
+- [ ] M6.6 Mac menu-bar free-space monitor: **Settings → Pro features → Show free space in the menu bar**, with a low-space threshold. A `MenuBarExtra` refreshes once a minute only while it's on, and posts one notification when free space drops below the threshold.
+- [ ] M6.7 Mac Build Footprint receipts: while comparing, **Save Receipt…** asks for the operation's name, such as "first Xcode build", and writes a Markdown receipt the user names: both scan times, the totals, gained and removed bytes, and the changed paths ranked, relative to the scanned folder
+- [ ] M6.8 Mac multiple windows: **File → New Window** (⌘N) with Pro features on, each window with its own scan, and menu commands acting on the focused window
+- [ ] M6.9 Promo refresh, manual QA rows, benchmarks and both editions' archive sizes in `docs/qa.md`
+- [ ] M6.10 Release v0.8.0
+
+### Later
+Work cut from M6 for the owner to schedule after the review. None so far.
 
 ## Working agreement
 
