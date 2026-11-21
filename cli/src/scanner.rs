@@ -257,7 +257,6 @@ fn walk(
             Err(contextual_error(scope, Operation::List, error))
         };
     }
-    drop(metadata);
 
     let walk_scope = Scope {
         root: scope.to_path_buf(),
