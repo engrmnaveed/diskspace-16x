@@ -5,23 +5,180 @@
 //! Pro data belongs in side tables keyed by the scan tree's `NodeId`, so Basic's tree stays
 //! lean.
 
+mod diff;
+
 use std::ffi::OsString;
 use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
+
+use crate::report::{Metric, Selection};
+use crate::scanner;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
-    Diff,
+    Diff(DiffOptions),
 }
 
-pub fn parse(name: &str, _arguments: impl Iterator<Item = OsString>) -> Result<Command, String> {
+#[derive(Debug, PartialEq, Eq)]
+pub struct DiffOptions {
+    old: PathBuf,
+    new: PathBuf,
+    selection: Selection,
+    metric: Metric,
+    json: bool,
+    threads: Option<usize>,
+}
+
+pub fn parse(
+    name: &str,
+    arguments: impl Iterator<Item = OsString>,
+) -> Result<crate::Command, String> {
     match name {
-        "diff" => Ok(Command::Diff),
+        "diff" => parse_diff(arguments),
         _ => Err(format!("Unknown Pro command {name:?}.")),
     }
 }
 
+fn parse_diff(mut arguments: impl Iterator<Item = OsString>) -> Result<crate::Command, String> {
+    let mut files = Vec::new();
+    let mut selection = None;
+    let mut metric = None;
+    let mut json = false;
+    let mut threads = None;
+    let mut literal = false;
+    while let Some(argument) = arguments.next() {
+        if literal || argument == "-" || !crate::is_option(&argument) {
+            files.push(crate::checked_path(argument)?);
+            continue;
+        }
+        match argument.to_str() {
+            Some("-h" | "--help") if files.is_empty() => return Ok(crate::Command::Help),
+            Some("--") => literal = true,
+            Some(flag @ ("--depth" | "--top")) if selection.is_none() => {
+                let number = arguments
+                    .next()
+                    .and_then(|value| value.to_str()?.parse::<usize>().ok())
+                    .ok_or_else(|| format!("{flag} requires a nonnegative integer."))?;
+                selection = Some(if flag == "--depth" {
+                    Selection::Depth(number)
+                } else {
+                    Selection::Top(number)
+                });
+            }
+            Some("--json") if !json => json = true,
+            Some("--apparent") if metric.is_none() => metric = Some(Metric::Apparent),
+            Some("--threads") => crate::take_threads(&mut threads, &mut arguments)?,
+            _ => return Err(format!("Unknown or repeated option {argument:?}.")),
+        }
+    }
+    let [old, new]: [PathBuf; 2] = files
+        .try_into()
+        .map_err(|_| "diff compares two scans: space16x diff OLD NEW|PATH.")?;
+    if old == Path::new("-") && new == Path::new("-") {
+        return Err("Only one scan can come from standard input.".into());
+    }
+    Ok(crate::Command::Pro(Command::Diff(DiffOptions {
+        old,
+        new,
+        selection: selection.unwrap_or(Selection::Depth(1)),
+        metric: metric.unwrap_or_default(),
+        json,
+        threads,
+    })))
+}
+
 pub fn run(command: Command) -> io::Result<u8> {
     match command {
-        Command::Diff => Err(io::Error::other("diff isn't available in this build yet.")),
+        Command::Diff(options) => run_diff(options),
+    }
+}
+
+/// Compares a saved scan with another saved scan, or with a folder scanned now using the
+/// saved scan's exclude patterns.
+fn run_diff(options: DiffOptions) -> io::Result<u8> {
+    let old = crate::import(&options.old)?;
+    let is_folder = options.new != Path::new("-")
+        && std::fs::metadata(&options.new).is_ok_and(|metadata| metadata.is_dir());
+    let (new, excludes) = if is_folder {
+        let excludes = scanner::Excludes::new(&old.excludes)
+            .map_err(|message| io::Error::new(io::ErrorKind::InvalidData, message))?;
+        let report = scanner::scan(
+            &options.new,
+            scanner::Options {
+                excludes: &excludes,
+                threads: options.threads.unwrap_or_else(scanner::default_threads),
+            },
+            false,
+            &AtomicBool::new(false),
+            |_| {},
+        )
+        .map_err(|error| crate::scan_error(&options.new, error))?;
+        (report, Some(excludes))
+    } else {
+        (crate::import(&options.new)?.report, None)
+    };
+    let summary = diff::Summary {
+        old: &old.report,
+        new: &new,
+        metric: options.metric,
+    };
+    let changes = match options.selection {
+        Selection::Depth(depth) => {
+            diff::entries(&old.report.tree, &new.tree, depth, options.metric)
+        }
+        Selection::Top(limit) => diff::files(&old.report.tree, &new.tree, limit, options.metric),
+    };
+    let stdout = io::stdout().lock();
+    if options.json {
+        diff::write_json(stdout, &summary, options.selection, &changes)?;
+    } else {
+        diff::write_plain(stdout, &summary, &changes)?;
+        if let Some(excludes) = &excludes {
+            crate::report_issues(&new.issues, true);
+            crate::report_excluded(new.excluded_count, excludes.sources().len());
+        }
+    }
+    let partial = !old.report.issues.is_empty() || !new.issues.is_empty();
+    Ok(if partial { 2 } else { 0 })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Result<crate::Command, String> {
+        parse("diff", values.iter().map(OsString::from))
+    }
+
+    #[test]
+    fn takes_two_scans_and_report_options() {
+        assert_eq!(
+            args(&["old.json", "/data", "--top", "5", "--json", "--apparent"]),
+            Ok(crate::Command::Pro(Command::Diff(DiffOptions {
+                old: "old.json".into(),
+                new: "/data".into(),
+                selection: Selection::Top(5),
+                metric: Metric::Apparent,
+                json: true,
+                threads: None,
+            })))
+        );
+        assert!(matches!(
+            args(&["-", "--threads", "2", "--", "-new"]),
+            Ok(crate::Command::Pro(Command::Diff(DiffOptions { threads: Some(2), ref new, .. })))
+                if new == Path::new("-new")
+        ));
+        assert_eq!(args(&["--help"]), Ok(crate::Command::Help));
+        for invalid in [
+            &["old.json"][..],
+            &["a", "b", "c"],
+            &["-", "-"],
+            &["a", "b", "--depth", "1", "--top", "2"],
+            &["a", "b", "--json", "--json"],
+            &["a", "b", "--color"],
+        ] {
+            assert!(args(invalid).is_err(), "{invalid:?}");
+        }
     }
 }

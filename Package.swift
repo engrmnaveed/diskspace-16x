@@ -11,6 +11,7 @@ var targets: [Target] = [
     // Pro analysis, shown in the app when Settings → Pro features is on.
     .target(name: "SpacePro", dependencies: ["SpaceCore"]),
     .testTarget(name: "SpaceCoreTests", dependencies: ["SpaceCore"]),
+    .testTarget(name: "SpaceProTests", dependencies: ["SpacePro", "SpaceCore"]),
 ]
 
 #if os(macOS)

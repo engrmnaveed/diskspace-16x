@@ -1,6 +1,7 @@
 import AppKit
 import Observation
 import SpaceCore
+import SpacePro
 import UniformTypeIdentifiers
 
 enum BrowseMode: String, CaseIterable {
@@ -25,8 +26,11 @@ enum FolderPresentation: String, CaseIterable {
 struct EntrySort: SortComparator, Hashable {
     var key: EntryOrder
     var order: SortOrder
+    /// Ranks by the change since a saved scan instead, for Pro's Compare.
+    var byChange = false
 
     static let largestFirst = EntrySort(key: .size, order: .reverse)
+    static let biggestGrowth = EntrySort(key: .size, order: .reverse, byChange: true)
 
     /// The workspace sorts rows itself with the current size metric. This serves other callers.
     func compare(_ lhs: ScanEntry, _ rhs: ScanEntry) -> ComparisonResult {
@@ -88,6 +92,9 @@ final class ScanWorkspace {
     private(set) var reportExcludes: [String] = []
     /// Mounted volumes for the start screen.
     private(set) var volumes: [VolumeSummary] = []
+    /// Pro: the saved scan the results are compared with, and the open folder's changes.
+    private(set) var comparison: ScanComparison?
+    private(set) var folderChanges: FolderChanges?
     private var isPresentingPicker = false
     private(set) var notice: Notice?
     private(set) var selectedEntry: ScanEntry?
@@ -183,6 +190,7 @@ final class ScanWorkspace {
     var canRescan: Bool { report != nil && canChooseFolder && !isImported }
     var canReveal: Bool { canBrowse && !isImported }
     var canExport: Bool { canBrowse && canChooseFolder }
+    var canCompare: Bool { canBrowse && canChooseFolder && ProFeatures.isEnabled }
 
     /// Suggests Full Disk Access only when macOS privacy controls kept items out of this scan.
     var accessAdvice: AccessAdvice {
@@ -305,6 +313,54 @@ final class ScanWorkspace {
                     isError: true
                 )
             }
+        }
+    }
+
+    /// Pro: asks for a saved scan of this folder and shows what changed since then.
+    func compareWithSavedScan() {
+        guard canCompare else { return }
+        let picker = NSOpenPanel()
+        picker.title = "Compare with a Saved Scan"
+        picker.message = "Choose an earlier scan of this folder, exported by Space 16X, the space16x CLI, ncdu, or gdu."
+        picker.prompt = "Compare"
+        picker.allowedContentTypes = [.json]
+        picker.allowsMultipleSelection = false
+        isPresentingPicker = true
+        Task {
+            let result = await picker.begin()
+            isPresentingPicker = false
+            if result == .OK, let url = picker.url { compare(with: url) }
+        }
+    }
+
+    /// Pro: compares the results with the saved scan at `url`.
+    func compare(with url: URL) {
+        guard canCompare else { return }
+        let name = url.lastPathComponent
+        Task {
+            let loaded = await Task.detached(priority: .userInitiated) {
+                Result { try SavedScan(contentsOf: url) }
+            }.value
+            switch loaded {
+            case let .success(saved):
+                comparison = ScanComparison(name: name, baseline: saved.report)
+                notice = Notice(
+                    title: "Comparing with “\(name)”",
+                    message: "The Change column shows what grew or shrank since that scan. Click its header to rank by change."
+                )
+                loadRows(keepingRows: true)
+            case let .failure(error):
+                notice = Notice(title: "Couldn’t open “\(name)”", message: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    func stopComparing() {
+        guard comparison != nil else { return }
+        comparison = nil
+        folderChanges = nil
+        if sortOrder.first?.byChange == true {
+            sortOrder = [.largestFirst]
         }
     }
 
@@ -748,7 +804,10 @@ final class ScanWorkspace {
         isLoadingRows = true
         let mode = mode
         let metric = sizeMetric
-        let sort = sortOrder.first ?? .largestFirst
+        let comparison = mode == .folders ? comparison : nil
+        let names = scope.dropFirst().map(\.name)
+        let requested = sortOrder.first ?? .largestFirst
+        let sort = requested.byChange && comparison == nil ? .largestFirst : requested
         rowsTask = Task { [weak self] in
             // Let a running sort release its buffers before allocating for a newer ranking.
             await previousTask?.value
@@ -758,10 +817,21 @@ final class ScanWorkspace {
                 case .folders: folder.rankedChildren(by: metric)
                 case .largestFiles: report.largestFiles(limit: Self.largestFileLimit, by: metric)
                 }
-                let rows = sort == .largestFirst
-                    ? ranked
-                    : ranked.ordered(by: sort.key, ascending: sort.order == .forward, metric: metric)
-                return (rows: rows, chart: Array(ranked.prefix(32)))
+                let changes = comparison?.changes(in: folder, at: names, metric: metric)
+                let rows: [ScanEntry]
+                if sort.byChange, let changes {
+                    // Largest growth first, or largest shrink first in ascending order.
+                    rows = ranked.sorted { left, right in
+                        let (a, b) = (changes.delta(for: left, metric: metric), changes.delta(for: right, metric: metric))
+                        if a == b { return left.name.utf8.lexicographicallyPrecedes(right.name.utf8) }
+                        return sort.order == .forward ? a < b : a > b
+                    }
+                } else if sort == .largestFirst {
+                    rows = ranked
+                } else {
+                    rows = ranked.ordered(by: sort.key, ascending: sort.order == .forward, metric: metric)
+                }
+                return (rows: rows, chart: Array(ranked.prefix(32)), changes: changes)
             }
             let result = await withTaskCancellationHandler {
                 await worker.value
@@ -772,6 +842,7 @@ final class ScanWorkspace {
             rankedScope = mode == .folders ? folder : report.root
             rows = result.rows
             chartRows = result.chart
+            folderChanges = result.changes
             let rowPaths = Set(rows.map(\.path))
             if !selectedPaths.isSubset(of: rowPaths) { selectedPaths.formIntersection(rowPaths) }
             selectedEntry = selection.flatMap(entry(withPath:))

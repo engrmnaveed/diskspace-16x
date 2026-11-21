@@ -1,5 +1,6 @@
 import AppKit
 import SpaceCore
+import SpacePro
 import SwiftUI
 
 // Some Command Line Tools SDKs expose the State macro without its compiler plugin.
@@ -8,6 +9,7 @@ typealias ViewState<Value> = SwiftUI.State<Value>
 @main
 struct Space16XApp: App {
     @ViewState private var workspace = ScanWorkspace()
+    @AppStorage(ProFeatures.defaultsKey) private var proFeatures = false
 
     var body: some Scene {
         Window("Space 16X", id: "workspace") {
@@ -52,6 +54,14 @@ struct Space16XApp: App {
                 Button("Cancel Scan", action: workspace.cancelScan)
                     .keyboardShortcut(".", modifiers: .command)
                     .disabled(!workspace.isScanning || workspace.isCancelling)
+                if proFeatures {
+                    Divider()
+                    Button("Compare with Saved Scan…", action: workspace.compareWithSavedScan)
+                        .keyboardShortcut("k", modifiers: [.command, .shift])
+                        .disabled(!workspace.canCompare)
+                    Button("Stop Comparing", action: workspace.stopComparing)
+                        .disabled(workspace.comparison == nil)
+                }
                 Divider()
                 Button("Show Scan Details") { workspace.showsDetails = true }
                     .keyboardShortcut("i")
