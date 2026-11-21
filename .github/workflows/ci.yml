@@ -92,11 +92,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Prepare musl build tools
+      - name: Prepare musl build tools, and ncdu and gdu for export checks
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends binutils musl-tools
+          sudo apt-get install -y --no-install-recommends binutils musl-tools ncdu gdu
       - name: Check formatting, lint, and tests
         working-directory: cli
         run: |
