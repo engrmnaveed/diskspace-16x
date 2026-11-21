@@ -27,14 +27,18 @@ pub struct OwnerTotal {
 
 impl OwnerTotal {
     /// The owner as text reports show it: the name, or the numeric ID.
-    fn label(&self) -> String {
+    pub(super) fn label(&self) -> String {
         match &self.owner {
             Some(name) => terminal_text(name).into_owned(),
             None => self.uid.to_string(),
         }
     }
 
-    fn bytes(&self, metric: Metric) -> u64 {
+    pub(super) fn item_count(&self) -> u64 {
+        self.item_count
+    }
+
+    pub(super) fn bytes(&self, metric: Metric) -> u64 {
         match metric {
             Metric::Allocated => self.allocated_bytes,
             Metric::Apparent => self.apparent_bytes,

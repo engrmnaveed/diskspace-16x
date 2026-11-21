@@ -86,6 +86,10 @@ This is Space 16X Pro. It adds:
              Add each entry's exclusive size: the space that moving it to the Trash
              and emptying it frees at least, without blocks shared with APFS clones or
              reflinks and files with other hard links. It reads more metadata.
+  scan --html FILE|-
+             Also write a self-contained HTML report to FILE to share: a treemap, the
+             largest items and files, file types and owners. With -, write only it to
+             standard output.
   scan --cleanup
              List folders that tools recreate, such as node_modules, Cargo's target,
              Xcode's DerivedData and caches, instead of entries. u in the explorer
@@ -121,6 +125,7 @@ const PRO_SCAN_OPTIONS: &[&str] = &[
     "--by-owner",
     "--cleanup",
     "--exclusive",
+    "--html",
 ];
 
 #[cfg(feature = "pro")]
@@ -414,6 +419,12 @@ fn run_scan(options: ScanOptions) -> io::Result<u8> {
     #[cfg(feature = "pro")]
     let (scan, written) = {
         let scan = options.pro.narrow(scan);
+        if options.pro.write_html(&scan, options.metric, sources)? {
+            report_issues(&scan.issues, true);
+            report_excluded(scan.excluded_count, sources.len());
+            options.pro.report_narrowed();
+            return Ok(status(&scan));
+        }
         let written = options.pro.write_report(
             &scan,
             options.selection,
@@ -705,7 +716,7 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
         );
     }
     #[cfg(feature = "pro")]
-    pro.check(selection, metric)?;
+    pro.check(selection, metric, json)?;
     Ok(Command::Scan(ScanOptions {
         path: path.unwrap_or_else(|| PathBuf::from(".")),
         selection: selection.unwrap_or(Selection::Depth(1)),
@@ -947,6 +958,10 @@ mod tests {
                 args(&["scan", "--exclusive"]),
                 Ok(Command::ProOnly("--exclusive"))
             );
+            assert_eq!(
+                args(&["scan", "--html", "r.html"]),
+                Ok(Command::ProOnly("--html"))
+            );
         }
         #[cfg(feature = "pro")]
         {
@@ -963,12 +978,20 @@ mod tests {
             assert!(args(&["scan", "/srv", "--by-owner", "--apparent"]).is_ok());
             assert!(args(&["scan", "~", "--cleanup", "--json", "--older-than", "30"]).is_ok());
             assert!(args(&["scan", "--exclusive", "--top", "5", "--json"]).is_ok());
+            assert!(args(&["scan", "--html", "r.html", "--types", "3", "--json"]).is_ok());
+            assert!(args(&["scan", "--html", "-", "--apparent", "--older-than", "9"]).is_ok());
             for invalid in [
                 &["scan", "--by-owner", "--by-owner"][..],
                 &["scan", "--cleanup", "--cleanup"],
                 &["scan", "--exclusive", "--apparent"],
                 &["scan", "--exclusive", "--types", "3"],
                 &["scan", "--cleanup", "--exclusive"],
+                &["scan", "--html"],
+                &["scan", "--html", ""],
+                &["scan", "--html", "a", "--html", "b"],
+                &["scan", "--html", "-", "--json"],
+                &["scan", "--html", "-", "--top", "3"],
+                &["scan", "--html", "-", "--export", "-"],
                 &["scan", "--cleanup", "--top", "3"],
                 &["scan", "--cleanup", "--by-owner"],
                 &["scan", "--by-owner", "--types", "2"],

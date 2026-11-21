@@ -11,8 +11,10 @@ mod duplicates;
 mod exclusive;
 mod explain;
 mod history;
+mod html;
 mod modified;
 mod owners;
+pub mod treemap;
 mod types;
 
 pub use cleanup::{rule_for as cleanup_rule, suggestions as cleanup_suggestions};
@@ -59,6 +61,8 @@ pub struct ScanOptions {
     cleanup: bool,
     /// Add each entry's exclusive bytes, which removing it frees at least.
     exclusive: bool,
+    /// Also write an HTML report to this file, or only it to standard output for `-`.
+    html: Option<PathBuf>,
 }
 
 impl ScanOptions {
@@ -97,6 +101,14 @@ impl ScanOptions {
                 self.exclusive = true;
                 Ok(())
             }
+            "--html" if self.html.is_none() => {
+                let file = arguments
+                    .next()
+                    .filter(|file| !file.is_empty())
+                    .ok_or("--html requires a file path or -.")?;
+                self.html = Some(file.into());
+                Ok(())
+            }
             _ => Err(format!("Use {flag} once.")),
         }
     }
@@ -106,7 +118,12 @@ impl ScanOptions {
         &self,
         selection: Option<Selection>,
         metric: Option<Metric>,
+        json: bool,
     ) -> Result<(), String> {
+        let others = self.types.is_some() || self.by_owner || self.cleanup || self.exclusive;
+        if self.html.as_deref() == Some(Path::new("-")) && (json || selection.is_some() || others) {
+            return Err("--html - writes only the HTML report, so it takes no other report options such as --json or --depth.".into());
+        }
         if self.exclusive && (self.types.is_some() || self.by_owner || self.cleanup) {
             return Err("--exclusive adds a column to entries or --top, so it takes no --types, --by-owner or --cleanup.".into());
         }
@@ -204,6 +221,33 @@ impl ScanOptions {
             (None, false, _) => return Ok(false),
         }
         Ok(true)
+    }
+
+    /// Writes the `--html` report. Returns true when it went to standard output, which
+    /// then holds nothing else.
+    pub fn write_html(
+        &self,
+        report: &scanner::Report,
+        metric: Metric,
+        excludes: &[String],
+    ) -> io::Result<bool> {
+        let Some(file) = &self.html else {
+            return Ok(false);
+        };
+        if file == Path::new("-") {
+            html::write(
+                io::stdout().lock(),
+                report,
+                metric,
+                excludes,
+                self.older_than,
+            )?;
+            return Ok(true);
+        }
+        std::fs::File::create(file)
+            .and_then(|output| html::write(output, report, metric, excludes, self.older_than))
+            .map_err(|error| crate::scan_error(file, error))?;
+        Ok(false)
     }
 
     pub fn older_than_days(&self) -> Option<u32> {

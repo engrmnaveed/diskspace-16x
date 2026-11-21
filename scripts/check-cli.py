@@ -48,6 +48,7 @@ def check(binary, root):
             assert "Space 16X Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
         for option in (
             ("--older-than", "30"), ("--types", "5"), ("--by-owner",), ("--cleanup",), ("--exclusive",),
+            ("--html", root / "report.html"),
         ):
             hint = run(binary, "scan", root, *option, status=1)
             assert "Space 16X Pro" in hint.stderr and not hint.stdout, hint.stderr
@@ -438,6 +439,28 @@ def check_duplicates(binary):
             assert run(binary, "duplicates", root, *invalid, status=1).stderr
 
 
+def check_html(binary):
+    """Pro: --html writes a self-contained page beside the usual report."""
+    with tempfile.TemporaryDirectory(prefix="space16x-html-") as directory:
+        root = Path(directory).resolve()
+        (root / "data" / "<clips>").mkdir(parents=True)
+        (root / "data" / "<clips>" / "talk.mov").write_bytes(os.urandom(200_000))
+        (root / "data" / "notes.txt").write_bytes(b"n" * 5000)
+        page = root / "report.html"
+        result = run(binary, "scan", root / "data", "--html", page, "--json")
+        assert json.loads(result.stdout)["schemaVersion"] == 3, result.stdout
+        html = page.read_text(encoding="utf-8")
+        assert html.startswith("<!doctype html>") and html.rstrip().endswith("</html>"), html[:200]
+        assert "&lt;clips&gt;/" in html and "Largest files" in html and ".mov" in html, html
+        for forbidden in ("<script", "http://", "https://", "<link"):
+            assert forbidden not in html, forbidden
+        alone = run(binary, "scan", root / "data", "--html", "-").stdout
+        assert alone.startswith("<!doctype html>") and "&lt;clips&gt;" in alone, alone[:200]
+        assert run(binary, "scan", root / "data", "--html", root / "missing" / "r.html", status=1).stderr
+        for invalid in (("--html", "-", "--json"), ("--html",), ("--html", "-", "--top", "2")):
+            assert run(binary, "scan", root, *invalid, status=1).stderr
+
+
 def check_explain(binary):
     """Pro: explain shows the volume of a folder and the space a scan can't see."""
     with tempfile.TemporaryDirectory(prefix="space16x-explain-") as directory:
@@ -631,6 +654,7 @@ def main():
         check_cleanup(binary)
         check_exclusive(binary)
         check_duplicates(binary)
+        check_html(binary)
     print("CLI acceptance checks passed.")
 
 

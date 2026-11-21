@@ -359,6 +359,11 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         frame.render_widget(widget.wrap(Wrap { trim: true }), area);
         return;
     }
+    #[cfg(feature = "pro")]
+    if explorer.treemap && explorer.mode == Mode::Folders {
+        draw_treemap(frame, area, explorer);
+        return;
+    }
     // Pro shows modification dates when the scan read them, which an import doesn't.
     let dated = explorer
         .scope()
@@ -403,6 +408,92 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         let line = columns.entry(entry, &path, total, selected, marked);
         let style = if selected { SELECTED } else { Style::default() };
         frame.render_widget(Paragraph::new(line).style(style), row);
+    }
+}
+
+/// Pro: the open folder's contents as a squarified treemap, with the selection highlighted.
+#[cfg(feature = "pro")]
+fn draw_treemap(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
+    use crate::pro::treemap;
+    use ratatui::widgets::Borders;
+    const COLORS: [Color; 5] = [
+        Color::Cyan,
+        Color::Green,
+        Color::Blue,
+        Color::Magenta,
+        Color::Yellow,
+    ];
+    explorer.set_page_rows(usize::from(area.height));
+    let Some(tree) = explorer.rows_tree() else {
+        return;
+    };
+    let metric = explorer.metric;
+    let selected = explorer.rows.get(explorer.selected).copied();
+    let mut cells: Vec<_> = explorer
+        .rows
+        .iter()
+        .map(|&id| tree.entry(id))
+        .filter(|entry| metric.bytes(*entry) > 0)
+        .collect();
+    cells.sort_by_key(|entry| std::cmp::Reverse(metric.bytes(*entry)));
+    cells.truncate(80);
+    let sizes: Vec<u64> = cells.iter().map(|entry| metric.bytes(*entry)).collect();
+    // Terminal cells are about twice as tall as wide, so lay out in half-rows.
+    let bounds = treemap::Rect {
+        x: 0.0,
+        y: 0.0,
+        width: f64::from(area.width),
+        height: f64::from(area.height) * 2.0,
+    };
+    for (index, (entry, rect)) in cells
+        .iter()
+        .zip(treemap::layout(&sizes, bounds))
+        .enumerate()
+    {
+        let (x0, y0) = (rect.x.round() as u16, (rect.y / 2.0).round() as u16);
+        let (x1, y1) = (
+            (rect.x + rect.width).round() as u16,
+            ((rect.y + rect.height) / 2.0).round() as u16,
+        );
+        // A box needs room for its borders and part of a name.
+        if x1.saturating_sub(x0) < 4 || y1.saturating_sub(y0) < 2 {
+            continue;
+        }
+        let cell = Rect::new(area.x + x0, area.y + y0, x1 - x0, y1 - y0);
+        let chosen = Some(entry.id()) == selected;
+        let color = COLORS[index % COLORS.len()];
+        let style = if chosen {
+            SELECTED
+        } else {
+            Style::new().fg(color)
+        };
+        let width = usize::from(cell.width.saturating_sub(2));
+        let name = terminal_path(&explorer.row_path(*entry));
+        let suffix = if entry.kind() == EntryKind::Directory {
+            "/"
+        } else {
+            ""
+        };
+        let block = Block::new()
+            .borders(Borders::ALL)
+            .border_style(style)
+            .title(Span::styled(
+                shorten(&format!("{name}{suffix}"), width, false),
+                style,
+            ));
+        let inner = block.inner(cell);
+        frame.render_widget(
+            block.style(if chosen { style } else { Style::default() }),
+            cell,
+        );
+        if inner.height > 0 {
+            let size = shorten(&format_bytes(metric.bytes(*entry)), width, false);
+            paint(
+                frame,
+                line_at(inner, 0),
+                Line::styled(size, if chosen { style } else { MUTED }),
+            );
+        }
     }
 }
 
@@ -851,6 +942,8 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         ("t", "Show file types in the open folder"),
         #[cfg(feature = "pro")]
         ("u", "List folders tools recreate, to trash them"),
+        #[cfg(feature = "pro")]
+        ("m", "Show the open folder as a treemap"),
         trash[0],
         trash[1],
         ("r", "Rescan the open folder, or all in largest"),
