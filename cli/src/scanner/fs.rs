@@ -10,7 +10,7 @@ use std::sync::atomic::AtomicBool;
 
 use super::check_cancelled;
 
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(super) struct Identity {
     device: libc::dev_t,
     inode: libc::ino_t,
@@ -27,8 +27,54 @@ impl From<&libc::stat> for Identity {
 
 pub(super) struct Directory {
     pub fd: Arc<OwnedFd>,
-    pub names: Vec<OsString>,
+    /// Entries in bytewise name order.
+    pub entries: Vec<DirectoryEntry>,
     pub error: Option<io::Error>,
+}
+
+pub(super) struct DirectoryEntry {
+    pub name: OsString,
+    pub listed: Listed,
+}
+
+/// What a directory listing already tells about an entry. Only macOS lists metadata.
+#[derive(Clone, Copy)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(super) enum Listed {
+    /// Nothing yet: read the entry's metadata on its own.
+    Unknown,
+    /// A regular file's metadata, read in bulk with the listing.
+    File(FileMetadata),
+    /// A symbolic link or special file, which contributes no bytes.
+    Special,
+}
+
+/// The metadata the scan counts for a regular file.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct FileMetadata {
+    pub device: libc::dev_t,
+    pub identity: Identity,
+    /// The file has more than one hard link.
+    pub linked: bool,
+    /// The file length (`st_size`).
+    pub size: u64,
+    /// Allocated bytes (`st_blocks` × 512), or None beyond the byte range.
+    pub allocated: Option<u64>,
+    pub dataless: bool,
+}
+
+impl From<&libc::stat> for FileMetadata {
+    fn from(metadata: &libc::stat) -> Self {
+        Self {
+            device: metadata.st_dev,
+            identity: Identity::from(metadata),
+            linked: metadata.st_nlink > 1,
+            size: metadata.st_size.max(0) as u64,
+            // POSIX st_blocks describes 512-byte units, regardless of the filesystem block size.
+            allocated: (metadata.st_blocks.max(0) as u64).checked_mul(512),
+            dataless: is_dataless(metadata),
+        }
+    }
 }
 
 pub(super) enum Operation {
@@ -219,6 +265,15 @@ fn list_at(
         return Err(io::Error::other("Directory changed during the scan."));
     }
 
+    #[cfg(target_os = "macos")]
+    if let Some((entries, error)) = bulk::read(&fd, cancelled)? {
+        return Ok(Directory {
+            fd: Arc::new(fd),
+            entries,
+            error,
+        });
+    }
+
     // Give the directory stream its own descriptor. The scan keeps the original
     // for relative metadata calls after enumeration, including provider workers.
     // SAFETY: fcntl borrows a live file descriptor.
@@ -230,9 +285,16 @@ fn list_at(
     let stream_fd = unsafe { OwnedFd::from_raw_fd(stream_fd) };
     let stream = DirectoryStream::open(stream_fd)?;
     let (names, error) = stream.names(cancelled)?;
+    let entries = names
+        .into_iter()
+        .map(|name| DirectoryEntry {
+            name,
+            listed: Listed::Unknown,
+        })
+        .collect();
     Ok(Directory {
         fd: Arc::new(fd),
-        names,
+        entries,
         error,
     })
 }
@@ -294,5 +356,299 @@ impl Drop for DirectoryStream {
     fn drop(&mut self) {
         // SAFETY: the wrapper owns a unique, open directory stream.
         unsafe { libc::closedir(self.0.as_ptr()) };
+    }
+}
+
+/// Reads a directory's names, and regular files' metadata, with `getattrlistbulk`.
+/// One call returns many entries without looking each one up, which keeps large scans
+/// from thrashing the kernel's vnode cache. Folders still get their own `fstatat`, so
+/// firmlinks and mount points resolve as they always have.
+#[cfg(target_os = "macos")]
+mod bulk {
+    use std::cell::RefCell;
+    use std::ffi::OsStr;
+    use std::io;
+    use std::os::fd::{AsRawFd, OwnedFd};
+    use std::os::unix::ffi::OsStrExt;
+    use std::sync::atomic::AtomicBool;
+
+    use super::{DirectoryEntry, FileMetadata, Identity, Listed, check_cancelled};
+
+    // From the macOS SDK's <sys/attr.h> and <sys/vnode.h>.
+    const ATTR_CMN_ERROR: u32 = 0x2000_0000;
+    const VREG: u32 = 1;
+    const VDIR: u32 = 2;
+    const SF_DATALESS: u32 = 0x4000_0000;
+    const BUFFER_BYTES: usize = 64 * 1024;
+
+    thread_local! {
+        static BUFFER: RefCell<Vec<u8>> = RefCell::new(vec![0; BUFFER_BYTES]);
+    }
+
+    /// The entries in name order and any error that cut the listing short, or None
+    /// when the filesystem can't list this directory in bulk.
+    pub(super) fn read(
+        fd: &OwnedFd,
+        cancelled: &AtomicBool,
+    ) -> io::Result<Option<(Vec<DirectoryEntry>, Option<io::Error>)>> {
+        let mut request = libc::attrlist {
+            bitmapcount: libc::ATTR_BIT_MAP_COUNT,
+            reserved: 0,
+            commonattr: libc::ATTR_CMN_RETURNED_ATTRS
+                | libc::ATTR_CMN_NAME
+                | libc::ATTR_CMN_DEVID
+                | libc::ATTR_CMN_OBJTYPE
+                | libc::ATTR_CMN_FLAGS
+                | libc::ATTR_CMN_FILEID
+                | ATTR_CMN_ERROR,
+            volattr: 0,
+            dirattr: 0,
+            fileattr: libc::ATTR_FILE_LINKCOUNT
+                | libc::ATTR_FILE_ALLOCSIZE
+                | libc::ATTR_FILE_DATALENGTH,
+            forkattr: 0,
+        };
+        BUFFER.with_borrow_mut(|buffer| {
+            let mut entries = Vec::new();
+            let mut started = false;
+            let error = loop {
+                check_cancelled(cancelled)?;
+                // SAFETY: the descriptor is open, the request is a valid attrlist, and
+                // the buffer is writable for its full length.
+                let count = unsafe {
+                    libc::getattrlistbulk(
+                        fd.as_raw_fd(),
+                        std::ptr::from_mut(&mut request).cast(),
+                        buffer.as_mut_ptr().cast(),
+                        buffer.len(),
+                        0,
+                    )
+                };
+                if count < 0 {
+                    if !started {
+                        return Ok(None);
+                    }
+                    break Some(io::Error::last_os_error());
+                }
+                if count == 0 {
+                    break None;
+                }
+                started = true;
+                if let Err(error) = parse(&buffer[..], count as usize, &mut entries) {
+                    break Some(error);
+                }
+            };
+            entries.sort_unstable_by(|left: &DirectoryEntry, right| {
+                left.name.as_bytes().cmp(right.name.as_bytes())
+            });
+            Ok(Some((entries, error)))
+        })
+    }
+
+    fn parse(buffer: &[u8], count: usize, entries: &mut Vec<DirectoryEntry>) -> io::Result<()> {
+        let mut offset = 0;
+        for _ in 0..count {
+            let length = Reader::new(buffer, offset).u32()? as usize;
+            let record = buffer
+                .get(offset..offset + length)
+                .filter(|_| length >= 4)
+                .ok_or_else(invalid)?;
+            if let Some(entry) = entry(record)? {
+                entries.push(entry);
+            }
+            offset += length;
+        }
+        Ok(())
+    }
+
+    /// One packed entry: its length, the attributes returned, then each returned
+    /// attribute in a fixed order.
+    fn entry(record: &[u8]) -> io::Result<Option<DirectoryEntry>> {
+        let mut reader = Reader::new(record, 4);
+        let common = reader.u32()?;
+        let _volume = reader.u32()?;
+        let _directory = reader.u32()?;
+        let file = reader.u32()?;
+        let _fork = reader.u32()?;
+        let error = if common & ATTR_CMN_ERROR != 0 {
+            reader.u32()?
+        } else {
+            0
+        };
+        if common & libc::ATTR_CMN_NAME == 0 {
+            return Ok(None);
+        }
+        let name = reader.name()?;
+        if name == b"." || name == b".." || name.is_empty() {
+            return Ok(None);
+        }
+        let mut take = |bit: u32, set: u32, wide: bool| -> io::Result<Option<u64>> {
+            if set & bit == 0 {
+                return Ok(None);
+            }
+            if wide {
+                reader.u64().map(Some)
+            } else {
+                reader.u32().map(|value| Some(u64::from(value)))
+            }
+        };
+        let device = take(libc::ATTR_CMN_DEVID, common, false)?;
+        let kind = take(libc::ATTR_CMN_OBJTYPE, common, false)?;
+        let flags = take(libc::ATTR_CMN_FLAGS, common, false)?;
+        let inode = take(libc::ATTR_CMN_FILEID, common, true)?;
+        let links = take(libc::ATTR_FILE_LINKCOUNT, file, false)?;
+        let allocated = take(libc::ATTR_FILE_ALLOCSIZE, file, true)?;
+        let size = take(libc::ATTR_FILE_DATALENGTH, file, true)?;
+        let listed = match (error, kind) {
+            (0, Some(kind)) if kind == u64::from(VREG) => {
+                match (device, flags, inode, links, allocated, size) {
+                    (
+                        Some(device),
+                        Some(flags),
+                        Some(inode),
+                        Some(links),
+                        Some(allocated),
+                        Some(size),
+                    ) => {
+                        let device = device as u32 as libc::dev_t;
+                        Listed::File(FileMetadata {
+                            device,
+                            identity: Identity {
+                                device,
+                                inode: inode as libc::ino_t,
+                            },
+                            linked: links > 1,
+                            // off_t values; a negative one would be invalid.
+                            size: (size as i64).max(0) as u64,
+                            allocated: Some((allocated as i64).max(0) as u64),
+                            dataless: flags as u32 & SF_DATALESS != 0,
+                        })
+                    }
+                    _ => Listed::Unknown,
+                }
+            }
+            (0, Some(kind)) if kind != u64::from(VDIR) => Listed::Special,
+            _ => Listed::Unknown,
+        };
+        Ok(Some(DirectoryEntry {
+            name: OsStr::from_bytes(name).to_owned(),
+            listed,
+        }))
+    }
+
+    struct Reader<'a> {
+        bytes: &'a [u8],
+        at: usize,
+    }
+
+    impl<'a> Reader<'a> {
+        fn new(bytes: &'a [u8], at: usize) -> Self {
+            Self { bytes, at }
+        }
+
+        fn take<const N: usize>(&mut self) -> io::Result<[u8; N]> {
+            let bytes = self.bytes.get(self.at..self.at + N).ok_or_else(invalid)?;
+            self.at += N;
+            Ok(bytes.try_into().expect("the slice has N bytes"))
+        }
+
+        fn u32(&mut self) -> io::Result<u32> {
+            self.take().map(u32::from_ne_bytes)
+        }
+
+        fn u64(&mut self) -> io::Result<u64> {
+            self.take().map(u64::from_ne_bytes)
+        }
+
+        /// An attrreference: an offset from its own position and a length that
+        /// includes the terminating NUL.
+        fn name(&mut self) -> io::Result<&'a [u8]> {
+            let position = self.at;
+            let offset = self.u32()? as i32;
+            let length = self.u32()? as usize;
+            let start = position
+                .checked_add_signed(offset as isize)
+                .ok_or_else(invalid)?;
+            let bytes = self.bytes.get(start..start + length).ok_or_else(invalid)?;
+            match bytes.split_last() {
+                Some((0, name)) => Ok(name),
+                _ => Err(invalid()),
+            }
+        }
+    }
+
+    fn invalid() -> io::Error {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "macOS returned an invalid directory listing.",
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::os::unix::fs::symlink;
+
+    #[test]
+    fn lists_names_in_order_with_the_same_file_metadata_as_fstatat() -> io::Result<()> {
+        let root = std::env::temp_dir().join(format!("space16x-listing-{}", std::process::id()));
+        fs::create_dir(&root)?;
+        let result = (|| {
+            fs::create_dir(root.join("folder"))?;
+            fs::write(root.join("b.bin"), vec![1; 70_000])?;
+            fs::write(root.join("a.txt"), "small")?;
+            fs::write(root.join("empty"), "")?;
+            fs::File::create(root.join("sparse.img"))?.set_len(16 * 1024 * 1024)?;
+            fs::hard_link(root.join("b.bin"), root.join("link.bin"))?;
+            symlink(root.join("a.txt"), root.join("pointer"))?;
+            let cancelled = AtomicBool::new(false);
+            let metadata = stat_at(None, root.as_os_str())?;
+            let directory = list_at(
+                None,
+                root.as_os_str(),
+                Identity::from(&metadata),
+                &cancelled,
+            )?;
+            assert!(directory.error.is_none());
+            let names: Vec<_> = directory
+                .entries
+                .iter()
+                .map(|entry| entry.name.to_string_lossy().into_owned())
+                .collect();
+            assert_eq!(
+                names,
+                [
+                    "a.txt",
+                    "b.bin",
+                    "empty",
+                    "folder",
+                    "link.bin",
+                    "pointer",
+                    "sparse.img"
+                ]
+            );
+            for entry in &directory.entries {
+                let stat = stat_at(Some(&directory.fd), &entry.name)?;
+                let regular = stat.st_mode & libc::S_IFMT == libc::S_IFREG;
+                match entry.listed {
+                    Listed::File(file) => assert_eq!(file, FileMetadata::from(&stat)),
+                    Listed::Special => assert_eq!(stat.st_mode & libc::S_IFMT, libc::S_IFLNK),
+                    // Folders always get their own fstatat. Linux reads everything that way.
+                    Listed::Unknown => assert!(!regular || cfg!(not(target_os = "macos"))),
+                }
+                if cfg!(target_os = "macos") {
+                    assert_eq!(
+                        regular,
+                        matches!(entry.listed, Listed::File(_)),
+                        "{names:?}"
+                    );
+                }
+            }
+            Ok(())
+        })();
+        fs::remove_dir_all(&root)?;
+        result
     }
 }
