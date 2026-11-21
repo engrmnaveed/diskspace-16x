@@ -232,7 +232,7 @@ struct JsonIssue<'a> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct JsonPath<'a> {
+pub(crate) struct JsonPath<'a> {
     path: Cow<'a, str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path_bytes: Option<String>,
@@ -330,7 +330,7 @@ pub(crate) fn write_json(
 }
 
 /// The build's edition. The Pro edition arrives with milestone M4.
-const EDITION: &str = "basic";
+pub(crate) const EDITION: &str = "basic";
 
 /// Entries through `depth` levels below the root, each folder's contents ranked.
 fn directory_entries(tree: &Tree, depth: usize, metric: Metric) -> Vec<NodeId> {

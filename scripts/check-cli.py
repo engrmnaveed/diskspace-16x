@@ -262,6 +262,22 @@ def check_ncdu_and_gdu(binary, root):
         theirs.unlink(missing_ok=True)
 
 
+def check_volumes(binary):
+    """`volumes` lists the root filesystem in text and JSON."""
+    text = run(binary, "volumes").stdout.splitlines()
+    assert text[0].split() == ["Size", "Used", "Free", "Use%", "Inodes", "Type", "Mounted", "on"], text
+    assert any(line.endswith(" /") for line in text[1:]), text
+    report = json.loads(run(binary, "volumes", "--json").stdout)
+    assert report["schemaVersion"] == 3 and report["edition"] == "basic", report
+    root = next(volume for volume in report["volumes"] if volume["path"] == "/")
+    assert root["totalBytes"] > 0 and root["usedBytes"] <= root["totalBytes"], root
+    assert root["availableBytes"] <= root["totalBytes"] and root["type"], root
+    everything = json.loads(run(binary, "volumes", "--all", "--json").stdout)
+    assert len(everything["volumes"]) >= len(report["volumes"])
+    for invalid in (("volumes", "/"), ("volumes", "--json", "--json")):
+        assert run(binary, *invalid, status=1).stderr
+
+
 def check_deep_tree(binary, root):
     # Each traversal level keeps a descriptor open. Start only the child at launchd's soft limit.
     deepest = root.joinpath(*(["d"] * 300))
@@ -287,6 +303,7 @@ def main():
         check(binary, Path(directory).resolve())
     with tempfile.TemporaryDirectory(prefix="space16x-deep-") as directory:
         check_deep_tree(binary, Path(directory).resolve())
+    check_volumes(binary)
     print("CLI acceptance checks passed.")
 
 

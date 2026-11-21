@@ -4,6 +4,7 @@
 space16x [--no-color] [--read-only] [--threads N] [EXCLUDES] [PATH]
 space16x --import FILE|- [--no-color]
 space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [--export FILE|-] [--threads N] [EXCLUDES]
+space16x volumes [--all] [--json]
 space16x --version
 space16x --help
 ```
@@ -128,6 +129,22 @@ Space 16X adds keys that start with `space16x_`, which other tools ignore:
 | `space16x_nameBytes` | Entry | The original name in hexadecimal, when it isn't UTF-8. `name` then substitutes invalid sequences, so the file stays valid JSON. |
 
 Exports contain every path in the scan. Review them for personal paths before sharing.
+
+## Check free space on each volume
+
+`space16x volumes` shows which disk is filling up before you scan one:
+
+```text
+      Size       Used       Free  Use%  Inodes  Type    Mounted on
+  98.30 GB   71.20 GB   22.00 GB   77%     12%  ext4    /
+   2.00 TB    1.21 TB  690.15 GB   64%      1%  xfs     /srv
+```
+
+**Free** is the space you can use, which excludes blocks a filesystem reserves for root. **Use%** is used space as a share of used plus free, rounded up, as `df` reports it. **Inodes** is the share of file slots in use; a filesystem that runs out of them can't create files even with free space. It shows `-` for filesystems without a fixed inode count. The figures come from `statvfs` on Linux and `statfs` on macOS.
+
+By default the list leaves out memory filesystems such as `tmpfs`, snap images, empty pseudo-filesystems, bind mounts of a device already listed, and macOS system volumes other than `/System/Volumes/Data`, which holds your files. `--all` lists every mount. On APFS, the volumes in a container share its space, so each one shows the container's size and use, as Finder does.
+
+`--json` writes schema 3 with `schemaVersion`, `edition`, `volumes` and `issues`. Each volume has `path` (and `pathBytes` when it isn't UTF-8), `device`, `type`, `totalBytes`, `usedBytes`, `availableBytes`, `totalInodes`, `freeInodes`, and `readOnly`. A mount that can't be read is listed in `issues` and on standard error, and the exit code is `2`.
 
 ## Threads
 

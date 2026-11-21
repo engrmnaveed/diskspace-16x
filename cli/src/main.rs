@@ -3,6 +3,7 @@ mod report;
 mod scanner;
 mod trash;
 mod tui;
+mod volumes;
 
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -21,10 +22,13 @@ Usage: space16x [--no-color] [--read-only] [--threads N] [EXCLUDES] [PATH]
        space16x --import FILE|- [--no-color]
        space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [--export FILE|-]
                      [--threads N] [EXCLUDES]
+       space16x volumes [--all] [--json]
 
 Open the disk explorer in an interactive terminal. PATH defaults to the current directory.
 In the explorer, Space marks items and d moves them to the Trash after you confirm.
-The scan command prints a plain directory summary and works in scripts.
+The scan command prints a plain directory summary and works in scripts. The volumes
+command shows the size, used and free space, and inode use of each mounted volume, and
+--all adds system, memory and duplicate mounts.
 
   --depth N  List entries through N levels (default: 1, 0 for the root total)
   --top N    List the N largest files in the scan instead of directory entries
@@ -58,6 +62,7 @@ enum Command {
     Version,
     Explore(ExploreOptions),
     Scan(ScanOptions),
+    Volumes { json: bool, all: bool },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -173,6 +178,22 @@ fn run(command: Command) -> io::Result<u8> {
         Command::Version => writeln!(io::stdout(), "space16x {}", env!("CARGO_PKG_VERSION"))?,
         Command::Explore(options) => return explore(options),
         Command::Scan(options) => return run_scan(options),
+        Command::Volumes { json, all } => {
+            let (list, issues) = volumes::list(all)?;
+            if json {
+                volumes::write_json(io::stdout().lock(), &list, &issues)?;
+            } else {
+                volumes::write_plain(io::stdout().lock(), &list)?;
+                for (path, message) in &issues {
+                    eprintln!(
+                        "space16x: {}: {}",
+                        report::terminal_path(path),
+                        report::terminal_text(message)
+                    );
+                }
+            }
+            return Ok(if issues.is_empty() { 0 } else { 2 });
+        }
     }
     Ok(0)
 }
@@ -385,6 +406,10 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Command, Strin
             arguments.next();
             return parse_scan(arguments);
         }
+        Some("volumes") => {
+            arguments.next();
+            return parse_volumes(arguments);
+        }
         _ => {}
     }
 
@@ -538,6 +563,19 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
         excludes,
         threads,
     }))
+}
+
+fn parse_volumes(arguments: impl Iterator<Item = OsString>) -> Result<Command, String> {
+    let (mut json, mut all) = (false, false);
+    for argument in arguments {
+        match argument.to_str() {
+            Some("-h" | "--help") if !json && !all => return Ok(Command::Help),
+            Some("--json") if !json => json = true,
+            Some("--all") if !all => all = true,
+            _ => return Err(format!("Unknown or repeated option {argument:?}.")),
+        }
+    }
+    Ok(Command::Volumes { json, all })
 }
 
 fn set_path(current: &mut Option<PathBuf>, path: PathBuf) -> Result<(), String> {
@@ -712,6 +750,27 @@ mod tests {
             &["--import", "a", "--threads", "2"],
             &["--exclude", "x", "--import", "a"],
         ] {
+            assert!(args(invalid).is_err(), "{invalid:?}");
+        }
+    }
+
+    #[test]
+    fn takes_volume_options() {
+        assert_eq!(
+            args(&["volumes"]),
+            Ok(Command::Volumes {
+                json: false,
+                all: false
+            })
+        );
+        assert_eq!(
+            args(&["volumes", "--all", "--json"]),
+            Ok(Command::Volumes {
+                json: true,
+                all: true
+            })
+        );
+        for invalid in [&["volumes", "/"][..], &["volumes", "--json", "--json"]] {
             assert!(args(invalid).is_err(), "{invalid:?}");
         }
     }
