@@ -1,0 +1,50 @@
+{
+  "minimumBytes": 1000000,
+  "suggestions": [
+    {
+      "path": "/Users/me/Library/Caches",
+      "rule": "app-caches",
+      "allocatedBytes": 7000000
+    },
+    {
+      "path": "/Users/me/Library/Developer/Xcode/DerivedData",
+      "rule": "xcode-derived-data",
+      "allocatedBytes": 4000000
+    },
+    {
+      "path": "/Users/me/Projects/rust/target",
+      "rule": "rust-target",
+      "allocatedBytes": 3500000
+    },
+    {
+      "path": "/Users/me/Library/Developer/Xcode/iOS DeviceSupport",
+      "rule": "xcode-device-support",
+      "allocatedBytes": 3000000
+    },
+    {
+      "path": "/Users/me/Library/Developer/CoreSimulator/Caches",
+      "rule": "simulator-caches",
+      "allocatedBytes": 2500000
+    },
+    {
+      "path": "/Users/me/Projects/web/node_modules",
+      "rule": "node-modules",
+      "allocatedBytes": 2000000
+    },
+    {
+      "path": "/Users/me/.gradle/caches",
+      "rule": "gradle-caches",
+      "allocatedBytes": 1800000
+    },
+    {
+      "path": "/Users/me/.cache",
+      "rule": "cache-folder",
+      "allocatedBytes": 1200000
+    },
+    {
+      "path": "/Users/me/.npm/_cacache",
+      "rule": "npm-cache",
+      "allocatedBytes": 1100000
+    }
+  ]
+}

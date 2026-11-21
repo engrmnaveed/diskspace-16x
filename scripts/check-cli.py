@@ -45,7 +45,7 @@ def check(binary, root):
         ):
             hint = run(binary, *command, status=1)
             assert "Space 16X Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
-        for option in (("--older-than", "30"), ("--types", "5"), ("--by-owner",)):
+        for option in (("--older-than", "30"), ("--types", "5"), ("--by-owner",), ("--cleanup",)):
             hint = run(binary, "scan", root, *option, status=1)
             assert "Space 16X Pro" in hint.stderr and not hint.stdout, hint.stderr
         assert "install.sh --pro" in run(binary, "--help").stdout
@@ -343,6 +343,34 @@ def check_diff(binary):
             assert run(binary, *invalid, status=1).stderr
 
 
+def check_cleanup(binary):
+    """Pro: --cleanup lists folders that tools recreate, found by name."""
+    with tempfile.TemporaryDirectory(prefix="space16x-cleanup-") as directory:
+        root = Path(directory).resolve()
+        files = {
+            "web/node_modules/pkg/index.js": 1_200_000,
+            "web/node_modules/pkg/node_modules/dep.js": 1_100_000,
+            "web/app.js": 2_000_000,
+            "rust/Cargo.toml": 100,
+            "rust/target/debug/app": 1_500_000,
+            "notes/target/plan.txt": 1_500_000,
+        }
+        for name, size in files.items():
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(os.urandom(size))
+        report = json.loads(run(binary, "scan", root, "--cleanup", "--json").stdout)
+        found = [(str(Path(item["path"]).relative_to(root)), item["rule"]) for item in report["suggestions"]]
+        assert found == [("web/node_modules", "node-modules"), ("rust/target", "rust-target")], found
+        assert report["cleanupBytes"] == sum(item["allocatedBytes"] for item in report["suggestions"]), report
+        assert report["suggestions"][0]["itemCount"] == 4 and "entries" not in report, report
+        text = run(binary, "scan", root, "--cleanup")
+        assert "Node packages" in text.stdout and "2 suggestions" in text.stdout, text.stdout
+        assert "press u in the explorer" in text.stderr, text.stderr
+        for invalid in (("--cleanup", "--top", "3"), ("--cleanup", "--types", "2"), ("--cleanup", "--cleanup")):
+            assert run(binary, "scan", root, *invalid, status=1).stderr
+
+
 def check_explain(binary):
     """Pro: explain shows the volume of a folder and the space a scan can't see."""
     with tempfile.TemporaryDirectory(prefix="space16x-explain-") as directory:
@@ -533,6 +561,7 @@ def main():
         check_types(binary)
         check_history(binary)
         check_explain(binary)
+        check_cleanup(binary)
     print("CLI acceptance checks passed.")
 
 

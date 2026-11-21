@@ -105,7 +105,7 @@ struct WorkspaceView: View {
                     .padding(.bottom, 4)
                     .accessibilityAddTraits(.isHeader)
 
-                ForEach(BrowseMode.allCases, id: \.self) { mode in
+                ForEach(BrowseMode.available(pro: proFeatures), id: \.self) { mode in
                     modeButton(mode)
                 }
             }

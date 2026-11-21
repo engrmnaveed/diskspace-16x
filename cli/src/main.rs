@@ -82,6 +82,10 @@ This is Space 16X Pro. It adds:
              entries, with their file counts.
   scan --by-owner
              List the space and items each user owns instead of entries.
+  scan --cleanup
+             List folders that tools recreate, such as node_modules, Cargo's target,
+             Xcode's DerivedData and caches, instead of entries. u in the explorer
+             lists them for Move to Trash. Nothing is removed without your confirmation.
   space16x history save [PATH] [--threads N] [EXCLUDES]
              Scan PATH and keep the scan in the history folder,
              $XDG_STATE_HOME/space16x/history or ~/.local/state/space16x/history.
@@ -95,15 +99,15 @@ This is Space 16X Pro. It adds:
              Show the space on PATH's volume that a scan can't see: on macOS, the
              APFS container's volumes, purgeable space and local snapshots, and on
              Linux, space reserved for root and deleted files still held open.
-The explorer adds a Modified column with each item's newest modification date, and t
-lists the file types in the open folder.
+The explorer adds a Modified column with each item's newest modification date, t lists
+the file types in the open folder, and u lists cleanup suggestions.
 ";
 
 /// Subcommands only Space 16X Pro has. Basic builds answer them with an install hint.
 const PRO_COMMANDS: &[&str] = &["diff", "history", "explain"];
 
 /// Options only Space 16X Pro's scan takes. Basic builds answer them with an install hint.
-const PRO_SCAN_OPTIONS: &[&str] = &["--older-than", "--types", "--by-owner"];
+const PRO_SCAN_OPTIONS: &[&str] = &["--older-than", "--types", "--by-owner", "--cleanup"];
 
 #[cfg(feature = "pro")]
 use pro::ScanOptions as ProScanOptions;
@@ -915,6 +919,10 @@ mod tests {
                 args(&["scan", "--by-owner"]),
                 Ok(Command::ProOnly("--by-owner"))
             );
+            assert_eq!(
+                args(&["scan", "--cleanup"]),
+                Ok(Command::ProOnly("--cleanup"))
+            );
         }
         #[cfg(feature = "pro")]
         {
@@ -929,8 +937,12 @@ mod tests {
             assert_eq!(scan.pro.older_than_days(), Some(30));
             assert!(args(&["scan", "--types", "10", "--older-than", "9", "--json"]).is_ok());
             assert!(args(&["scan", "/srv", "--by-owner", "--apparent"]).is_ok());
+            assert!(args(&["scan", "~", "--cleanup", "--json", "--older-than", "30"]).is_ok());
             for invalid in [
                 &["scan", "--by-owner", "--by-owner"][..],
+                &["scan", "--cleanup", "--cleanup"],
+                &["scan", "--cleanup", "--top", "3"],
+                &["scan", "--cleanup", "--by-owner"],
                 &["scan", "--by-owner", "--types", "2"],
                 &["scan", "--by-owner", "--depth", "2"],
                 &["scan", "--types"][..],

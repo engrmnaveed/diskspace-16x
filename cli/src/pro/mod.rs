@@ -5,6 +5,7 @@
 //! Pro data belongs in side tables keyed by the scan tree's `NodeId`, so Basic's tree stays
 //! lean.
 
+mod cleanup;
 mod diff;
 mod explain;
 mod history;
@@ -12,6 +13,7 @@ mod modified;
 mod owners;
 mod types;
 
+pub use cleanup::{rule_for as cleanup_rule, suggestions as cleanup_suggestions};
 pub use modified::format_date;
 pub use types::{TypeTotal, breakdown as type_breakdown};
 
@@ -50,6 +52,8 @@ pub struct ScanOptions {
     types: Option<usize>,
     /// List each owner's bytes and items instead of entries.
     by_owner: bool,
+    /// List cleanup suggestions instead of entries.
+    cleanup: bool,
 }
 
 impl ScanOptions {
@@ -80,15 +84,24 @@ impl ScanOptions {
                 self.by_owner = true;
                 Ok(())
             }
+            "--cleanup" if !self.cleanup => {
+                self.cleanup = true;
+                Ok(())
+            }
             _ => Err(format!("Use {flag} once.")),
         }
     }
 
     /// Checks the options against the rest of the scan command.
     pub fn check(&self, selection: Option<Selection>) -> Result<(), String> {
-        let reports = [selection.is_some(), self.types.is_some(), self.by_owner];
+        let reports = [
+            selection.is_some(),
+            self.types.is_some(),
+            self.by_owner,
+            self.cleanup,
+        ];
         if reports.into_iter().filter(|&chosen| chosen).count() > 1 {
-            return Err("Use one of --depth, --top, --types and --by-owner.".into());
+            return Err("Use one of --depth, --top, --types, --by-owner and --cleanup.".into());
         }
         Ok(())
     }
@@ -103,6 +116,25 @@ impl ScanOptions {
         json: bool,
     ) -> io::Result<bool> {
         let stdout = io::stdout().lock();
+        if self.cleanup {
+            if json {
+                let result = cleanup::JsonCleanup::new(report, metric);
+                report::write_json_report(
+                    stdout,
+                    report,
+                    metric,
+                    excludes,
+                    self.older_than,
+                    result,
+                )?;
+            } else {
+                cleanup::write_plain(stdout, report, metric)?;
+                eprintln!(
+                    "space16x: tools recreate these folders when needed. Review them, then press u in the explorer to move them to the Trash."
+                );
+            }
+            return Ok(true);
+        }
         match (self.types, self.by_owner, json) {
             (Some(limit), _, true) => {
                 let result = types::JsonTypes::new(report, limit, metric);

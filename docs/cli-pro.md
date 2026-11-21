@@ -94,6 +94,38 @@ Owners come from the user database. The Linux release builds are static and read
 
 JSON reports put `owners` in place of `depth` and `entries`. Each owner has `owner` (the user name, or `null` without one), `uid`, `allocatedBytes`, `apparentBytes` and `itemCount`.
 
+## Cleanup suggestions
+
+```text
+space16x scan [PATH] --cleanup [--apparent] [--older-than DAYS] [--json] ...
+```
+
+`--cleanup` lists folders that tools recreate when they need them, in place of entries, largest first, with the total. Press `u` in the explorer for the same list across the scan, where Space marks folders and `d` moves them to the Trash after you confirm, as anywhere in the explorer. Enter jumps to a folder, and `u` or Esc returns to the folders. Space 16X only suggests: it never removes anything without that confirmation, and Move to Trash keeps items until you empty the Trash.
+
+```text
+      Size  Suggestion            Path
+   5.15 GB  Rust build output     /Users/me/Projects/app/target
+   2.10 GB  Xcode build data      /Users/me/Library/Developer/Xcode/DerivedData
+  464.7 MB  Node packages         /Users/me/Projects/site/node_modules
+   7.71 GB  3 suggestions         [total]
+```
+
+Suggestions come from names in the finished scan, so they read nothing new:
+
+| Suggestion | Folder | Recreated by |
+| --- | --- | --- |
+| Xcode build data | `Library/Developer/Xcode/DerivedData` | Xcode, at the next build |
+| Xcode device support | `Library/Developer/Xcode/iOS DeviceSupport` | Xcode, when a device connects |
+| Simulator caches | `Library/Developer/CoreSimulator/Caches` | the Simulator |
+| App caches | `Library/Caches` | each app, as needed. Quit apps first. |
+| Gradle caches | `.gradle/caches` | Gradle, at the next build |
+| npm cache | `.npm/_cacache` | npm, at the next install |
+| Cache folder | any folder named `.cache` | the programs that use it |
+| Node packages | any `node_modules` folder | `npm install` or your package manager |
+| Rust build output | `target` beside `Cargo.toml` | `cargo build` |
+
+A folder is listed only when it was read completely and uses at least 1 MB, and folders inside a listed one aren't listed again, so `node_modules` inside `node_modules` counts once. Xcode archives and simulator devices aren't suggested, because they can't be recreated. JSON reports put `cleanupBytes` and `suggestions` in place of `depth` and `entries`. Each suggestion has `path`, `rule` (a stable name, such as `node-modules` or `rust-target`), `label`, `allocatedBytes`, `apparentBytes` and `itemCount`. `--cleanup` takes no `--depth`, `--top`, `--types` or `--by-owner`.
+
 ## Scan history
 
 ```text

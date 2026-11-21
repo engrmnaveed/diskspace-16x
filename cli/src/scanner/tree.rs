@@ -299,6 +299,13 @@ impl<'a> Entry<'a> {
         self.tree.path(self.id)
     }
 
+    /// The folder that holds this entry, or None for the root.
+    #[cfg(feature = "pro")]
+    pub fn parent(self) -> Option<Entry<'a>> {
+        let parent = self.tree.parent_of(self.id)?;
+        Some(self.tree.entry(parent))
+    }
+
     pub fn children(self) -> Children<'a> {
         let first = self.id.0 + 1;
         Children {
