@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — M4 is in progress, one PR per item below. M4.1 to M4.3 (export and import, `volumes`) are done. Next: M4.4, the edition scaffolding (§4): the `pro` Cargo feature, Pro release archives, `install.sh --pro`, CI for both editions, and the Mac **Settings → Pro features** switch with a `SpacePro` target. Pro per-node data goes in side tables keyed by the arena's `NodeId` (§4). Full LTO with one codegen unit (M4.1) brought a local Linux x86-64 archive to about 575 KB with export and import, against the 600 KB Basic budget.
+**Resume here** — M4 is in progress, one PR per item below. M4.1 to M4.4 (export and import, `volumes`, the edition scaffolding) are done. Next: M4.5, `space16x diff` in `cli/src/pro/` (it answers "isn't available in this build yet" until then) and Mac **Compare** in the `SpacePro` target, shown when **Settings → Pro features** is on. Pro per-node data goes in side tables keyed by the arena's `NodeId` (§4). Full LTO with one codegen unit (M4.1) brought a local Linux x86-64 archive to about 575 KB with export and import, against the 600 KB Basic budget.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -39,7 +39,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 - [x] M4.1 Rust: `scan --export FILE|-` writes ncdu JSON v1 with `space16x_*` keys (states, issues, excludes, non-UTF-8 names), and `--import FILE|-` opens a saved scan in the explorer, read-only, including ncdu and gdu exports and a pipe from `ssh`. A streaming reader and writer in `cli/src/ncdu.rs` with no new dependency. Full LTO and one codegen unit keep the archive under budget.
 - [x] M4.2 Mac: **Open Scan…** and **Export Scan…** in the same format (`SpaceCore/SavedScan.swift`), opened scans read-only, and shared ncdu, gdu and Space 16X fixtures in `fixtures/scan-exports/` that both importers' tests read
 - [x] M4.3 Basic volumes: `space16x volumes [--all] [--json]` (size, used, free and inodes from `statvfs`, or `statfs` on macOS) in `cli/src/volumes.rs`, and a volume list on the Mac start screen that scans the volume you click
-- [ ] M4.4 Edition scaffolding: the `pro` Cargo feature, Basic hints for Pro subcommands, `(pro)` in `--version` and `"edition": "pro"`, `space16x-pro-<target>` archives, `install.sh --pro`, CI for both editions, Mac **Settings → Pro features** and a `SpacePro` target, docs
+- [x] M4.4 Edition scaffolding: the `pro` Cargo feature, Basic hints for Pro subcommands, `(pro)` in `--version` and `"edition": "pro"`, `space16x-pro-<target>` archives from `package-cli.sh --pro`, `install.sh --pro` (one-liners re-pinned), both editions linted, tested and checked in the existing CI jobs (job names unchanged), Mac **Settings → Pro features** and a `SpacePro` target, docs
 - [ ] M4.5 Pro: `space16x diff OLD NEW|PATH [--top N] [--json]` and Mac **Compare**
 - [ ] M4.6 Promo refresh, manual QA rows, archive sizes for both editions in `docs/qa.md`
 - [ ] M4.7 Release v0.6.0

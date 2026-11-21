@@ -5,11 +5,11 @@
 In Bash, Zsh, or a POSIX shell, paste either one-liner.
 
 ```sh
-space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/f36f06107316d5a0312f9c52c4a4e96f2cb34597/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
 ```sh
-space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/f36f06107316d5a0312f9c52c4a4e96f2cb34597/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
 The one-liners download the installer from a fixed commit. To review the script first, download it from the URL above, read it, and run `sh install.sh`. Releases from 0.2.2 also provide an attested `install.sh` alongside the archives on the [releases page](https://github.com/engrmnaveed/diskspace-16x/releases).
@@ -23,19 +23,33 @@ Pass `--version 0.2.1` after `--shell-path` to select a published version. Use `
 Paste either line to remove the executable, installer files, and shell startup entries created by the installer. The command updates PATH in the current shell. It preserves pre-existing PATH entries and manually installed executables.
 
 ```sh
-space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/f36f06107316d5a0312f9c52c4a4e96f2cb34597/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
 ```sh
-space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/f36f06107316d5a0312f9c52c4a4e96f2cb34597/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
+
+## Install Space 16X Pro
+
+Space 16X comes in two free editions. Basic, which the commands above install, is the lightweight default. Pro adds more analysis, starting with `space16x diff`, which compares two scans. Both install the same `space16x` command in the same place, so installing one edition replaces the other. Add `--pro` to the installer:
+
+```sh
+space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --pro --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+```
+
+```sh
+space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --pro --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+```
+
+`space16x --version` ends with `(pro)` in the Pro edition. Run the Basic one-liner again to switch back. `--uninstall` removes either edition. In Basic, a Pro command such as `space16x diff` prints a one-line hint to install Pro and exits with code 1. Releases from 0.6.0 publish `space16x-pro-<target>.tar.gz` beside each Basic archive, built from the same tag. In the Mac app, Pro features are part of the one app: turn them on in **Settings → Pro features**.
 
 ## Fish shell
 
 Use Fish's list syntax to apply PATH immediately. Add `--uninstall` before `--shell-path` to remove the installation. The download can also use `wget -qO-`.
 
 ```fish
-set -l space16x_path (curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/f36f06107316d5a0312f9c52c4a4e96f2cb34597/scripts/install.sh | sh -s -- --shell-path); and test -n "$space16x_path"; and set -gx PATH (string split : -- "$space16x_path")
+set -l space16x_path (curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path); and test -n "$space16x_path"; and set -gx PATH (string split : -- "$space16x_path")
 ```
 
 ### Candidate CLI targets
@@ -51,7 +65,7 @@ Linux archives link musl statically and are built and tested on their respective
 
 ### Install a CLI archive manually
 
-Download `space16x-<target>.tar.gz` and its companion `.sha256` file from the same release. The commands below use the Apple silicon archive.
+Download `space16x-<target>.tar.gz`, or `space16x-pro-<target>.tar.gz` for Pro, and its companion `.sha256` file from the same release. The commands below use the Apple silicon archive.
 
 ```sh
 archive=space16x-aarch64-apple-darwin.tar.gz
@@ -84,7 +98,7 @@ Install [Rustup](https://rustup.rs/) and a native linker for your system. Run th
 "$HOME/.local/bin/space16x" --help
 ```
 
-The toolchain file under `cli/` selects the project compiler. To make a distributable package, use [the packaging instructions](release.md#package-the-cli-locally).
+Add `--features pro` to the `cargo install` command to build the Pro edition. The toolchain file under `cli/` selects the project compiler. To make a distributable package, use [the packaging instructions](release.md#package-the-cli-locally).
 
 ## Build the Mac app from source
 

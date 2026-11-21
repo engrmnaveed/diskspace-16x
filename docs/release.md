@@ -10,7 +10,7 @@ Check that [scripts/release-version](../scripts/release-version), [cli/Cargo.tom
 
 Pushing a new `vX.Y.Z` tag that matches `scripts/release-version` runs **Publish release** (`publish-cli.yml`). The workflow tests the four Rust targets, runs the Swift tests, and builds the universal Mac app with `scripts/package-macos.sh --universal` and `scripts/archive-macos.sh`. It uses the `release` environment for publication. Once the environment's protection rules pass, the workflow attests build provenance and publishes these assets to the tagged GitHub release:
 
-- the checksummed CLI archives
+- the checksummed CLI archives for both editions: `space16x-<target>.tar.gz` (Basic) and `space16x-pro-<target>.tar.gz` (Pro), built from the same tag for all four targets
 - `space16x-X.Y.Z-macos-universal.zip` and its `.sha256` file
 - `space16x.rb`, the Homebrew cask rendered by `scripts/render-cask` from the app ZIP's digest
 - `install.sh` and `install.sh.sha256`
@@ -48,7 +48,7 @@ Push the reviewed source to the default branch. To sign the native Swift app, co
 | `APPLE_API_KEY_ID` | Key ID. |
 | `APPLE_API_ISSUER` | Issuer UUID. |
 
-Tag the reviewed commit with the version prefixed by `v`. Run **Release artifacts** from that tag. The workflow runs the macOS and Linux checks and uploads the four tested CLI archives with their checksums and the installer script. Enable **Also sign and notarize the native Swift Mac app** to get a Developer ID-signed ZIP with a stapled notarization ticket.
+Tag the reviewed commit with the version prefixed by `v`. Run **Release artifacts** from that tag. The workflow runs the macOS and Linux checks and uploads the eight tested CLI archives, Basic and Pro for each target, with their checksums and the installer script. Enable **Also sign and notarize the native Swift Mac app** to get a Developer ID-signed ZIP with a stapled notarization ticket.
 
 Review the Apple notary log and verify the checksums. Test the archived app on a fresh Mac and the CLI archives on their matching architectures. Publish the approved artifacts and release notes to the versioned GitHub Release. Upload each archive and matching `.sha256` file as a separate asset, keeping the exact generated filenames. The installer locates them through the release's stable asset names.
 
@@ -79,8 +79,9 @@ Build on a host matching one of the [CLI release targets](install.md#candidate-c
 target=x86_64-unknown-linux-musl
 (cd cli && rustup target add "$target")
 scripts/package-cli.sh "$target"
+scripts/package-cli.sh --pro "$target"
 ```
 
-The script checks the executable's version, confirms its macOS architecture or Linux static linkage, and smoke-tests a scan before creating `dist/space16x-<target>.tar.gz` and its SHA-256 file. Mac CLI archives use an ad hoc signature. The universal native app follows the Developer ID and notarization procedure above.
+The script checks the executable's version, confirms its macOS architecture or Linux static linkage, and smoke-tests a scan before creating `dist/space16x-<target>.tar.gz` and its SHA-256 file. `--pro` builds the Pro edition with `--features pro` into `dist/space16x-pro-<target>.tar.gz`, and the version must end with `(pro)`. Mac CLI archives use an ad hoc signature. The universal native app follows the Developer ID and notarization procedure above.
 
-Run `scripts/check-cli.py` and `scripts/check-tui.py` against the executable extracted from the archive. Use a standard user account to exercise permission errors.
+Run `scripts/check-cli.py` and `scripts/check-tui.py` against each edition's executable extracted from its archive. Both scripts read the edition from `--version`. Use a standard user account to exercise permission errors.
