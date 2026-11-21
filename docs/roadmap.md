@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — v0.3.0 is published; M2.1–M2.5 landed. M2.6 (docs and the Move to Trash promo) is the open PR from `feature/m2-docs-promo`, ticked on that branch: merge it once CI is green. Next: M2.7, release v0.4.0.
+**Resume here** — v0.4.0 is published, and Milestone 2 (Act) is complete. Next: start M3 (v0.5) Speed in a new session, after reading its section: lean arena tree, parallel walk `--threads`, Swift TaskGroup walk, 1M-file benchmark. The owner asked for M3 to start in a fresh session.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -24,7 +24,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 - [x] M2.4 Rescan folder: TUI `r` and Mac **Rescan Folder**, replacing one subtree in place
 - [x] M2.5 Mac: Quick Look on Space
 - [x] M2.6 Docs (`docs/cli.md`, README, CHANGELOG, manual QA rows for Trash; check on a Mac whether Finder offers Put Back for items moved with `trashItem` and document the answer) and the promo refresh showing Move to Trash
-- [ ] M2.7 Release v0.4.0
+- [x] M2.7 Release v0.4.0
 
 ### Later milestones
 - [ ] M3 (v0.5) Speed: lean arena tree, parallel walk `--threads`, Swift TaskGroup walk, 1M-file benchmark
