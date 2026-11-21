@@ -42,7 +42,7 @@ space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercont
 space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --pro --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
-`space16x --version` ends with `(pro)` in the Pro edition. Run the Basic one-liner again to switch back. `--uninstall` removes either edition. In Basic, a Pro command such as `space16x diff` prints a one-line hint to install Pro and exits with code 1. Releases from 0.6.0 publish `space16x-pro-<target>.tar.gz` beside each Basic archive, built from the same tag. In the Mac app, Pro features are part of the one app: turn them on in **Settings → Pro features**.
+`space16x --version` ends with `(pro)` in the Pro edition. Run the Basic one-liner again to switch back. `--uninstall` removes either edition. In Basic, a Pro command such as `space16x diff` prints a one-line hint to install Pro and exits with code 1. Releases from 0.6.0 publish `space16x-pro-<target>.tar.gz` beside each Basic archive, built from the same tag. The [Pro CLI reference](cli-pro.md) documents Pro's commands. In the Mac app, Pro features are part of the one app: turn them on in **Settings → Pro features**.
 
 ## Fish shell
 
@@ -75,7 +75,7 @@ mkdir -p "$HOME/.local/bin"
 install -m 0755 space16x "$HOME/.local/bin/space16x"
 ```
 
-On Linux, use `sha256sum -c "$archive.sha256"` and substitute your target. The [CLI reference](cli.md) has terminal key bindings and report examples.
+On Linux, use `sha256sum -c "$archive.sha256"` and substitute your target. The [CLI reference](cli.md) has terminal key bindings and report examples, and Pro archives add the [Pro CLI reference](cli-pro.md).
 
 ### Verify a release archive
 

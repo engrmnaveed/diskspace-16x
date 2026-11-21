@@ -108,6 +108,9 @@ final class ScanWorkspace {
     private(set) var notice: Notice?
     private(set) var selectedEntry: ScanEntry?
     var showsDetails = false
+    /// Pro: the figures the Explain Disk sheet shows, while it is open.
+    var explanation: DiskExplanation?
+    private(set) var isExplaining = false
     var folderPresentation: FolderPresentation = .list
     /// Up to 32 entries of the current folder, largest first, for the treemap and donut.
     private(set) var chartRows: [ScanEntry] = []
@@ -213,6 +216,28 @@ final class ScanWorkspace {
         Task {
             let mounted = await Task.detached(priority: .utility) { VolumeSummary.mounted() }.value
             if mounted != volumes { volumes = mounted }
+        }
+    }
+
+    /// Pro: explains the space on the volume of the scanned folder, or of `path`.
+    func explainDisk(at path: String? = nil) {
+        guard ProFeatures.isEnabled, !isExplaining else { return }
+        let path = path ?? report?.root.path ?? "/"
+        isExplaining = true
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                DiskExplanation.explain(URL(filePath: path))
+            }.value
+            isExplaining = false
+            if let result {
+                explanation = result
+            } else {
+                notice = Notice(
+                    title: "Couldn't explain this disk",
+                    message: "macOS didn't report the volume of “\(path)”.",
+                    isError: true
+                )
+            }
         }
     }
 

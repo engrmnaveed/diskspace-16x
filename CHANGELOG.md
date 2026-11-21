@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- See the space a scan can't show in Space 16X Pro. `space16x explain [PATH]` shows the size, used and free space of PATH's volume. On macOS it adds each volume of the APFS container with its own used space (the system volume, Preboot, VM, Recovery and your data), purgeable space that macOS frees when needed, and Time Machine local snapshots. On Linux it adds the blocks reserved for root and the deleted files that programs still hold open, with each program's name and process ID. `--json` writes the same figures. In the Mac app, with **Settings → Pro features** on, **Scan → Explain Disk Space** (⇧⌘X), or a volume's context menu on the start screen, shows them for the volume. It reads system figures and metadata only.
+
 ## 0.7.0
 
 - See when files last changed in Space 16X Pro. The CLI explorer adds a **Modified** column with each item's newest modification date, a folder's being the newest of any file inside, and JSON reports add `newestModified` in Unix seconds. `space16x scan --older-than DAYS` counts only files last modified more than DAYS days ago, so sizes, rankings and top files show where old data sits. In the Mac app, with **Settings → Pro features** on, the folder list and Largest Files add a sortable **Modified** column. Pro reads the times with the same metadata calls as sizes, keeps them in a side table beside the scan tree, and Basic's memory and output are unchanged.

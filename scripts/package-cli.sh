@@ -76,6 +76,11 @@ mkdir "$stage/fixture"
 
 cp docs/cli.md docs/example-report.json "$payload/"
 set -- space16x cli.md example-report.json
+# Only Pro ships the Pro reference, which keeps the Basic archive small.
+if [ "$edition" = pro ]; then
+    cp docs/cli-pro.md "$payload/"
+    set -- "$@" cli-pro.md
+fi
 if [ -f LICENSE ]; then
     cp LICENSE "$payload/"
     set -- "$@" LICENSE

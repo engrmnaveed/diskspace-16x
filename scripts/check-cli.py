@@ -40,7 +40,9 @@ def edition(binary):
 def check(binary, root):
     if edition(binary) == "basic":
         # Basic answers Pro subcommands with an install hint.
-        for command in (("diff", "old.json", "new.json"), ("history",), ("history", "save", root)):
+        for command in (
+            ("diff", "old.json", "new.json"), ("history",), ("history", "save", root), ("explain",),
+        ):
             hint = run(binary, *command, status=1)
             assert "Space 16X Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
         for option in (("--older-than", "30"), ("--types", "5"), ("--by-owner",)):
@@ -341,6 +343,37 @@ def check_diff(binary):
             assert run(binary, *invalid, status=1).stderr
 
 
+def check_explain(binary):
+    """Pro: explain shows the volume of a folder and the space a scan can't see."""
+    with tempfile.TemporaryDirectory(prefix="space16x-explain-") as directory:
+        folder = Path(directory).resolve()
+        held = folder / "held.log"
+        with held.open("wb") as stream:
+            stream.write(os.urandom(65536))
+            stream.flush()
+            os.fsync(stream.fileno())
+            held.unlink()
+            plain = run(binary, "explain", folder).stdout
+            report = json.loads(run(binary, "explain", folder, "--json").stdout)
+    assert plain.startswith("Volume      ") and "\nFree        " in plain, plain
+    assert report["schemaVersion"] == 3 and report["edition"] == "pro", report
+    volume = report["volume"]
+    assert volume["totalBytes"] > 0 and volume["usedBytes"] <= volume["totalBytes"], volume
+    assert folder.is_relative_to(volume["path"]) or sys.platform == "darwin", volume
+    if sys.platform == "darwin":
+        assert isinstance(report["snapshots"], list), report
+        if volume["type"] == "apfs":
+            assert volume["path"] in [item["path"] for item in report["containerVolumes"]], report
+    else:
+        # This process holds the deleted file open, so its space is still in use.
+        files = [item for item in report["deletedOpenFiles"] if item["path"] == str(held)]
+        assert files and files[0]["pid"] == os.getpid() and files[0]["apparentBytes"] == 65536, report
+        assert "deleted file" in plain and str(held) in plain, plain
+    for invalid in (("explain", "a", "b"), ("explain", "--all")):
+        assert run(binary, *invalid, status=1).stderr
+    assert run(binary, "explain", "/no/such/space16x/path", status=1).stderr
+
+
 def build_modified_fixture(root):
     """Creates fixtures/modified-times.json below root and returns the table."""
     table = json.loads(
@@ -499,6 +532,7 @@ def main():
         check_modified(binary)
         check_types(binary)
         check_history(binary)
+        check_explain(binary)
     print("CLI acceptance checks passed.")
 
 

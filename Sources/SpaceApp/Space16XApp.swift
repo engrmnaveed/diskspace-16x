@@ -73,6 +73,10 @@ struct Space16XApp: App {
                         .keyboardShortcut("s", modifiers: [.command, .option])
                         .disabled(!workspace.canSaveToHistory)
                     Button("Show History in Finder", action: workspace.showHistoryInFinder)
+                    Divider()
+                    Button("Explain Disk Space") { workspace.explainDisk() }
+                        .keyboardShortcut("x", modifiers: [.command, .shift])
+                        .disabled(workspace.isExplaining)
                 }
                 Divider()
                 Button("Show Scan Details") { workspace.showsDetails = true }

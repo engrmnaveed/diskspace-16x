@@ -1,10 +1,12 @@
 import AppKit
 import SpaceCore
+import SpacePro
 import SwiftUI
 
 struct WorkspaceView: View {
     @Bindable var workspace: ScanWorkspace
     @ViewState private var isDropTargeted = false
+    @AppStorage(ProFeatures.defaultsKey) private var proFeatures = false
 
     var body: some View {
         NavigationSplitView {
@@ -62,6 +64,9 @@ struct WorkspaceView: View {
             if let report = workspace.report {
                 ScanDetailsView(report: report, workspace: workspace)
             }
+        }
+        .sheet(item: $workspace.explanation) { explanation in
+            ExplainDiskView(explanation: explanation)
         }
         // Returning from System Settings may have changed Full Disk Access.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -288,6 +293,11 @@ struct WorkspaceView: View {
         }
         .buttonStyle(.plain)
         .disabled(!workspace.canChooseFolder)
+        .contextMenu {
+            if proFeatures {
+                Button("Explain Disk Space") { workspace.explainDisk(at: volume.path) }
+            }
+        }
         .help("Scan \(volume.name) (\(volume.path))")
         .accessibilityLabel("\(volume.name), \(free)")
         .accessibilityHint("Scans this volume")
