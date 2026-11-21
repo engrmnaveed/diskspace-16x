@@ -20,10 +20,8 @@ struct Capture {
     @MainActor
     private static func render() async throws {
         let arguments = CommandLine.arguments
-        guard arguments.count == 7 else {
-            throw CaptureError(
-                "Expected the demo folder, working directory, CLI report, explorer capture, app icon, and saved scan."
-            )
+        guard arguments.count == 6 else {
+            throw CaptureError("Expected the demo folder, working directory, CLI report, explorer capture, and app icon.")
         }
         let fixture = URL(filePath: arguments[1], directoryHint: .isDirectory)
         let output = URL(filePath: arguments[2], directoryHint: .isDirectory)
@@ -77,24 +75,24 @@ struct Capture {
             desktop[name] = image
         }
 
-        // Pro's Compare, against the folder's scan saved a few days earlier, with the Modified
-        // column. Registered defaults stay in memory, so the capture leaves no preferences
-        // or history behind.
+        // Pro's Duplicates, after the explicit Find Duplicates. Registered defaults stay in
+        // memory, so the capture leaves no preferences behind.
         UserDefaults.standard.register(defaults: [ProFeatures.defaultsKey: true])
-        workspace.folderPresentation = .list
-        workspace.compare(with: URL(filePath: arguments[6]), name: "Monday")
-        try await waitUntil { workspace.comparison != nil && !workspace.isLoadingRows }
-        workspace.sortOrder = [.biggestGrowth]
-        try await waitUntil { !workspace.isLoadingRows }
+        workspace.sortOrder = [.largestFirst]
+        workspace.findDuplicates()
+        try await waitUntil { workspace.duplicateGroups != nil && !workspace.isLoadingRows }
+        guard workspace.duplicateGroups?.isEmpty == false else {
+            throw CaptureError("The demo folder must hold a duplicate file.")
+        }
         workspace.dismissNotice()
         try await Task.sleep(for: .milliseconds(350))
         host.layoutSubtreeIfNeeded()
         guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
-            throw CaptureError("Could not allocate the compare snapshot.")
+            throw CaptureError("Could not allocate the duplicates snapshot.")
         }
         host.cacheDisplay(in: host.bounds, to: bitmap)
-        guard let image = bitmap.cgImage else { throw CaptureError("Could not render the compare snapshot.") }
-        desktop["compare"] = image
+        guard let image = bitmap.cgImage else { throw CaptureError("Could not render the duplicates snapshot.") }
+        desktop["duplicates"] = image
 
         try Cards(output: output, icon: icon, report: reportLines, explorer: explorer, desktop: desktop).render()
     }

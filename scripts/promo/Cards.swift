@@ -58,9 +58,9 @@ struct Cards {
                   detail: "Press Space to mark, d to move to the Trash.", progress: 2) { canvas in
             explorerPanel("trash", on: canvas, x: 74, top: 646, width: 916)
         }
-        try short("report", section: "CLI  /  PRO", title: ["See which", "types fill it."],
-                  detail: "List the largest file types.", progress: 2) { canvas in
-            terminal("$ space16x scan Projects --types 4", on: canvas, top: 646)
+        try short("report", section: "CLI  /  PRO", title: ["Clear what", "tools rebuild."],
+                  detail: "List build output and caches to trash.", progress: 2) { canvas in
+            terminal("$ space16x scan --cleanup", on: canvas, top: 646)
         }
         try short("carry", section: "CLI  /  macOS + LINUX", title: ["Scan a server.", "Browse it here."],
                   detail: "Pipe a saved scan into the explorer.", progress: 2) { canvas in
@@ -75,9 +75,9 @@ struct Cards {
                   detail: "Switch to the donut chart.", progress: 4) { canvas in
             appPanel("donut", on: canvas, top: 646)
         }
-        try short("compare", section: "DESKTOP  /  PRO", title: ["See what grew", "since Monday."],
-                  detail: "Compare with a scan in your history.", progress: 5) { canvas in
-            appPanel("compare", on: canvas, top: 646)
+        try short("duplicates", section: "DESKTOP  /  PRO", title: ["Find files you", "saved twice."],
+                  detail: "Compare same-size files on request.", progress: 5) { canvas in
+            appPanel("duplicates", on: canvas, top: 646)
         }
         try short("end", section: "DISK SPACE ANALYZER", title: ["Find the", "space hogs."],
                   detail: "Free and open source.", progress: 6) { canvas in
@@ -208,12 +208,15 @@ struct Cards {
         canvas.text(command, x: 102, y: top + 92, size: 33, weight: .semibold, ink: mint, mono: true)
         // A report with a column heading highlights the first row below it.
         let first = report.first?.hasPrefix("      Size") == true ? 1 : 0
+        // Shrink the text for wide reports so every column stays inside the window.
+        let widest = CGFloat(report.map(\.count).max() ?? 1)
+        let size = min(31, ((frame.width - 56) / (0.61 * widest)).rounded(.down))
         for (index, row) in report.enumerated() {
             let y = top + 161 + 58 * CGFloat(index)
             if index == first {
                 canvas.panel(CGRect(x: 93, y: y - 6, width: frame.width - 38, height: 55), fill: 0x163A45, radius: 11)
             }
-            canvas.text(row, x: 102, y: y, size: 31, ink: index == first ? white : muted, mono: true)
+            canvas.text(row, x: 102, y: y, size: size, ink: index == first ? white : muted, mono: true)
         }
     }
 }

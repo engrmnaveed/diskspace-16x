@@ -1,5 +1,26 @@
 # Space 16X verification
 
+## 0.8.0
+
+Milestone 6 (Pro deep) on the Apple M5 Pro MacBook Pro with macOS 27.2.1, APFS and Rust 1.100.0.
+
+- The Rust CLI passed 73 unit tests in the Basic edition and 109 with `--features pro`. New Pro tests cover `explain` (snapshot names and dates, APFS containers, the plain and JSON reports, and on Linux a deleted file the test holds open), the shared `fixtures/cleanup` scan and its report, the explorer's `u` view through Move to Trash, exclusive sizes with hard links and, on macOS, a `clonefile` clone, `FIEMAP` on Linux, duplicate groups (a late difference, a hard link, files under the minimum) and size parsing, the HTML page (escaping, no scripts or links), the squarified layout, the explorer's `m` view, and parsing of every new command and option in both editions.
+- `scripts/check-cli.py` checks, with the Pro archive, `explain` (a held-open deleted file on Linux), `--cleanup`, `--exclusive` (a hard link everywhere and a `cp -c` clone on macOS), `duplicates` (groups, `--min-size`, a hard link, and an unreadable file giving exit 2) and `--html` (a file and standard output). With the Basic archive, it checks that each new command and option prints the install hint. `scripts/check-tui.py` checks Pro's `u` and `m` views.
+- All 55 Swift tests passed (42 in SpaceCore and 13 in SpacePro). New ones read the same `fixtures/cleanup` scan as the Rust tests and cover snapshot names and APFS containers, a real explanation of the temporary folder's volume, exclusive sizes with a hard link and a `clonefile` clone, duplicate groups in the same folder layout as the Rust test, the low-space alert rule, and a Build Footprint receipt across two scans of a changing folder.
+- Offscreen renders of the shipping views checked **Explain Disk Space**, **Cleanup** from the shared fixture, **Duplicates** before and after **Find Duplicates**, the receipt sheet and **Settings → Pro features** with the menu-bar options, in light and dark. The packaged app launched with Pro on and quit cleanly. The menu-bar item, the low-space notification, a second window and the receipt's save panel haven't been checked by hand. See the manual QA rows.
+- On this Mac, `explain` lists the six mounted volumes of the startup disk's APFS container, from 813.65 GB for the data volume to 24.3 MB for Update, and 10.39 GB of purgeable space. `scan ~/Library --exclusive` found 39.31 GB of caches of which 36.43 GB is exclusive, and took about 2 seconds longer than the 1.8-second scan for 270,000 files. `duplicates ~/work` found 1,091 groups with 14.16 GB in extra copies in 3 seconds with a warm cache.
+- The scanner, the tree and Basic's memory are unchanged. Exclusive sizes are measured after the scan and kept only for files that share blocks.
+- Local release archives (macOS `tar` and `gzip`), Basic and Pro: `aarch64-apple-darwin` 505,118 and 693,055 bytes (0.7.0: 507,308 and 607,158). Linux `x86_64-unknown-linux-musl` archives as `package-cli.sh` builds them, with `cli.md`, the example report and the license: Basic 590,246 bytes against 592,542 before M6, and Pro 808,813. Basic's binary grew by 416 bytes for the new hints, and moving the Pro reference out of `cli.md` took about 2.7 KB off its archive, so it ends about 2.3 KB smaller with no new dependencies. Pro grew by about 100 KB with no new dependencies, and has no size budget.
+
+Rust release CLI, the same day. The 100,000-file row is `scripts/benchmark.py`, the last of three runs. The 1,000,000-file row times the three builds on one fixture, alternating, after a warm-up run of each, because separate `benchmark.py` runs on freshly created fixtures measured Pro at 1.28–1.44 s once and couldn't be repeated on a shared fixture.
+
+| Fixture | 0.7.0 Pro | 0.8.0 Basic | 0.8.0 Pro |
+| --- | --- | --- | --- |
+| 100,000 files | | 0.0395 s; 18.6 MB | 0.0399 s; 19.6 MB |
+| 1,000,000 files | 1.150, 1.142, 1.153, 1.152 s | 1.136, 1.136, 1.154, 1.157 s; 120.1–120.4 MB | 1.137, 1.141, 1.158, 1.156 s; 128.2–128.4 MB |
+
+Both editions scan as fast as 0.7.0 with the same memory: M6 doesn't change the scanner, and `--exclusive` and `duplicates` do their extra reading only when asked.
+
 ## 0.7.0
 
 Milestone 5 (Pro analysis) on the Apple M5 Pro MacBook Pro with macOS 27.2.1, APFS and Rust 1.100.0.

@@ -162,7 +162,7 @@ On macOS, a startup-disk scan counts firmlinked directories such as `/Users` at 
 
 ## Pro commands
 
-Space 16X Pro, a free edition, adds commands and scan options such as `diff`, `history`, `explain`, `scan --types` and `scan --older-than`. The [Pro CLI reference](cli-pro.md), included in the Pro archive, documents them. Basic answers them with a one-line hint to install Pro.
+Space 16X Pro, a free edition, adds commands and scan options such as `diff`, `history`, `explain`, `duplicates`, `scan --cleanup` and `scan --html`. The [Pro CLI reference](cli-pro.md), included in the Pro archive, documents them. Basic answers them with a one-line hint to install Pro.
 
 ## Scan exit codes
 

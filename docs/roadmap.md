@@ -4,7 +4,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — Milestone 6 (Pro deep, v0.8.0), the last milestone the owner approved on 2026-11-21, is split into M6.1–M6.10 below. Build them one PR at a time (`feature/m6-…`), in order, then release v0.8.0, tick M6, and pause the roadmap for the owner's review: nothing comes after M6. All of M6 is Pro: CLI code in `cli/src/pro/` behind the `pro` feature, Mac code in `SpacePro` behind **Settings → Pro features**, and Basic gains only install hints. Per-node data goes in the details side table keyed by `NodeId` (`cli/src/scanner/details.rs`, zero-sized in Basic). Only `space16x duplicates` and the Mac's **Find Duplicates** read file contents, on that explicit command and never during a scan. Cleanup suggestions only suggest: removal goes through Basic's confirmed Move to Trash. Basic's published Linux x86-64 archive is 592,316 bytes against its 600 KB budget, so keep the hints short and find savings before raising it.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — Milestone 6 (Pro deep, v0.8.0), the last milestone the owner approved on 2026-11-21, has landed M6.1–M6.9 on `main`: explain my disk, cleanup suggestions, exclusive size, opt-in duplicates, the HTML report and terminal treemap, the Mac menu-bar monitor, Build Footprint receipts, multiple windows, and the promo refresh with QA rows and benchmarks. Next is M6.10: release v0.8.0 as the Working agreement says, then tick M6, set this note to "Roadmap complete: paused for owner review after v0.8.0." and stop. Nothing comes after M6. The **Later** list below holds what M6 cut. Basic's local Linux x86-64 archive is 590,246 bytes against its 600 KB budget.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -59,11 +59,16 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** —
 - [x] M6.6 Mac menu-bar free-space monitor: **Settings → Pro features → Show free space in the menu bar** (off by default) inserts a `MenuBarExtra` with the startup disk's free space and every volume's in its menu (`SpaceApp/FreeSpaceMonitor.swift`). It follows the setting through `UserDefaults`, refreshes once a minute only while shown, and posts one notification when free space drops below the chosen threshold (10 GB by default, or never), rearming after it rises 10% above it (`SpacePro/LowSpaceAlert.swift`).
 - [x] M6.7 Mac Build Footprint receipts: while comparing, **Scan → Save Footprint Receipt…** or the receipt button beside the comparison asks for the operation's name and writes a Markdown receipt the user names (`SpacePro/FootprintReceipt.swift`): both scan times, the totals and item counts, what files gained and lost, and the 25 largest file changes matched by relative path, with notes for partial scans and different folders
 - [x] M6.8 Mac multiple windows: the app's `Window` is now a `WindowGroup` with one `ScanWorkspace` per window (`SpaceApp/WorkspaceCommands.swift`), **File → New Window** (⌘N) appears with Pro features on, and the menus act on the focused window through a focused scene value. Automatic window tabbing is off, so Basic stays one window. The menu bar's **Open Space 16X** brings back an open window before opening one.
-- [ ] M6.9 Promo refresh, manual QA rows, benchmarks and both editions' archive sizes in `docs/qa.md`
+- [x] M6.9 Promo refresh (Pro's `scan --cleanup` in the CLI and the Mac app's Duplicates, 29 s, and a new README preview from the larger fixture), manual QA rows for every M6 feature, benchmarks and both editions' archive sizes in `docs/qa.md`, and the **Later** list
 - [ ] M6.10 Release v0.8.0
 
 ### Later
-Work cut from M6 for the owner to schedule after the review. None so far.
+Work cut from M6 for the owner to schedule after the review. M6 shipped simpler versions of these:
+- Exclusive size in the CLI explorer and as a Mac column. M6 shows it in `scan --exclusive` and the Mac's Move to Trash confirmation only, because reading private sizes during the walk makes it about 30% slower.
+- `duplicates` and `explain` views in the CLI explorer. M6 has the commands and the Mac views.
+- Per-snapshot sizes for APFS local snapshots, which need root or private APIs. M6 lists the snapshots and the purgeable total.
+- Reusable size budgets for Build Footprint receipts, as the PRD suggests for a later experiment.
+- Xcode archives and simulator devices in cleanup suggestions. They can't be recreated, so they'd need a separate "review" kind.
 
 ## Working agreement
 
