@@ -66,7 +66,15 @@ struct WorkspaceView: View {
         // Returning from System Settings may have changed Full Disk Access.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             workspace.refreshFullDiskAccess()
+            workspace.refreshVolumes()
         }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)) { _ in
+            workspace.refreshVolumes()
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didUnmountNotification)) { _ in
+            workspace.refreshVolumes()
+        }
+        .task { workspace.refreshVolumes() }
     }
 
     private var sidebar: some View {
@@ -210,6 +218,10 @@ struct WorkspaceView: View {
                 .buttonStyle(.link)
                 .disabled(!workspace.canChooseFolder)
                 .help("Browse a scan exported by Space 16X, the CLI, ncdu, or gdu (⇧⌘O)")
+
+            if !workspace.volumes.isEmpty {
+                volumeList
+            }
         }
         .padding(36)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -221,6 +233,64 @@ struct WorkspaceView: View {
                 endRadius: 310
             )
         }
+    }
+
+    private var volumeList: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("Volumes")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+                .accessibilityAddTraits(.isHeader)
+            ForEach(workspace.volumes) { volume in
+                volumeButton(volume)
+            }
+        }
+        .frame(maxWidth: 400)
+        .padding(.top, 6)
+    }
+
+    private func volumeButton(_ volume: VolumeSummary) -> some View {
+        let free = "\(ScanFormat.size(volume.availableBytes)) free of \(ScanFormat.size(volume.totalBytes))"
+        return Button {
+            workspace.startScan(URL(filePath: volume.path, directoryHint: .isDirectory))
+        } label: {
+            HStack(spacing: 11) {
+                Image(systemName: volume.path == "/" ? "internaldrive" : "externaldrive")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(volume.name)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(free)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.secondary.opacity(0.18))
+                            Capsule()
+                                .fill(volume.usedFraction > 0.9 ? Color.orange : SpaceColor.accent)
+                                .frame(width: proxy.size.width * volume.usedFraction)
+                        }
+                    }
+                    .frame(height: 5)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
+            .contentShape(RoundedRectangle(cornerRadius: 9))
+        }
+        .buttonStyle(.plain)
+        .disabled(!workspace.canChooseFolder)
+        .help("Scan \(volume.name) (\(volume.path))")
+        .accessibilityLabel("\(volume.name), \(free)")
+        .accessibilityHint("Scans this volume")
     }
 
     private func opening(_ file: String) -> some View {

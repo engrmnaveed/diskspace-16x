@@ -86,6 +86,8 @@ final class ScanWorkspace {
     private(set) var importedFile: String?
     /// The exclude patterns the results were scanned with, for Export Scan.
     private(set) var reportExcludes: [String] = []
+    /// Mounted volumes for the start screen.
+    private(set) var volumes: [VolumeSummary] = []
     private var isPresentingPicker = false
     private(set) var notice: Notice?
     private(set) var selectedEntry: ScanEntry?
@@ -187,6 +189,13 @@ final class ScanWorkspace {
         guard hasPrivacyRefusals, !isImported else { return .none }
         if !hasFullDiskAccess { return .grant }
         return scanHadFullDiskAccess ? .none : .rescan
+    }
+
+    func refreshVolumes() {
+        Task {
+            let mounted = await Task.detached(priority: .utility) { VolumeSummary.mounted() }.value
+            if mounted != volumes { volumes = mounted }
+        }
     }
 
     func refreshFullDiskAccess() {
