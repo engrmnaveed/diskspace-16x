@@ -4,7 +4,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — M3 (v0.5) Speed is in progress. The Rust CLI scans 1M files in about 1.4 s instead of 5.4 s (M3.1–M3.3). The Swift scanner takes about 2.3 s instead of 5.6 s, at 132 MB instead of 379 MB (M3.4–M3.5). Next: M3.6, record the 100K and 1M benchmarks in `docs/qa.md`, then M3.7, release v0.5.0.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — M3 (v0.5) Speed is complete on `main`. At 1M files the Rust CLI takes 1.24 s instead of 5.5 s and peaks at 119 MB instead of 342 MB; the Swift scanner takes 2.1–2.5 s instead of 5.6 s. Results are in `docs/qa.md`. Next: M3.7, release v0.5.0.
 
 **Resume here** — M3 (v0.5) Speed is in progress on `feature/m3-lean-tree` (M3.1). The Rust scanner now builds a flat arena (`cli/src/scanner/tree.rs`) from per-directory records (`cli/src/scanner/walk.rs`). Next: land M3.1, then M3.2 adds worker threads to the same record walk.
 
@@ -32,7 +32,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** —
 - [x] M3.3 Rust on macOS: read each directory's names and regular files' metadata with `getattrlistbulk`, keeping `fstatat` for folders, entries with errors and filesystems without bulk support. At 1M files, per-file `fstatat` thrashes the vnode cache and threads contend in the kernel.
 - [x] M3.4 Swift: entries keep their name and a shared parent location instead of a full path
 - [x] M3.5 Swift: TaskGroup walk with the same deterministic hard-link rule
-- [ ] M3.6 Benchmarks at 100K and 1M files in `docs/qa.md`
+- [x] M3.6 Benchmarks at 100K and 1M files in `docs/qa.md`
 - [ ] M3.7 Release v0.5.0
 
 ### Later milestones

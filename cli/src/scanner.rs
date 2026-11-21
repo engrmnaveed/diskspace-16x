@@ -220,7 +220,7 @@ fn walk(
     exclude_root_length: Option<usize>,
     progressive: bool,
     cancelled: &AtomicBool,
-    notify: &mut impl FnMut(Event),
+    notify: &mut dyn FnMut(Event),
 ) -> io::Result<Report> {
     check_cancelled(cancelled)?;
     let progress = |notify: &mut dyn FnMut(Event), visited| {
