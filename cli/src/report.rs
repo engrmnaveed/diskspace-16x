@@ -4,11 +4,10 @@ use std::collections::BinaryHeap;
 use std::fmt::Write as _;
 use std::io::{self, Write};
 use std::path::Path;
-use std::sync::Arc;
 
 use serde::Serialize;
 
-use crate::scanner::{Entry, EntryKind, EntryState, Report};
+use crate::scanner::{Entry, EntryKind, EntryState, NodeId, Report, Tree};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Selection {
@@ -27,10 +26,10 @@ pub(crate) enum Metric {
 }
 
 impl Metric {
-    pub(crate) fn bytes(self, entry: &Entry) -> u64 {
+    pub(crate) fn bytes(self, entry: Entry<'_>) -> u64 {
         match self {
-            Self::Allocated => entry.allocated_bytes,
-            Self::Apparent => entry.apparent_bytes,
+            Self::Allocated => entry.allocated_bytes(),
+            Self::Apparent => entry.apparent_bytes(),
         }
     }
 
@@ -49,34 +48,30 @@ pub(crate) fn write_plain(
     metric: Metric,
 ) -> io::Result<()> {
     let mut out = io::BufWriter::new(out);
-    match selection {
-        Selection::Depth(depth) => {
-            for entry in directory_entries(&report.root, depth, metric) {
-                write_entry(&mut out, entry, metric, "")?;
-            }
-        }
-        Selection::Top(limit) => {
-            for entry in largest_files(&report.root, limit, metric) {
-                write_entry(&mut out, entry, metric, "")?;
-            }
-        }
+    let tree = &report.tree;
+    let entries = match selection {
+        Selection::Depth(depth) => directory_entries(tree, depth, metric),
+        Selection::Top(limit) => largest_files(tree.root(), limit, metric),
+    };
+    for id in entries {
+        write_entry(&mut out, tree.entry(id), metric, "")?;
     }
     let total = if report.issues.is_empty() {
         "  [total]"
     } else {
         "  [partial total]"
     };
-    write_entry(&mut out, &report.root, metric, total)?;
+    write_entry(&mut out, report.root(), metric, total)?;
     out.flush()
 }
 
 fn write_entry(
     mut out: impl Write,
-    entry: &Entry,
+    entry: Entry<'_>,
     metric: Metric,
     annotation: &str,
 ) -> io::Result<()> {
-    let state = match entry.state {
+    let state = match entry.state() {
         EntryState::CloudOnly => "  [cloud only]",
         EntryState::Protected => "  [protected]",
         EntryState::Incomplete => "  [incomplete]",
@@ -87,7 +82,7 @@ fn write_entry(
         out,
         "{:>10}  {}{state}{annotation}",
         format_bytes(metric.bytes(entry)),
-        terminal_path(&entry.path),
+        terminal_path(&entry.path()),
     )
 }
 
@@ -183,27 +178,27 @@ struct JsonReport<'a> {
     is_partial: bool,
     issues: Vec<JsonIssue<'a>>,
     #[serde(flatten)]
-    result: JsonSelection<'a>,
+    result: JsonSelection,
 }
 
 #[derive(Serialize)]
 #[serde(untagged, rename_all_fields = "camelCase")]
-enum JsonSelection<'a> {
+enum JsonSelection {
     Depth {
         depth: usize,
-        entries: Vec<JsonEntry<'a>>,
+        entries: Vec<JsonEntry>,
     },
     Top {
         top_limit: usize,
-        top_files: Vec<JsonFile<'a>>,
+        top_files: Vec<JsonFile>,
     },
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct JsonEntry<'a> {
+struct JsonEntry {
     #[serde(flatten)]
-    file: JsonFile<'a>,
+    file: JsonFile,
     kind: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     item_count: Option<u64>,
@@ -211,19 +206,19 @@ struct JsonEntry<'a> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct JsonFile<'a> {
+struct JsonFile {
     #[serde(flatten)]
-    path: JsonPath<'a>,
+    path: JsonPath<'static>,
     allocated_bytes: u64,
     apparent_bytes: u64,
 }
 
-impl<'a> From<&'a Entry> for JsonFile<'a> {
-    fn from(entry: &'a Entry) -> Self {
+impl From<Entry<'_>> for JsonFile {
+    fn from(entry: Entry<'_>) -> Self {
         Self {
-            path: JsonPath::from(entry.path.as_path()),
-            allocated_bytes: entry.allocated_bytes,
-            apparent_bytes: entry.apparent_bytes,
+            path: JsonPath::owned(&entry.path()),
+            allocated_bytes: entry.allocated_bytes(),
+            apparent_bytes: entry.apparent_bytes(),
         }
     }
 }
@@ -241,6 +236,16 @@ struct JsonPath<'a> {
     path: Cow<'a, str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path_bytes: Option<String>,
+}
+
+impl JsonPath<'static> {
+    fn owned(path: &Path) -> Self {
+        let JsonPath { path, path_bytes } = JsonPath::from(path);
+        JsonPath {
+            path: Cow::Owned(path.into_owned()),
+            path_bytes,
+        }
+    }
 }
 
 impl<'a> From<&'a Path> for JsonPath<'a> {
@@ -271,27 +276,29 @@ pub(crate) fn write_json(
     excludes: &[String],
 ) -> io::Result<()> {
     let mut out = io::BufWriter::new(out);
-    let scope = JsonPath::from(report.root.path.as_path());
+    let tree = &report.tree;
+    let scope = JsonPath::from(tree.root_path());
     let result = match selection {
         Selection::Depth(depth) => JsonSelection::Depth {
             depth,
-            entries: directory_entries(&report.root, depth, metric)
+            entries: directory_entries(tree, depth, metric)
                 .into_iter()
-                .map(|entry| {
-                    let directory = entry.kind == EntryKind::Directory;
+                .map(|id| {
+                    let entry = tree.entry(id);
+                    let directory = entry.kind() == EntryKind::Directory;
                     JsonEntry {
                         file: JsonFile::from(entry),
                         kind: if directory { "directory" } else { "file" },
-                        item_count: directory.then_some(entry.item_count),
+                        item_count: directory.then_some(entry.item_count()),
                     }
                 })
                 .collect(),
         },
         Selection::Top(top_limit) => JsonSelection::Top {
             top_limit,
-            top_files: largest_files(&report.root, top_limit, metric)
+            top_files: largest_files(tree.root(), top_limit, metric)
                 .into_iter()
-                .map(|entry| JsonFile::from(entry.as_ref()))
+                .map(|id| JsonFile::from(tree.entry(id)))
                 .collect(),
         },
     };
@@ -301,9 +308,9 @@ pub(crate) fn write_json(
         scope: scope.path,
         scope_bytes: scope.path_bytes,
         ranked_by: metric.name(),
-        allocated_bytes: report.root.allocated_bytes,
-        apparent_bytes: report.root.apparent_bytes,
-        item_count: report.root.item_count,
+        allocated_bytes: report.root().allocated_bytes(),
+        apparent_bytes: report.root().apparent_bytes(),
+        item_count: report.root().item_count(),
         excluded_count: report.excluded_count,
         excludes,
         is_partial: !report.issues.is_empty(),
@@ -325,70 +332,64 @@ pub(crate) fn write_json(
 /// The build's edition. The Pro edition arrives with milestone M4.
 const EDITION: &str = "basic";
 
-fn directory_entries(root: &Entry, depth: usize, metric: Metric) -> Vec<&Entry> {
+/// Entries through `depth` levels below the root, each folder's contents ranked.
+fn directory_entries(tree: &Tree, depth: usize, metric: Metric) -> Vec<NodeId> {
     let mut output = Vec::new();
     let mut pending = Vec::new();
-    let mut entry = root;
+    let mut entry = tree.root();
     let mut remaining = depth;
     loop {
-        if remaining > 0 && !entry.children.is_empty() {
-            let mut children: Vec<_> = entry.children.iter().map(AsRef::as_ref).collect();
+        if remaining > 0 {
+            let mut children: Vec<_> = entry.children().collect();
             // Sort in reverse output order so the next child is on top of the stack.
-            children.sort_unstable_by(|left, right| rank(left, right, metric));
+            children.sort_unstable_by(|&left, &right| rank(left, right, metric));
             pending.extend(children.into_iter().map(|child| (child, remaining - 1)));
         }
         let Some((next, next_depth)) = pending.pop() else {
             break;
         };
-        output.push(next);
+        output.push(next.id());
         entry = next;
         remaining = next_depth;
     }
     output
 }
 
-pub(crate) fn largest_files(root: &Entry, limit: usize, metric: Metric) -> Vec<&Arc<Entry>> {
+/// The `limit` largest counted files below `scope`, largest first.
+pub(crate) fn largest_files(scope: Entry<'_>, limit: usize, metric: Metric) -> Vec<NodeId> {
     if limit == 0 {
         return Vec::new();
     }
     let mut heap = BinaryHeap::new();
-    let mut levels = vec![root.children.iter()];
-    while let Some(level) = levels.last_mut() {
-        let Some(entry) = level.next() else {
-            levels.pop();
+    for entry in scope.descendants() {
+        if entry.kind() != EntryKind::File || entry.state() != EntryState::Local {
             continue;
-        };
-        if entry.kind == EntryKind::Directory {
-            levels.push(entry.children.iter());
-        } else if entry.state == EntryState::Local {
-            let candidate = Reverse(RankedFile(entry, metric));
-            if heap.len() < limit {
-                heap.push(candidate);
-            } else if let Some(mut smallest) = heap.peek_mut()
-                && candidate < *smallest
-            {
-                *smallest = candidate;
-            }
+        }
+        let candidate = Reverse(RankedFile(entry, metric));
+        if heap.len() < limit {
+            heap.push(candidate);
+        } else if let Some(mut smallest) = heap.peek_mut()
+            && candidate < *smallest
+        {
+            *smallest = candidate;
         }
     }
     heap.into_sorted_vec()
         .into_iter()
-        .map(|Reverse(file)| file.0)
+        .map(|Reverse(file)| file.0.id())
         .collect()
 }
 
-fn rank(left: &Entry, right: &Entry, metric: Metric) -> Ordering {
-    metric.bytes(left).cmp(&metric.bytes(right)).then_with(|| {
-        right
-            .path
-            .as_os_str()
-            .as_encoded_bytes()
-            .cmp(left.path.as_os_str().as_encoded_bytes())
-    })
+/// Orders by size, then by path with the smaller path ranking higher.
+fn rank(left: Entry<'_>, right: Entry<'_>, metric: Metric) -> Ordering {
+    metric
+        .bytes(left)
+        .cmp(&metric.bytes(right))
+        .then_with(|| left.tree().cmp_paths(right.id(), left.id()))
 }
 
 #[derive(Clone, Copy)]
-struct RankedFile<'a>(&'a Arc<Entry>, Metric);
+struct RankedFile<'a>(Entry<'a>, Metric);
 
 impl PartialEq for RankedFile<'_> {
     fn eq(&self, other: &Self) -> bool {

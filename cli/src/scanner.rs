@@ -1,34 +1,21 @@
 mod exclude;
 mod fs;
-mod preview;
 #[cfg(target_os = "macos")]
 mod provider;
 #[cfg(target_os = "macos")]
 mod startup_volume;
+mod tree;
+mod walk;
 
-use std::collections::HashSet;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
 
 pub use exclude::Excludes;
-use fs::{Directory, Identity, MetadataAccess, Operation, is_cloud_error, with_local_metadata};
-use preview::Preview;
-
-#[derive(Clone, Debug)]
-pub struct Entry {
-    pub path: PathBuf,
-    pub allocated_bytes: u64,
-    /// File lengths (`st_size`), counted under the same rules as allocated bytes.
-    pub apparent_bytes: u64,
-    /// Files and folders below this entry, counting each hard-linked file once.
-    pub item_count: u64,
-    pub kind: EntryKind,
-    pub state: EntryState,
-    pub children: Vec<Arc<Entry>>,
-}
+use fs::{Identity, MetadataAccess, Operation, is_cloud_error, with_local_metadata};
+pub use tree::{Entry, NodeId, Tree, TreeBuilder};
+use walk::{Inline, Scope, Task};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EntryKind {
@@ -111,7 +98,7 @@ impl IssueKind {
 
 #[derive(Clone, Debug)]
 pub struct Report {
-    pub root: Arc<Entry>,
+    pub tree: Arc<Tree>,
     pub issues: Vec<Issue>,
     /// Entries skipped by exclude patterns. Their contents aren't visited or counted.
     pub excluded_count: u64,
@@ -119,64 +106,40 @@ pub struct Report {
 }
 
 impl Report {
+    pub fn root(&self) -> Entry<'_> {
+        self.tree.root()
+    }
+
     /// This report with the folder `subtree` scanned again, as from [`rescan`]. Totals,
     /// item counts, and states of every folder above it are recomputed, and issues at or
     /// below it are replaced. The excluded count keeps the earlier scan's figure. Returns
     /// None when the folder isn't in this report.
     pub fn replacing(&self, subtree: Report) -> Option<Report> {
-        let folder = subtree.root.path.clone();
-        if folder == self.root.path {
+        let folder = subtree.tree.root_path();
+        if folder == self.tree.root_path() {
             return Some(Report {
                 excluded_count: self.excluded_count.max(subtree.excluded_count),
                 ..subtree
             });
         }
+        let at = self.tree.find(folder)?;
+        if self.tree.entry(at).kind() != EntryKind::Directory {
+            return None;
+        }
         let mut issues: Vec<Issue> = self
             .issues
             .iter()
-            .filter(|issue| !issue.path.starts_with(&folder))
+            .filter(|issue| !issue.path.starts_with(folder))
             .cloned()
             .collect();
         issues.extend(subtree.issues);
-        let root = replaced(&self.root, subtree.root, &issues)?;
         Some(Report {
-            root,
+            tree: Arc::new(self.tree.replacing(at, &subtree.tree)),
             issues,
             excluded_count: self.excluded_count,
             is_preview: self.is_preview,
         })
     }
-}
-
-/// `node` with the descendant at `replacement.path` swapped for `replacement`.
-fn replaced(node: &Arc<Entry>, replacement: Arc<Entry>, issues: &[Issue]) -> Option<Arc<Entry>> {
-    let index = node
-        .children
-        .iter()
-        .position(|child| replacement.path.starts_with(&child.path))?;
-    let child = if node.children[index].path == replacement.path {
-        if node.children[index].kind != EntryKind::Directory {
-            return None;
-        }
-        replacement
-    } else {
-        replaced(&node.children[index], replacement, issues)?
-    };
-    let mut children = node.children.clone();
-    children[index] = child;
-    // A folder's own state comes from problems reading the folder itself or a child
-    // that has no entry. Problems inside a child are already in that child's state.
-    let own = issues
-        .iter()
-        .filter(|issue| {
-            issue.path == node.path
-                || (issue.path.parent() == Some(node.path.as_path())
-                    && !children.iter().any(|child| child.path == issue.path))
-        })
-        .fold(EntryState::Local, |state, issue| {
-            state.degrade(issue.kind.entry_state())
-        });
-    Some(directory_entry(node.path.clone(), own, children).0)
 }
 
 #[derive(Clone, Debug)]
@@ -192,42 +155,17 @@ pub fn scan(
     excludes: &Excludes,
     progressive: bool,
     cancelled: &AtomicBool,
-    notify: impl FnMut(Event),
+    mut notify: impl FnMut(Event),
 ) -> io::Result<Report> {
     fs::raise_open_file_limit();
     with_local_metadata(|| {
-        check_cancelled(cancelled)?;
         let scope = scan_scope(path)?;
-        let mut walker = Walker {
-            notify,
-            metadata: MetadataAccess::new(cancelled),
-            cancelled,
-            excludes,
-            exclude_root_length: None,
-            visited: 0,
-            last_progress: None,
-        };
-        walker.progress(&scope, true);
-
-        let mut preview = None;
+        let report = walk(&scope, excludes, None, progressive, cancelled, &mut notify)?;
         if progressive {
-            let mut shallow = walker.walk(&scope, Some(2), &mut preview)?;
-            if shallow.root.state != EntryState::Pending {
-                return walker.complete(shallow);
-            }
-            shallow.is_preview = true;
-            preview = Some(Preview::new(Arc::clone(&shallow.root)));
-            (walker.notify)(Event::Snapshot(shallow));
-        }
-
-        let report = walker.walk(&scope, None, &mut preview)?;
-        if progressive {
-            walker.complete(report)
-        } else {
-            walker.progress(&scope, true);
             check_cancelled(cancelled)?;
-            Ok(report)
+            notify(Event::Snapshot(report.clone()));
         }
+        Ok(report)
     })
 }
 
@@ -241,7 +179,7 @@ pub fn rescan(
     folder: &Path,
     excludes: &Excludes,
     cancelled: &AtomicBool,
-    notify: impl FnMut(Event),
+    mut notify: impl FnMut(Event),
 ) -> io::Result<Report> {
     fs::raise_open_file_limit();
     with_local_metadata(|| {
@@ -254,21 +192,95 @@ pub fn rescan(
                 "The folder isn't inside the scanned folder.",
             ));
         }
-        let mut walker = Walker {
-            notify,
-            metadata: MetadataAccess::new(cancelled),
-            cancelled,
+        let length = root.as_os_str().len();
+        walk(
+            &scope,
             excludes,
-            exclude_root_length: Some(root.as_os_str().len()),
-            visited: 0,
-            last_progress: None,
-        };
-        walker.progress(&scope, true);
-        let report = walker.walk(&scope, None, &mut None)?;
-        walker.progress(&scope, true);
-        check_cancelled(cancelled)?;
-        Ok(report)
+            Some(length),
+            false,
+            cancelled,
+            &mut notify,
+        )
     })
+}
+
+/// Reads the root, then walks everything below it. Problems with the root itself fail
+/// the scan, except a cloud-only root or an unresponsive cloud provider.
+fn walk(
+    scope: &Path,
+    excludes: &Excludes,
+    exclude_root_length: Option<usize>,
+    progressive: bool,
+    cancelled: &AtomicBool,
+    notify: &mut impl FnMut(Event),
+) -> io::Result<Report> {
+    check_cancelled(cancelled)?;
+    let progress = |notify: &mut dyn FnMut(Event), visited| {
+        notify(Event::Progress {
+            visited,
+            path: scope.to_path_buf(),
+        });
+    };
+    progress(notify, 1);
+    let mut metadata = MetadataAccess::new(cancelled);
+    let stat = match metadata.stat(scope, None, scope.as_os_str()) {
+        Ok(stat) => stat,
+        Err(error) if error.kind() == io::ErrorKind::TimedOut => {
+            return Ok(unavailable_root(scope, &error));
+        }
+        Err(error) => return Err(contextual_error(scope, Operation::Stat, &error)),
+    };
+    if stat.st_mode & libc::S_IFMT != libc::S_IFDIR {
+        let message = if stat.st_mode & libc::S_IFMT == libc::S_IFLNK {
+            "Choose the directory the symbolic link points to."
+        } else {
+            "Choose a directory."
+        };
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, message));
+    }
+    if fs::is_dataless(&stat) {
+        return Ok(cloud_root(scope));
+    }
+    let identity = Identity::from(&stat);
+    let directory = match metadata.list(scope, None, scope.as_os_str(), identity) {
+        Ok(directory) => directory,
+        Err(error) if is_cloud_error(&error) => return Ok(cloud_root(scope)),
+        Err(error) if error.kind() == io::ErrorKind::TimedOut => {
+            return Ok(unavailable_root(scope, &error));
+        }
+        Err(error) => return Err(contextual_error(scope, Operation::List, &error)),
+    };
+    if let Some(error) = &directory.error {
+        return if is_cloud_error(error) {
+            Ok(cloud_root(scope))
+        } else {
+            Err(contextual_error(scope, Operation::List, error))
+        };
+    }
+    drop(metadata);
+
+    let walk_scope = Scope {
+        root: scope.to_path_buf(),
+        excludes,
+        exclude_root_length: exclude_root_length.unwrap_or(scope.as_os_str().len()),
+        device: stat.st_dev,
+        cancelled,
+        #[cfg(target_os = "macos")]
+        startup_volume: startup_volume::StartupVolume::for_scope(scope, &directory.fd),
+    };
+    let (task, root) = Task::root(scope.to_path_buf(), identity, directory);
+    let mut inline = Inline {
+        scope: &walk_scope,
+        notify: &mut *notify,
+        previews: progressive,
+        visited: 1,
+        last_progress: None,
+    };
+    let report = inline.run(task, root)?;
+    let visited = inline.visited;
+    progress(notify, visited);
+    check_cancelled(cancelled)?;
+    Ok(report)
 }
 
 fn scan_scope(path: &Path) -> io::Result<PathBuf> {
@@ -291,411 +303,6 @@ fn scan_scope(path: &Path) -> io::Result<PathBuf> {
         .collect())
 }
 
-struct Walker<'a, F> {
-    notify: F,
-    metadata: MetadataAccess<'a>,
-    cancelled: &'a AtomicBool,
-    excludes: &'a Excludes,
-    /// Length of the path exclude patterns are relative to. A folder rescan keeps the
-    /// original scan root, so anchored patterns such as `/build` still apply there.
-    exclude_root_length: Option<usize>,
-    visited: u64,
-    last_progress: Option<Instant>,
-}
-
-impl<F: FnMut(Event)> Walker<'_, F> {
-    fn walk(
-        &mut self,
-        scope: &Path,
-        depth_limit: Option<usize>,
-        preview: &mut Option<Preview>,
-    ) -> io::Result<Report> {
-        check_cancelled(self.cancelled)?;
-        self.visited += 1;
-        let metadata = match self.metadata.stat(scope, None, scope.as_os_str()) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == io::ErrorKind::TimedOut => {
-                return Ok(unavailable_root(scope, &error));
-            }
-            Err(error) => return Err(contextual_error(scope, Operation::Stat, &error)),
-        };
-        if metadata.st_mode & libc::S_IFMT != libc::S_IFDIR {
-            let message = if metadata.st_mode & libc::S_IFMT == libc::S_IFLNK {
-                "Choose the directory the symbolic link points to."
-            } else {
-                "Choose a directory."
-            };
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, message));
-        }
-        if fs::is_dataless(&metadata) {
-            return Ok(cloud_root(scope));
-        }
-        let device = metadata.st_dev;
-        let identity = Identity::from(&metadata);
-        let directory = match self.metadata.list(scope, None, scope.as_os_str(), identity) {
-            Ok(directory) => directory,
-            Err(error) if is_cloud_error(&error) => return Ok(cloud_root(scope)),
-            Err(error) if error.kind() == io::ErrorKind::TimedOut => {
-                return Ok(unavailable_root(scope, &error));
-            }
-            Err(error) => return Err(contextual_error(scope, Operation::List, &error)),
-        };
-        if let Some(error) = directory.error {
-            return if is_cloud_error(&error) {
-                Ok(cloud_root(scope))
-            } else {
-                Err(contextual_error(scope, Operation::List, &error))
-            };
-        }
-
-        let mut issues = Vec::new();
-        let mut excluded = 0_u64;
-        let scope_length = self.exclude_root_length.unwrap_or(scope.as_os_str().len());
-        let mut links = HashSet::new();
-        let mut ancestors = HashSet::from([identity]);
-        #[cfg(target_os = "macos")]
-        let startup_volume = startup_volume::StartupVolume::for_scope(scope, &directory.fd);
-        let mut stack = vec![Frame::new(scope.to_path_buf(), identity, directory)];
-        while !stack.is_empty() {
-            check_cancelled(self.cancelled)?;
-            let level = stack.len() - 1;
-            let frame = &mut stack[level];
-            let Some(name) = frame.names.next() else {
-                let finished = stack.pop().expect("current frame exists");
-                ancestors.remove(&finished.identity);
-                let entry = finished.finish(&mut issues);
-                if let Some(parent) = stack.last_mut() {
-                    add(parent, entry, level - 1, preview);
-                    self.publish_preview(preview, &issues, excluded);
-                    continue;
-                }
-                return Ok(Report {
-                    root: entry,
-                    issues,
-                    excluded_count: excluded,
-                    is_preview: false,
-                });
-            };
-
-            let path = frame.path.join(&name);
-            let relative = (!self.excludes.is_empty()).then(|| relative_bytes(scope_length, &path));
-            if relative.is_some_and(|relative| {
-                self.excludes
-                    .matches_any_type(relative, name.as_encoded_bytes())
-            }) {
-                excluded += 1;
-                continue;
-            }
-            self.visited += 1;
-            self.progress(&path, false);
-            self.publish_preview(preview, &issues, excluded);
-            let metadata = match self.metadata.stat(&path, Some(&frame.fd), &name) {
-                Ok(metadata) => metadata,
-                Err(error) => {
-                    check_cancelled(self.cancelled)?;
-                    let kind = record_issue(&mut issues, &path, Operation::Stat, &error);
-                    frame.state = frame.state.degrade(kind.entry_state());
-                    continue;
-                }
-            };
-            if metadata.st_dev != device {
-                continue;
-            }
-
-            match metadata.st_mode & libc::S_IFMT {
-                libc::S_IFREG => {
-                    let entry = file_entry(
-                        path,
-                        &metadata,
-                        depth_limit.is_some(),
-                        &mut links,
-                        &mut issues,
-                    );
-                    add(frame, entry, level, preview);
-                }
-                libc::S_IFDIR => {
-                    if relative.is_some_and(|relative| {
-                        self.excludes
-                            .matches_directory(relative, name.as_encoded_bytes())
-                    }) {
-                        excluded += 1;
-                        continue;
-                    }
-                    #[cfg(target_os = "macos")]
-                    if let Some(volume) = &startup_volume
-                        && volume.is_backing_path(&path)
-                        && !fs::is_dataless(&metadata)
-                    {
-                        match self
-                            .metadata
-                            .canonical_directory_path(&path, &frame.fd, &name)
-                        {
-                            Ok(canonical) if volume.is_alias(&canonical) => continue,
-                            Ok(_) => {}
-                            Err(error) => {
-                                check_cancelled(self.cancelled)?;
-                                let kind = record_issue(
-                                    &mut issues,
-                                    &path,
-                                    Operation::CanonicalPath,
-                                    &error,
-                                );
-                                frame.state = frame.state.degrade(kind.entry_state());
-                                continue;
-                            }
-                        }
-                    }
-                    let identity = Identity::from(&metadata);
-                    if fs::is_dataless(&metadata) {
-                        add(
-                            frame,
-                            empty_directory(path, EntryState::CloudOnly),
-                            level,
-                            preview,
-                        );
-                    } else if ancestors.contains(&identity) {
-                        issues.push(Issue::error(
-                            path.clone(),
-                            "Skipped a directory that points back to an ancestor.",
-                        ));
-                        add(
-                            frame,
-                            empty_directory(path, EntryState::Incomplete),
-                            level,
-                            preview,
-                        );
-                    } else if depth_limit.is_some_and(|limit| level + 1 >= limit) {
-                        add(
-                            frame,
-                            empty_directory(path, EntryState::Pending),
-                            level,
-                            preview,
-                        );
-                    } else {
-                        match self.metadata.list(&path, Some(&frame.fd), &name, identity) {
-                            Ok(directory)
-                                if !directory.error.as_ref().is_some_and(is_cloud_error) =>
-                            {
-                                if let Some(error) = &directory.error {
-                                    record_issue(&mut issues, &path, Operation::List, error);
-                                }
-                                ancestors.insert(identity);
-                                stack.push(Frame::new(path, identity, directory));
-                            }
-                            Ok(_) => {
-                                add(
-                                    frame,
-                                    empty_directory(path, EntryState::CloudOnly),
-                                    level,
-                                    preview,
-                                );
-                            }
-                            Err(error) if is_cloud_error(&error) => {
-                                add(
-                                    frame,
-                                    empty_directory(path, EntryState::CloudOnly),
-                                    level,
-                                    preview,
-                                );
-                            }
-                            Err(error) => {
-                                check_cancelled(self.cancelled)?;
-                                let kind =
-                                    record_issue(&mut issues, &path, Operation::List, &error);
-                                add(
-                                    frame,
-                                    empty_directory(path, kind.entry_state()),
-                                    level,
-                                    preview,
-                                );
-                            }
-                        }
-                    }
-                }
-                // Symlinks and special filesystem objects contribute no bytes.
-                _ => {}
-            }
-        }
-        unreachable!("traversal finishes at the root");
-    }
-
-    fn progress(&mut self, path: &Path, force: bool) {
-        let now = Instant::now();
-        if !force
-            && self
-                .last_progress
-                .is_some_and(|last| now - last < Duration::from_millis(100))
-        {
-            return;
-        }
-        self.last_progress = Some(now);
-        (self.notify)(Event::Progress {
-            visited: self.visited,
-            path: path.to_path_buf(),
-        });
-    }
-
-    fn publish_preview(&mut self, preview: &mut Option<Preview>, issues: &[Issue], excluded: u64) {
-        if let Some(report) = preview
-            .as_mut()
-            .and_then(|preview| preview.publish(issues, excluded))
-        {
-            (self.notify)(Event::Snapshot(report));
-        }
-    }
-
-    fn complete(&mut self, report: Report) -> io::Result<Report> {
-        self.progress(&report.root.path, true);
-        check_cancelled(self.cancelled)?;
-        (self.notify)(Event::Snapshot(report.clone()));
-        Ok(report)
-    }
-}
-
-struct Frame {
-    path: PathBuf,
-    identity: Identity,
-    fd: Arc<std::os::fd::OwnedFd>,
-    names: std::vec::IntoIter<std::ffi::OsString>,
-    children: Vec<Arc<Entry>>,
-    state: EntryState,
-}
-
-impl Frame {
-    fn new(path: PathBuf, identity: Identity, listing: Directory) -> Self {
-        let state = listing.error.as_ref().map_or(EntryState::Local, |error| {
-            IssueKind::of(error).entry_state()
-        });
-        Self {
-            path,
-            identity,
-            fd: listing.fd,
-            names: listing.names.into_iter(),
-            children: Vec::new(),
-            state,
-        }
-    }
-
-    fn finish(self, issues: &mut Vec<Issue>) -> Arc<Entry> {
-        let (entry, overflow) = directory_entry(self.path, self.state, self.children);
-        if overflow {
-            issues.push(Issue::error(
-                entry.path.clone(),
-                "Directory totals exceed the supported byte range.",
-            ));
-        }
-        entry
-    }
-}
-
-fn add(frame: &mut Frame, entry: Arc<Entry>, level: usize, preview: &mut Option<Preview>) {
-    if level < 2
-        && let Some(preview) = preview
-    {
-        preview.record(&frame.path, &entry);
-    }
-    frame.children.push(entry);
-}
-
-fn file_entry(
-    path: PathBuf,
-    metadata: &libc::stat,
-    discovery: bool,
-    links: &mut HashSet<Identity>,
-    issues: &mut Vec<Issue>,
-) -> Arc<Entry> {
-    let mut state = if fs::is_dataless(metadata) {
-        EntryState::CloudOnly
-    } else if metadata.st_nlink > 1 && discovery {
-        // An unseen deeper path may own this inode. Defer counting until the
-        // ordered depth-first pass chooses the first link.
-        EntryState::Pending
-    } else if metadata.st_nlink > 1 && !links.insert(Identity::from(metadata)) {
-        EntryState::HardLinkAlias
-    } else {
-        EntryState::Local
-    };
-    let mut allocated = 0;
-    let mut apparent = 0;
-    if state == EntryState::Local {
-        apparent = metadata.st_size.max(0) as u64;
-        // POSIX st_blocks describes 512-byte units, regardless of the filesystem block size.
-        let blocks = metadata.st_blocks.max(0) as u64;
-        allocated = match blocks.checked_mul(512) {
-            Some(bytes) => bytes,
-            None => {
-                issues.push(Issue::error(
-                    path.clone(),
-                    "Allocated size exceeds the supported byte range.",
-                ));
-                state = EntryState::Incomplete;
-                u64::MAX
-            }
-        };
-    }
-    Arc::new(Entry {
-        path,
-        allocated_bytes: allocated,
-        apparent_bytes: apparent,
-        item_count: 0,
-        kind: EntryKind::File,
-        state,
-        children: Vec::new(),
-    })
-}
-
-fn empty_directory(path: PathBuf, state: EntryState) -> Arc<Entry> {
-    directory_entry(path, state, Vec::new()).0
-}
-
-fn directory_entry(
-    path: PathBuf,
-    mut state: EntryState,
-    children: Vec<Arc<Entry>>,
-) -> (Arc<Entry>, bool) {
-    let mut bytes = 0_u64;
-    let mut apparent = 0_u64;
-    let mut items = 0_u64;
-    let mut overflow = false;
-    for entry in &children {
-        for (total, amount) in [
-            (&mut bytes, entry.allocated_bytes),
-            (&mut apparent, entry.apparent_bytes),
-        ] {
-            match total.checked_add(amount) {
-                Some(sum) => *total = sum,
-                None => {
-                    *total = u64::MAX;
-                    overflow = true;
-                }
-            }
-        }
-        if entry.state != EntryState::HardLinkAlias {
-            items = items.saturating_add(entry.item_count.saturating_add(1));
-        }
-        if entry.state == EntryState::Pending {
-            state = EntryState::Pending;
-        } else {
-            state = state.degrade(entry.state);
-        }
-    }
-    if overflow {
-        state = state.degrade(EntryState::Incomplete);
-    }
-    (
-        Arc::new(Entry {
-            path,
-            allocated_bytes: bytes,
-            apparent_bytes: apparent,
-            item_count: items,
-            kind: EntryKind::Directory,
-            state,
-            children,
-        }),
-        overflow,
-    )
-}
-
 /// The bytes of `path` after the scan root and its separator.
 fn relative_bytes(scope_length: usize, path: &Path) -> &[u8] {
     let bytes = path.as_os_str().as_encoded_bytes();
@@ -710,7 +317,11 @@ fn relative_bytes(scope_length: usize, path: &Path) -> &[u8] {
 
 fn unavailable_root(path: &Path, error: &io::Error) -> Report {
     Report {
-        root: empty_directory(path.to_path_buf(), EntryState::Incomplete),
+        tree: Arc::new(
+            TreeBuilder::new(path.to_path_buf(), EntryState::Incomplete)
+                .finish()
+                .0,
+        ),
         issues: vec![Issue::error(path.to_path_buf(), error.to_string())],
         excluded_count: 0,
         is_preview: false,
@@ -719,7 +330,11 @@ fn unavailable_root(path: &Path, error: &io::Error) -> Report {
 
 fn cloud_root(path: &Path) -> Report {
     Report {
-        root: empty_directory(path.to_path_buf(), EntryState::CloudOnly),
+        tree: Arc::new(
+            TreeBuilder::new(path.to_path_buf(), EntryState::CloudOnly)
+                .finish()
+                .0,
+        ),
         issues: Vec::new(),
         excluded_count: 0,
         is_preview: false,

@@ -2,7 +2,7 @@ use super::ranker::{RankRequest, Ranked};
 use super::{Progress, ScanUpdate};
 use crate::{
     report::{Metric, format_bytes, terminal_path},
-    scanner::{Entry, EntryKind, EntryState, Report},
+    scanner::{Entry, EntryKind, EntryState, NodeId, Report, Tree},
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::{
@@ -65,8 +65,8 @@ pub(super) enum Panel {
 pub(super) enum Action {
     Stay,
     CancelScan,
-    /// Move these entries to the Trash, then report the results to `finish_trash`.
-    Trash(Vec<Arc<Entry>>),
+    /// Move these items to the Trash, then report the results to `finish_trash`.
+    Trash(Vec<TrashItem>),
     /// Scan `folder` again, with exclude patterns relative to `root`, and report the
     /// result to `finish`.
     Rescan {
@@ -76,9 +76,41 @@ pub(super) enum Action {
     Quit,
 }
 
+/// An item chosen for the Trash, as the scan saw it.
+#[derive(Clone, Debug)]
+pub(super) struct TrashItem {
+    pub(super) path: PathBuf,
+    pub(super) kind: EntryKind,
+    pub(super) allocated_bytes: u64,
+    state: EntryState,
+}
+
+impl TrashItem {
+    fn new(entry: Entry<'_>) -> Self {
+        Self {
+            path: entry.path(),
+            kind: entry.kind(),
+            allocated_bytes: entry.allocated_bytes(),
+            state: entry.state(),
+        }
+    }
+
+    /// The quoted name for messages.
+    pub(super) fn quoted_name(&self) -> String {
+        quoted_name(&self.path)
+    }
+}
+
+fn quoted_name(path: &Path) -> String {
+    format!(
+        "“{}”",
+        terminal_path(path.file_name().map_or(path, Path::new))
+    )
+}
+
 /// Items waiting for the user to confirm Move to Trash, with their allocated bytes.
 pub(super) struct TrashPlan {
-    pub(super) items: Vec<Arc<Entry>>,
+    pub(super) items: Vec<TrashItem>,
     pub(super) bytes: u64,
 }
 
@@ -114,7 +146,8 @@ pub(super) struct Explorer {
     pub(super) mode: Mode,
     pub(super) sort: Sort,
     pub(super) metric: Metric,
-    pub(super) rows: Vec<Arc<Entry>>,
+    /// The visible rows, as nodes of the latest ranking's tree.
+    pub(super) rows: Vec<NodeId>,
     pub(super) selected: usize,
     pub(super) offset: usize,
     pub(super) page_rows: usize,
@@ -130,10 +163,11 @@ pub(super) struct Explorer {
     pub(super) marked: BTreeSet<PathBuf>,
     pub(super) prompt: Option<TrashPlan>,
     pub(super) notice: Option<Notice>,
-    folder: Option<Arc<Entry>>,
+    /// The open folder in `report`.
+    folder: Option<NodeId>,
     /// The folder being scanned again, and the status to return to afterwards.
     rescan: Option<(PathBuf, Status)>,
-    requested_ranking: Option<(RankKey, Weak<Entry>)>,
+    requested_ranking: Option<(RankKey, Weak<Tree>, NodeId)>,
     ranking: Option<Ranked>,
     selection_target: Option<PathBuf>,
 }
@@ -222,15 +256,17 @@ impl Explorer {
         }
     }
 
-    pub(super) fn scope(&self) -> Option<&Entry> {
-        self.scope_reference().map(Arc::as_ref)
+    /// The folder being browsed, or the whole scan in the largest files view.
+    pub(super) fn scope(&self) -> Option<Entry<'_>> {
+        let report = self.report.as_ref()?;
+        Some(report.tree.entry(self.scope_id()?))
     }
 
-    fn scope_reference(&self) -> Option<&Arc<Entry>> {
-        let report = self.report.as_ref()?;
+    fn scope_id(&self) -> Option<NodeId> {
+        self.report.as_ref()?;
         match self.mode {
-            Mode::Folders => self.folder.as_ref(),
-            Mode::Largest => Some(&report.root),
+            Mode::Folders => self.folder,
+            Mode::Largest => Some(NodeId::ROOT),
         }
     }
 
@@ -243,67 +279,75 @@ impl Explorer {
     }
 
     pub(super) fn ranking_request(&mut self) -> Option<RankRequest> {
-        let source = Arc::clone(self.scope_reference()?);
-        let snapshot = Arc::downgrade(&source);
+        let tree = Arc::clone(&self.report.as_ref()?.tree);
+        let scope = self.scope_id()?;
         let key = self.rank_key();
         if self
             .requested_ranking
             .as_ref()
-            .is_some_and(|(requested_key, requested)| {
-                *requested_key == key && Weak::ptr_eq(requested, &snapshot)
+            .is_some_and(|(requested_key, requested, folder)| {
+                *requested_key == key
+                    && *folder == scope
+                    && Weak::as_ptr(requested) == Arc::as_ptr(&tree)
             })
         {
             return None;
         }
-        self.requested_ranking = Some((key, snapshot));
-        Some(RankRequest { key, source })
+        self.requested_ranking = Some((key, Arc::downgrade(&tree), scope));
+        Some(RankRequest { key, tree, scope })
     }
 
     pub(super) fn is_ranking(&self) -> bool {
-        self.scope_reference().is_some_and(|entry| {
-            self.ranking.as_ref().is_none_or(|rank| {
-                rank.key != self.rank_key() || !Weak::ptr_eq(&rank.snapshot, &Arc::downgrade(entry))
-            })
+        let (Some(report), Some(scope)) = (&self.report, self.scope_id()) else {
+            return false;
+        };
+        self.ranking.as_ref().is_none_or(|rank| {
+            rank.key != self.rank_key()
+                || rank.folder != scope
+                || !Arc::ptr_eq(&rank.tree, &report.tree)
         })
     }
 
     pub(super) fn accept_ranking(&mut self, ranked: Ranked) -> bool {
         if ranked.key != self.rank_key()
-            || self.scope().is_none_or(|scope| scope.path != ranked.folder)
+            || self
+                .scope()
+                .is_none_or(|scope| scope.path() != ranked.tree.path(ranked.folder))
         {
             return false;
         }
         let preferred = self
             .selection_target
             .clone()
-            .or_else(|| self.current().map(|entry| entry.path.clone()));
+            .or_else(|| self.current().map(Entry::path));
         self.ranking = Some(ranked);
         self.rebuild(preferred.as_deref());
         if !self.is_ranking()
             || self
                 .current()
-                .is_some_and(|row| Some(&row.path) == self.selection_target.as_ref())
+                .is_some_and(|row| Some(row.path()) == self.selection_target)
         {
             self.selection_target = None;
         }
         true
     }
 
-    pub(super) fn current(&self) -> Option<&Entry> {
-        self.rows.get(self.selected).map(Arc::as_ref)
+    /// The tree the rows belong to.
+    pub(super) fn rows_tree(&self) -> Option<&Tree> {
+        self.ranking.as_ref().map(|ranking| &*ranking.tree)
     }
 
-    pub(super) fn row_path<'a>(&self, entry: &'a Entry) -> &'a Path {
+    pub(super) fn current(&self) -> Option<Entry<'_>> {
+        let id = *self.rows.get(self.selected)?;
+        Some(self.rows_tree()?.entry(id))
+    }
+
+    /// A row's name in the folder view, or its path below the scope in the largest
+    /// files view.
+    pub(super) fn row_path(&self, entry: Entry<'_>) -> PathBuf {
         match self.mode {
-            Mode::Folders => entry.path.file_name().map(Path::new).unwrap_or(&entry.path),
-            Mode::Largest => {
-                let root = self
-                    .report
-                    .as_ref()
-                    .map(|report| report.root.path.as_path());
-                root.and_then(|root| entry.path.strip_prefix(root).ok())
-                    .unwrap_or(&entry.path)
-            }
+            Mode::Folders => PathBuf::from(entry.name()),
+            Mode::Largest => entry.tree().relative_path(entry.id(), NodeId::ROOT),
         }
     }
 
@@ -320,17 +364,24 @@ impl Explorer {
     }
 
     fn install(&mut self, report: Report) {
-        let old_folder = self.folder.as_ref().map(|entry| entry.path.as_path());
-        let mut folder_path = old_folder.unwrap_or(&report.root.path).to_path_buf();
+        let old_folder = self
+            .report
+            .as_ref()
+            .zip(self.folder)
+            .map(|(old, folder)| old.tree.path(folder));
+        let tree = &report.tree;
+        let mut folder_path = old_folder
+            .clone()
+            .unwrap_or_else(|| tree.root_path().to_path_buf());
         let folder = loop {
-            if let Some(folder) = find(&report.root, &folder_path) {
-                break Arc::clone(folder);
+            if let Some(folder) = tree.find(&folder_path) {
+                break folder;
             }
-            if !folder_path.pop() || !folder_path.starts_with(&report.root.path) {
-                break Arc::clone(&report.root);
+            if !folder_path.pop() || !folder_path.starts_with(tree.root_path()) {
+                break NodeId::ROOT;
             }
         };
-        if self.mode == Mode::Folders && old_folder.is_some_and(|old| old != folder.path) {
+        if self.mode == Mode::Folders && old_folder.is_some_and(|old| old != tree.path(folder)) {
             self.reset_ranking(None);
         }
         self.folder = Some(folder);
@@ -338,33 +389,36 @@ impl Explorer {
     }
 
     fn rebuild(&mut self, preferred: Option<&Path>) {
-        let items = self
-            .ranking
-            .as_ref()
-            .map_or(&[][..], |ranking| &ranking.items);
-        let rows: Vec<_> = if self.query.is_empty() {
-            items.to_vec()
-        } else {
-            let needle = self.query.to_lowercase();
-            items
-                .iter()
-                .filter(|entry| {
-                    terminal_path(self.row_path(entry))
-                        .to_lowercase()
-                        .contains(&needle)
-                })
-                .cloned()
-                .collect()
+        let (rows, target) = match &self.ranking {
+            None => (Vec::new(), None),
+            Some(ranking) => {
+                let rows = if self.query.is_empty() {
+                    ranking.items.clone()
+                } else {
+                    let needle = self.query.to_lowercase();
+                    ranking
+                        .items
+                        .iter()
+                        .copied()
+                        .filter(|&id| {
+                            terminal_path(&self.row_path(ranking.tree.entry(id)))
+                                .to_lowercase()
+                                .contains(&needle)
+                        })
+                        .collect()
+                };
+                (rows, preferred.and_then(|path| ranking.tree.find(path)))
+            }
         };
-        self.selected = preferred
-            .and_then(|path| rows.iter().position(|entry| entry.path == path))
+        self.selected = target
+            .and_then(|target| rows.iter().position(|&row| row == target))
             .unwrap_or_else(|| self.selected.min(rows.len().saturating_sub(1)));
         self.rows = rows;
         self.set_page_rows(self.page_rows);
     }
 
     fn refresh(&mut self) {
-        let previous = self.current().map(|entry| entry.path.clone());
+        let previous = self.current().map(Entry::path);
         self.rebuild(previous.as_deref());
     }
 
@@ -381,8 +435,7 @@ impl Explorer {
         let Some(folder) = self
             .report
             .as_ref()
-            .and_then(|report| find(&report.root, path))
-            .cloned()
+            .and_then(|report| report.tree.find(path))
         else {
             return;
         };
@@ -394,11 +447,11 @@ impl Explorer {
 
     fn activate(&mut self) {
         let Some(entry) = self.current() else { return };
-        match (self.mode, &entry.kind) {
-            (Mode::Folders, EntryKind::Directory) => self.switch_folder(&entry.path.clone(), None),
+        let (kind, path) = (entry.kind(), entry.path());
+        match (self.mode, kind) {
+            (Mode::Folders, EntryKind::Directory) => self.switch_folder(&path, None),
             (Mode::Folders, EntryKind::File) => self.open_panel(Panel::Details),
             (Mode::Largest, _) => {
-                let path = entry.path.clone();
                 if let Some(parent) = path.parent() {
                     self.switch_folder(parent, Some(&path));
                 }
@@ -412,10 +465,10 @@ impl Explorer {
             self.refresh();
         } else if self.mode == Mode::Largest {
             self.toggle_largest();
-        } else if let (Some(report), Some(folder)) = (&self.report, &self.folder)
-            && folder.path != report.root.path
+        } else if let (Some(report), Some(folder)) = (&self.report, self.folder)
+            && folder != NodeId::ROOT
         {
-            let child = folder.path.clone();
+            let child = report.tree.path(folder);
             if let Some(parent) = child.parent() {
                 self.switch_folder(parent, Some(&child));
             }
@@ -439,7 +492,7 @@ impl Explorer {
         if self.report.is_none() {
             return;
         }
-        self.selection_target = self.current().map(|entry| entry.path.clone());
+        self.selection_target = self.current().map(Entry::path);
         self.requested_ranking = None;
     }
 
@@ -543,19 +596,20 @@ impl Explorer {
 
     /// Marks or unmarks the selected item, then moves to the next row.
     fn toggle_mark(&mut self) {
-        let Some(entry) = self.rows.get(self.selected).cloned() else {
+        let Some(entry) = self.current() else {
             return;
         };
+        let (path, state) = (entry.path(), entry.state());
         if self.read_only {
             self.notice = Some(Notice::warning(READ_ONLY_NOTICE));
             return;
         }
-        if !self.marked.remove(&entry.path) {
-            if let Some(reason) = kept_reason(&entry) {
+        if !self.marked.remove(&path) {
+            if let Some(reason) = kept_reason(state, &path) {
                 self.notice = Some(Notice::warning(reason));
                 return;
             }
-            self.marked.insert(entry.path.clone());
+            self.marked.insert(path);
         }
         self.move_selection(1);
     }
@@ -564,25 +618,27 @@ impl Explorer {
     pub(super) fn marked_bytes(&self) -> u64 {
         self.trash_items(self.marked.iter())
             .iter()
-            .map(|entry| entry.allocated_bytes)
+            .map(|item| item.allocated_bytes)
             .sum()
     }
 
-    /// Resolves paths to entries in the current report. A path inside another chosen
+    /// Resolves paths to items in the current report. A path inside another chosen
     /// folder is left out, since moving the folder moves it too.
-    fn trash_items<'a>(&self, paths: impl Iterator<Item = &'a PathBuf>) -> Vec<Arc<Entry>> {
+    fn trash_items<'a>(&self, paths: impl Iterator<Item = &'a PathBuf>) -> Vec<TrashItem> {
         let Some(report) = &self.report else {
             return Vec::new();
         };
-        let mut items: Vec<Arc<Entry>> = Vec::new();
+        let mut items: Vec<TrashItem> = Vec::new();
         // Sorted paths put every folder before its contents.
         let paths: BTreeSet<_> = paths.collect();
         for path in paths {
-            if *path == report.root.path || items.iter().any(|item| path.starts_with(&item.path)) {
+            if path == report.tree.root_path()
+                || items.iter().any(|item| path.starts_with(&item.path))
+            {
                 continue;
             }
-            if let Some(entry) = find(&report.root, path) {
-                items.push(Arc::clone(entry));
+            if let Some(id) = report.tree.find(path) {
+                items.push(TrashItem::new(report.tree.entry(id)));
             }
         }
         items
@@ -600,18 +656,21 @@ impl Explorer {
             ));
             return;
         }
-        let current = self.current().map(|entry| entry.path.clone());
+        let current = self.current().map(Entry::path);
         let items = if self.marked.is_empty() {
             self.trash_items(current.iter())
         } else {
             self.trash_items(self.marked.iter())
         };
-        if let Some(reason) = items.iter().find_map(|entry| kept_reason(entry)) {
+        if let Some(reason) = items
+            .iter()
+            .find_map(|item| kept_reason(item.state, &item.path))
+        {
             self.notice = Some(Notice::warning(reason));
             return;
         }
         if !items.is_empty() {
-            let bytes = items.iter().map(|entry| entry.allocated_bytes).sum();
+            let bytes = items.iter().map(|item| item.allocated_bytes).sum();
             self.prompt = Some(TrashPlan { items, bytes });
         }
     }
@@ -627,9 +686,9 @@ impl Explorer {
         let Some(report) = &self.report else {
             return Action::Stay;
         };
-        let root = report.root.path.clone();
-        let folder = match (self.mode, &self.folder) {
-            (Mode::Folders, Some(folder)) => folder.path.clone(),
+        let root = report.tree.root_path().to_path_buf();
+        let folder = match (self.mode, self.folder) {
+            (Mode::Folders, Some(folder)) => report.tree.path(folder),
             _ => root.clone(),
         };
         let previous = std::mem::replace(&mut self.status, Status::Scanning);
@@ -641,19 +700,19 @@ impl Explorer {
     /// Replaces the rescanned folder in place. A cancelled or failed rescan keeps the
     /// earlier results, except that a folder that no longer exists leaves them.
     fn finish_rescan(&mut self, folder: &Path, previous: Status, result: io::Result<Report>) {
-        let name = format!(
-            "“{}”",
-            terminal_path(folder.file_name().map_or(folder, Path::new))
-        );
+        let name = quoted_name(folder);
         let Some(report) = &self.report else {
             self.status = previous;
             return;
         };
-        let whole = *folder == report.root.path;
-        let before = find(&report.root, folder).map(|entry| entry.allocated_bytes);
+        let whole = folder == report.tree.root_path();
+        let before = report
+            .tree
+            .find(folder)
+            .map(|id| report.tree.entry(id).allocated_bytes());
         match result {
             Ok(subtree) => {
-                let after = subtree.root.allocated_bytes;
+                let after = subtree.root().allocated_bytes();
                 let Some(updated) = report.replacing(subtree) else {
                     self.status = previous;
                     self.notice = Some(Notice::warning(format!(
@@ -661,8 +720,7 @@ impl Explorer {
                     )));
                     return;
                 };
-                self.marked
-                    .retain(|path| find(&updated.root, path).is_some());
+                self.marked.retain(|path| updated.tree.find(path).is_some());
                 self.install(updated);
                 // Rescanning one folder doesn't finish a cancelled or failed scan.
                 self.status = if whole { Status::Complete } else { previous };
@@ -684,10 +742,9 @@ impl Explorer {
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound && !whole => {
                 self.status = previous;
-                let gone = Arc::clone(&report.root);
-                if let Some(root) = without(&gone, folder) {
+                if let Some(id) = report.tree.find(folder) {
                     let updated = Report {
-                        root,
+                        tree: Arc::new(report.tree.without(&[id])),
                         issues: report
                             .issues
                             .iter()
@@ -713,27 +770,29 @@ impl Explorer {
 
     /// Removes the moved items from the tree in place, so totals, rankings, and item
     /// counts update without a rescan, and reports the outcome in the footer.
-    pub(super) fn finish_trash(&mut self, results: Vec<(Arc<Entry>, io::Result<PathBuf>)>) {
+    pub(super) fn finish_trash(&mut self, results: Vec<(TrashItem, io::Result<PathBuf>)>) {
         let Some(report) = &self.report else { return };
-        let mut root = Arc::clone(&report.root);
         let mut moved = Vec::new();
         let mut freed = 0;
         let mut failed = Vec::new();
-        for (entry, result) in results {
+        for (item, result) in results {
             match result {
                 Ok(_) => {
-                    root = without(&root, &entry.path).unwrap_or(root);
-                    freed += entry.allocated_bytes;
-                    moved.push(entry);
+                    freed += item.allocated_bytes;
+                    moved.push(item);
                 }
-                Err(error) => failed.push((entry, error)),
+                Err(error) => failed.push((item, error)),
             }
         }
         if !moved.is_empty() {
-            let gone = |path: &Path| moved.iter().any(|entry| path.starts_with(&entry.path));
+            let removed: Vec<_> = moved
+                .iter()
+                .filter_map(|item| report.tree.find(&item.path))
+                .collect();
+            let gone = |path: &Path| moved.iter().any(|item| path.starts_with(&item.path));
             self.marked.retain(|path| !gone(path));
             let updated = Report {
-                root,
+                tree: Arc::new(report.tree.without(&removed)),
                 issues: report
                     .issues
                     .iter()
@@ -745,34 +804,23 @@ impl Explorer {
             };
             self.install(updated);
         }
-        let named = |entry: &Entry| {
-            format!(
-                "“{}”",
-                terminal_path(
-                    entry
-                        .path
-                        .file_name()
-                        .map_or(entry.path.as_path(), Path::new)
-                )
-            )
-        };
         self.notice = Some(match (moved.as_slice(), failed.first()) {
             (moved, None) => Notice::info(format!(
                 "Moved {} ({}) to the Trash. Space is freed when you empty the Trash.",
                 match moved {
-                    [entry] => named(entry),
+                    [item] => item.quoted_name(),
                     _ => format!("{} items", moved.len()),
                 },
                 format_bytes(freed)
             )),
-            ([], Some((entry, error))) => {
-                Notice::warning(format!("{} wasn't moved: {error}", named(entry)))
+            ([], Some((item, error))) => {
+                Notice::warning(format!("{} wasn't moved: {error}", item.quoted_name()))
             }
-            (moved, Some((entry, error))) => Notice::warning(format!(
+            (moved, Some((item, error))) => Notice::warning(format!(
                 "Moved {} of {} items. {} wasn't moved: {error}",
                 moved.len(),
                 moved.len() + failed.len(),
-                named(entry)
+                item.quoted_name()
             )),
         });
     }
@@ -844,106 +892,130 @@ impl Explorer {
 }
 
 /// Why an item can't be moved to the Trash, or None if it can.
-fn kept_reason(entry: &Entry) -> Option<String> {
-    let reason = match entry.state {
+fn kept_reason(state: EntryState, path: &Path) -> Option<String> {
+    let reason = match state {
         EntryState::Local | EntryState::HardLinkAlias => return None,
         EntryState::CloudOnly => "is cloud-only. Remove it in Finder or its cloud app.",
         EntryState::Protected => "is protected, so Space 16X couldn't see all of it.",
         EntryState::Pending => "wasn't scanned, so its size is unknown.",
         EntryState::Incomplete => "had read errors, so its size is uncertain.",
     };
-    let name = entry
-        .path
-        .file_name()
-        .map_or(entry.path.as_path(), Path::new);
     Some(format!(
-        "“{}” {reason} It stays where it is.",
-        terminal_path(name)
+        "{} {reason} It stays where it is.",
+        quoted_name(path)
     ))
-}
-
-/// Files and folders that `entry` adds to its parent's item count.
-fn items_in(entry: &Entry) -> u64 {
-    if entry.state == EntryState::HardLinkAlias {
-        0
-    } else {
-        entry.item_count.saturating_add(1)
-    }
-}
-
-/// A copy of `node` without the descendant at `path`, with every total on the way
-/// reduced by what it held. None if `path` isn't below `node`.
-fn without(node: &Arc<Entry>, path: &Path) -> Option<Arc<Entry>> {
-    let index = node
-        .children
-        .iter()
-        .position(|child| path.starts_with(&child.path))?;
-    let child = &node.children[index];
-    let mut updated = Entry::clone(node);
-    let (bytes, apparent, items) = if child.path == path {
-        updated.children.remove(index);
-        (child.allocated_bytes, child.apparent_bytes, items_in(child))
-    } else {
-        let replacement = without(child, path)?;
-        let removed = (
-            child.allocated_bytes - replacement.allocated_bytes,
-            child.apparent_bytes - replacement.apparent_bytes,
-            child.item_count - replacement.item_count,
-        );
-        updated.children[index] = replacement;
-        removed
-    };
-    updated.allocated_bytes = updated.allocated_bytes.saturating_sub(bytes);
-    updated.apparent_bytes = updated.apparent_bytes.saturating_sub(apparent);
-    updated.item_count = updated.item_count.saturating_sub(items);
-    Some(Arc::new(updated))
-}
-
-fn find<'a>(root: &'a Arc<Entry>, path: &Path) -> Option<&'a Arc<Entry>> {
-    let relative = path.strip_prefix(&root.path).ok()?;
-    let mut current = root;
-    for name in relative.iter() {
-        current = current
-            .children
-            .iter()
-            .find(|child| child.path.file_name() == Some(name))?;
-    }
-    Some(current)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scanner::EntryState;
+    use crate::scanner::{EntryState, TreeBuilder};
     use crate::tui::ranker::rank;
+    use std::os::unix::ffi::OsStrExt;
 
-    fn file(path: &str, allocated_bytes: u64) -> Arc<Entry> {
-        Arc::new(Entry {
-            path: path.into(),
-            allocated_bytes,
-            apparent_bytes: allocated_bytes,
-            item_count: 0,
-            kind: EntryKind::File,
-            state: EntryState::Local,
-            children: Vec::new(),
-        })
+    /// A file or folder for a hand-built tree. Paths give the names, so tests read
+    /// like the scans they stand for.
+    #[derive(Clone)]
+    enum Spec {
+        File {
+            path: &'static str,
+            allocated: u64,
+            apparent: u64,
+            state: EntryState,
+        },
+        Folder {
+            path: &'static str,
+            state: EntryState,
+            children: Vec<Spec>,
+        },
     }
 
-    fn folder(path: &str, children: Vec<Arc<Entry>>) -> Arc<Entry> {
-        Arc::new(Entry {
-            path: path.into(),
-            allocated_bytes: children.iter().map(|entry| entry.allocated_bytes).sum(),
-            apparent_bytes: children.iter().map(|entry| entry.apparent_bytes).sum(),
-            item_count: children.iter().map(|entry| entry.item_count + 1).sum(),
-            kind: EntryKind::Directory,
+    impl Spec {
+        fn with_state(self, new: EntryState) -> Self {
+            match self {
+                Spec::File {
+                    path,
+                    allocated,
+                    apparent,
+                    ..
+                } => Spec::File {
+                    path,
+                    allocated,
+                    apparent,
+                    state: new,
+                },
+                Spec::Folder { path, children, .. } => Spec::Folder {
+                    path,
+                    state: new,
+                    children,
+                },
+            }
+        }
+
+        fn add(&self, builder: &mut TreeBuilder) {
+            let name = |path: &str| Path::new(path).file_name().unwrap().as_bytes().to_vec();
+            match self {
+                Spec::File {
+                    path,
+                    allocated,
+                    apparent,
+                    state,
+                } => builder.file(&name(path), *allocated, *apparent, *state),
+                Spec::Folder {
+                    path,
+                    state,
+                    children,
+                } => {
+                    builder.open_folder(&name(path), *state);
+                    for child in children {
+                        child.add(builder);
+                    }
+                    builder.close_folder();
+                }
+            }
+        }
+
+        fn tree(&self) -> Arc<Tree> {
+            let Spec::Folder {
+                path,
+                state,
+                children,
+            } = self
+            else {
+                panic!("a tree's root is a folder");
+            };
+            let mut builder = TreeBuilder::new(PathBuf::from(path), *state);
+            for child in children {
+                child.add(&mut builder);
+            }
+            Arc::new(builder.finish().0)
+        }
+    }
+
+    fn file(path: &'static str, allocated_bytes: u64) -> Spec {
+        sized(path, allocated_bytes, allocated_bytes)
+    }
+
+    fn sized(path: &'static str, allocated: u64, apparent: u64) -> Spec {
+        Spec::File {
+            path,
+            allocated,
+            apparent,
+            state: EntryState::Local,
+        }
+    }
+
+    fn folder(path: &'static str, children: Vec<Spec>) -> Spec {
+        Spec::Folder {
+            path,
             state: EntryState::Local,
             children,
-        })
+        }
     }
 
-    fn show(explorer: &mut Explorer, root: Arc<Entry>) {
+    fn show(explorer: &mut Explorer, root: Spec) {
         explorer.install(Report {
-            root,
+            tree: root.tree(),
             issues: Vec::new(),
             excluded_count: 0,
             is_preview: true,
@@ -964,18 +1036,14 @@ mod tests {
         explorer.key(KeyEvent::new(code, KeyModifiers::NONE))
     }
 
-    fn sized(path: &str, allocated_bytes: u64, apparent_bytes: u64) -> Arc<Entry> {
-        Arc::new(Entry {
-            apparent_bytes,
-            ..(*file(path, allocated_bytes)).clone()
-        })
-    }
-
     fn names(explorer: &Explorer) -> Vec<String> {
         explorer
             .rows
             .iter()
-            .map(|row| row.path.file_name().unwrap().to_string_lossy().into_owned())
+            .map(|&row| {
+                let tree = explorer.rows_tree().unwrap();
+                tree.entry(row).name().to_string_lossy().into_owned()
+            })
             .collect()
     }
 
@@ -991,18 +1059,20 @@ mod tests {
         explorer
     }
 
-    fn confirm(explorer: &mut Explorer) -> Vec<Arc<Entry>> {
+    fn confirm(explorer: &mut Explorer) -> Vec<TrashItem> {
         match key(explorer, KeyCode::Char('y')) {
             Action::Trash(items) => items,
             _ => panic!("y should confirm the prompt"),
         }
     }
 
-    fn moved(items: Vec<Arc<Entry>>) -> Vec<(Arc<Entry>, io::Result<PathBuf>)> {
-        let trashed = |entry: &Entry| Path::new("/Trash").join(entry.path.file_name().unwrap());
+    fn moved(items: Vec<TrashItem>) -> Vec<(TrashItem, io::Result<PathBuf>)> {
         items
             .into_iter()
-            .map(|entry| (Arc::clone(&entry), Ok(trashed(&entry))))
+            .map(|item| {
+                let trashed = Path::new("/Trash").join(item.path.file_name().unwrap());
+                (item, Ok(trashed))
+            })
             .collect()
     }
 
@@ -1018,9 +1088,9 @@ mod tests {
         }
     }
 
-    fn subtree(root: Arc<Entry>) -> io::Result<Report> {
+    fn subtree(root: Spec) -> io::Result<Report> {
         Ok(Report {
-            root,
+            tree: root.tree(),
             issues: Vec::new(),
             excluded_count: 0,
             is_preview: false,
@@ -1054,7 +1124,7 @@ mod tests {
         );
         assert_eq!(names(&explorer), ["3", "1"]);
         assert_eq!(
-            explorer.report.as_ref().unwrap().root.allocated_bytes,
+            explorer.report.as_ref().unwrap().root().allocated_bytes(),
             1_310
         );
     }
@@ -1074,7 +1144,10 @@ mod tests {
             notice(&explorer),
             ("Rescan cancelled. The earlier results stay.", false)
         );
-        assert_eq!(explorer.report.as_ref().unwrap().root.allocated_bytes, 610);
+        assert_eq!(
+            explorer.report.as_ref().unwrap().root().allocated_bytes(),
+            610
+        );
 
         key(&mut explorer, KeyCode::Enter);
         settle_ranking(&mut explorer);
@@ -1086,8 +1159,8 @@ mod tests {
                 .0
                 .ends_with("no longer exists, so it left the results.")
         );
-        let root = &explorer.report.as_ref().unwrap().root;
-        assert_eq!((root.allocated_bytes, root.children.len()), (110, 2));
+        let root = explorer.report.as_ref().unwrap().root();
+        assert_eq!((root.allocated_bytes(), root.children().count()), (110, 2));
 
         rescan_request(&mut explorer);
         explorer.finish(Err(io::Error::from(io::ErrorKind::PermissionDenied)));
@@ -1112,8 +1185,8 @@ mod tests {
         settle_ranking(&mut explorer);
 
         assert_eq!(names(&explorer), ["mid"]);
-        let root = &explorer.report.as_ref().unwrap().root;
-        assert_eq!((root.allocated_bytes, root.item_count), (100, 1));
+        let root = explorer.report.as_ref().unwrap().root();
+        assert_eq!((root.allocated_bytes(), root.item_count()), (100, 1));
         assert!(explorer.marked.is_empty());
         assert_eq!(
             notice(&explorer),
@@ -1136,9 +1209,13 @@ mod tests {
         settle_ranking(&mut explorer);
 
         assert_eq!(names(&explorer), ["2"]);
-        assert_eq!(explorer.scope().unwrap().allocated_bytes, 200);
-        let root = &explorer.report.as_ref().unwrap().root;
-        let totals = (root.allocated_bytes, root.apparent_bytes, root.item_count);
+        assert_eq!(explorer.scope().unwrap().allocated_bytes(), 200);
+        let root = explorer.report.as_ref().unwrap().root();
+        let totals = (
+            root.allocated_bytes(),
+            root.apparent_bytes(),
+            root.item_count(),
+        );
         assert_eq!(totals, (310, 310, 4));
         assert!(
             notice(&explorer)
@@ -1162,13 +1239,16 @@ mod tests {
         let items = confirm(&mut explorer);
         assert_eq!(items.len(), 1, "moving big moves big/1 too");
         let denied = io::Error::new(io::ErrorKind::PermissionDenied, "Permission denied");
-        explorer.finish_trash(vec![(Arc::clone(&items[0]), Err(denied))]);
+        explorer.finish_trash(vec![(items[0].clone(), Err(denied))]);
         assert_eq!(explorer.marked.len(), 2);
         assert_eq!(
             notice(&explorer),
             ("“big” wasn't moved: Permission denied", true)
         );
-        assert_eq!(explorer.report.as_ref().unwrap().root.allocated_bytes, 610);
+        assert_eq!(
+            explorer.report.as_ref().unwrap().root().allocated_bytes(),
+            610
+        );
     }
 
     #[test]
@@ -1201,14 +1281,8 @@ mod tests {
     #[test]
     fn cloud_only_and_protected_items_stay_put() {
         let mut explorer = Explorer::new(Path::new("/r"));
-        let with_state = |entry: Arc<Entry>, state| {
-            Arc::new(Entry {
-                state,
-                ..(*entry).clone()
-            })
-        };
-        let cloud = with_state(file("/r/cloud", 0), EntryState::CloudOnly);
-        let locked = with_state(folder("/r/locked", Vec::new()), EntryState::Protected);
+        let cloud = file("/r/cloud", 0).with_state(EntryState::CloudOnly);
+        let locked = folder("/r/locked", Vec::new()).with_state(EntryState::Protected);
         show(
             &mut explorer,
             folder("/r", vec![cloud, locked, file("/r/plain", 5)]),
@@ -1298,7 +1372,7 @@ mod tests {
             ),
         );
         key(&mut explorer, KeyCode::Down);
-        assert_eq!(explorer.current().unwrap().path, Path::new("/fixture/b"));
+        assert_eq!(explorer.current().unwrap().path(), Path::new("/fixture/b"));
 
         show(
             &mut explorer,
@@ -1308,7 +1382,7 @@ mod tests {
             ),
         );
         assert_eq!(explorer.selected, 0);
-        assert_eq!(explorer.current().unwrap().path, Path::new("/fixture/b"));
+        assert_eq!(explorer.current().unwrap().path(), Path::new("/fixture/b"));
     }
 
     #[test]
@@ -1331,23 +1405,23 @@ mod tests {
         key(&mut explorer, KeyCode::Char('f'));
         settle_ranking(&mut explorer);
         assert_eq!(
-            explorer.current().unwrap().path,
+            explorer.current().unwrap().path(),
             Path::new("/fixture/nested one/movie")
         );
         key(&mut explorer, KeyCode::Enter);
         settle_ranking(&mut explorer);
         assert_eq!(
-            explorer.scope().unwrap().path,
+            explorer.scope().unwrap().path(),
             Path::new("/fixture/nested one")
         );
         assert_eq!(
-            explorer.current().unwrap().path,
+            explorer.current().unwrap().path(),
             Path::new("/fixture/nested one/movie")
         );
         key(&mut explorer, KeyCode::Backspace);
         settle_ranking(&mut explorer);
         assert_eq!(
-            explorer.current().unwrap().path,
+            explorer.current().unwrap().path(),
             Path::new("/fixture/nested one")
         );
     }
@@ -1365,11 +1439,11 @@ mod tests {
         key(&mut explorer, KeyCode::Char('/'));
         explorer.paste("b");
         assert_eq!(explorer.rows.len(), 1);
-        assert_eq!(explorer.current().unwrap().path, Path::new("/fixture/b"));
+        assert_eq!(explorer.current().unwrap().path(), Path::new("/fixture/b"));
         assert!(explorer.ranking_request().is_none());
         key(&mut explorer, KeyCode::Esc);
         assert_eq!(explorer.rows.len(), 2);
-        assert_eq!(explorer.current().unwrap().path, Path::new("/fixture/b"));
+        assert_eq!(explorer.current().unwrap().path(), Path::new("/fixture/b"));
     }
 
     #[test]
