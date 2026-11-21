@@ -33,7 +33,7 @@ space16x scan --top 10 --json > report.json
 space16x --exclude node_modules --exclude '*.log' ~/Projects
 ```
 
-Use the arrow keys and Enter to drill into a folder, `/` to filter, `f` for the largest files, `s` to sort by size, item count, or name, `a` for apparent sizes, and `?` for help. The `scan` command provides plain text and JSON for scripts.
+Use the arrow keys and Enter to drill into a folder, `/` to filter, `f` for the largest files, `s` to sort by size, item count, or name, `a` for apparent sizes, and `?` for help. Press Space to mark items and `d` to move them to the Trash after you confirm. Space is freed when you empty the Trash. Pass `--read-only` to turn this off. The `scan` command provides plain text and JSON for scripts.
 
 Exit code `0` means the scan completed, `2` means it returned partial results, and `1` means the scan could not start or complete. A partial JSON report carries its issues and totals on standard output. See the [CLI reference](docs/cli.md) and [example report](docs/example-report.json).
 

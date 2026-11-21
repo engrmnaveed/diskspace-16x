@@ -4,9 +4,9 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — v0.3.0 is published; M2.1 landed. M2.2 is PR #21: merge it once CI is green. M2.3 (Mac Trash) is committed on `feature/m2-mac-trash`, branched before M2.2: merge `main` into it (keep both CHANGELOG `Unreleased` entries and every roadmap tick), run `swift test`, then open its PR. Then M2.4, rescan one folder.
 
-**Resume here** — v0.3.0 is published and M2.1 (Trash backends, the one-write rule) landed. M2.2 (marking and `d` in the explorer, `--read-only`) is on `feature/m2-tui-trash`, stacked on M2.1: the explorer, view, run loop and unit tests are committed as a `wip` commit; next, add the pty check in `scripts/check-tui.py`, update `docs/cli.md` and the CHANGELOG, tick M2.2 and open its PR.
+**Resume here** — v0.3.0 is published; M2.1 (Trash backends) and M2.2 (Trash in the explorer) landed. Next: M2.3, Move to Trash in the Mac app (multi-select in `ResultsView`, ⌘⌫, a confirmation sheet, `FileManager.trashItem`, the tree updated in place like `without()` in `cli/src/tui/explorer.rs`).
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -19,7 +19,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 
 ### M2 (v0.4.0) Act [Basic]
 - [x] M2.1 Rust: Trash backends, macOS `trashItemAtURL` through a minimal Objective-C binding (no new crate) and an in-house Linux FreeDesktop Trash (home Trash, else `$topdir/.Trash/$uid` or `$topdir/.Trash-$uid`, `.trashinfo` written first, never across devices), plus the write rule in `AGENTS.md`, `SECURITY.md`, `PRD.md` and `README.md`
-- [ ] M2.2 TUI: Space marks items, `d` moves them to the Trash after a `y/N` prompt, the tree updates in place, "Space is freed when you empty the Trash", cloud-only and protected items blocked, `--read-only` and `SPACE16X_READ_ONLY=1`, a pty check in `scripts/check-tui.py`
+- [x] M2.2 TUI: Space marks items, `d` moves them to the Trash after a `y/N` prompt, the tree updates in place, "Space is freed when you empty the Trash", cloud-only and protected items blocked, `--read-only` and `SPACE16X_READ_ONLY=1`, a pty check in `scripts/check-tui.py`
 - [ ] M2.3 Mac: multi-select, ⌘⌫ Move to Trash, a confirmation sheet with the item count and size, `FileManager.trashItem`, cloud-only and protected items blocked, the tree updated in place
 - [ ] M2.4 Rescan folder: TUI `r` and Mac **Rescan Folder**, replacing one subtree in place
 - [ ] M2.5 Mac: Quick Look on Space

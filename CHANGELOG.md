@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Move files and folders to the Trash from the CLI explorer. Press Space to mark items, press `d`, and confirm the count and size with `y`. Folder totals and rankings update in place without a rescan. Space is freed when you empty the Trash. On Linux, items go to the FreeDesktop.org Trash that file managers use, and they are never copied to another disk. `--read-only` or `SPACE16X_READ_ONLY=1` turns trashing off. Cloud-only, protected, and incompletely scanned items stay where they are.
+
 ## 0.3.0
 
 - Add apparent sizes and item counts to the CLI. `space16x scan --apparent` shows and ranks file lengths, as `ls -l` reports them, instead of allocated bytes, which helps with sparse and compressed files. JSON reports move to schema 3, which keeps every schema 2 field and adds `apparentBytes`, `itemCount` (files and folders below an entry, counting each hard-linked file once), `rankedBy` and `edition`. Exit codes are unchanged.

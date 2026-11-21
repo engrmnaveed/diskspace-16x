@@ -69,18 +69,8 @@ def check_sort_size_and_color(binary, fixture):
         terminal.expect(b"Items")
         assert uses_color(terminal.output), "the explorer should use color by default"
 
-        # Resizing repaints every cell, so the whole label appears in the output.
-        start = len(terminal.output)
-        terminal.send(b"s")
-        time.sleep(0.3)
-        terminal.resize(101, 28)
-        terminal.expect(b"by items", start)
-
-        start = len(terminal.output)
-        terminal.send(b"a")
-        time.sleep(0.3)
-        terminal.resize(100, 28)
-        terminal.expect(b"apparent", start)
+        terminal.press(b"s", b"by items")
+        terminal.press(b"a", b"apparent")
         terminal.send(b"q")
         terminal.finish(0)
 
@@ -97,6 +87,57 @@ def check_sort_size_and_color(binary, fixture):
             assert b"\x1b[7m" in terminal.output
 
 
+def check_trash(binary):
+    """Mark, decline, and confirm Move to Trash, and check that read-only mode refuses it.
+
+    On Linux the FreeDesktop Trash goes to a scratch XDG_DATA_HOME. On macOS the item
+    goes to the real Trash, so a local run stops before confirming unless CI is set.
+    """
+    with tempfile.TemporaryDirectory(prefix="space16x-trash-") as directory:
+        root = Path(directory).resolve()
+        scope = root / "scope"
+        (scope / "keep").mkdir(parents=True)
+        (scope / "keep" / "small.bin").write_bytes(b"k" * 100)
+        victim = scope / "trash-me"
+        victim.mkdir()
+        (victim / "data.bin").write_bytes(os.urandom(65_536))
+        environment = {key: value for key, value in os.environ.items() if key != "SPACE16X_READ_ONLY"}
+        environment["XDG_DATA_HOME"] = str(root / "data")
+
+        for command, env in (
+            ([binary, "--read-only", scope], environment),
+            ([binary, scope], {**environment, "SPACE16X_READ_ONLY": "1"}),
+        ):
+            with Terminal(command, env=env) as terminal:
+                terminal.expect(b"trash-me")
+                terminal.press(b" ", b"Read-only mode: Move to Trash is off.")
+                terminal.press(b"d", b"Read-only mode: Move to Trash is off.")
+                terminal.send(b"q")
+                terminal.finish(0)
+            assert victim.exists()
+
+        with Terminal([binary, scope], env=environment) as terminal:
+            terminal.expect(b"Scan complete")
+            terminal.expect(b"trash-me")
+            terminal.press(b" ", b"1 marked (")
+            terminal.press(b"d", "Move “trash-me” (".encode())
+            terminal.expect(b"to the Trash? y/N")
+            terminal.press(b"n", b"Nothing was moved.")
+            assert victim.exists()
+            if sys.platform != "darwin" or os.environ.get("CI") == "true":
+                terminal.press(b"d", b"to the Trash? y/N")
+                terminal.press(b"y", b"Space is freed when you empty the Trash.")
+                assert not victim.exists()
+                terminal.press(b"j", b"keep")
+                if sys.platform != "darwin":
+                    trash = root / "data" / "Trash"
+                    assert (trash / "files" / "trash-me" / "data.bin").is_file()
+                    info = (trash / "info" / "trash-me.trashinfo").read_text()
+                    assert f"\nPath={victim}\n" in info, info
+            terminal.send(b"q")
+            terminal.finish(0)
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit(f"Usage: {sys.argv[0]} PATH-TO-SPACE16X")
@@ -108,7 +149,8 @@ def main():
         (nested / "payload.bin").write_bytes(os.urandom(65_536))
         check(binary, fixture)
         check_sort_size_and_color(binary, fixture)
-    print("Terminal navigation, sorting, color, resize, and restoration checks passed.")
+    check_trash(binary)
+    print("Terminal navigation, sorting, color, Trash, resize, and restoration checks passed.")
 
 
 if __name__ == "__main__":
