@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Exercise the packaged explorer through a pseudo-terminal."""
 
-import itertools
 import os
 from pathlib import Path
 import re
@@ -70,18 +69,8 @@ def check_sort_size_and_color(binary, fixture):
         terminal.expect(b"Items")
         assert uses_color(terminal.output), "the explorer should use color by default"
 
-        # Resizing repaints every cell, so the whole label appears in the output.
-        start = len(terminal.output)
-        terminal.send(b"s")
-        time.sleep(0.3)
-        terminal.resize(101, 28)
-        terminal.expect(b"by items", start)
-
-        start = len(terminal.output)
-        terminal.send(b"a")
-        time.sleep(0.3)
-        terminal.resize(100, 28)
-        terminal.expect(b"apparent", start)
+        terminal.press(b"s", b"by items")
+        terminal.press(b"a", b"apparent")
         terminal.send(b"q")
         terminal.finish(0)
 
@@ -96,18 +85,6 @@ def check_sort_size_and_color(binary, fixture):
             assert not uses_color(terminal.output), f"{command} printed colors"
             # The selection stays visible in reverse video.
             assert b"\x1b[7m" in terminal.output
-
-
-WIDTHS = itertools.cycle((101, 100))
-
-
-def press(terminal, keys, needle):
-    """Sends keys, then forces a full repaint so the expected text appears whole."""
-    start = len(terminal.output)
-    terminal.send(keys)
-    time.sleep(0.3)
-    terminal.resize(next(WIDTHS), 28)
-    terminal.expect(needle, start)
 
 
 def check_trash(binary):
@@ -133,8 +110,8 @@ def check_trash(binary):
         ):
             with Terminal(command, env=env) as terminal:
                 terminal.expect(b"trash-me")
-                press(terminal, b" ", b"Read-only mode: Move to Trash is off.")
-                press(terminal, b"d", b"Read-only mode: Move to Trash is off.")
+                terminal.press(b" ", b"Read-only mode: Move to Trash is off.")
+                terminal.press(b"d", b"Read-only mode: Move to Trash is off.")
                 terminal.send(b"q")
                 terminal.finish(0)
             assert victim.exists()
@@ -142,16 +119,16 @@ def check_trash(binary):
         with Terminal([binary, scope], env=environment) as terminal:
             terminal.expect(b"Scan complete")
             terminal.expect(b"trash-me")
-            press(terminal, b" ", b"1 marked (")
-            press(terminal, b"d", "Move “trash-me” (".encode())
+            terminal.press(b" ", b"1 marked (")
+            terminal.press(b"d", "Move “trash-me” (".encode())
             terminal.expect(b"to the Trash? y/N")
-            press(terminal, b"n", b"Nothing was moved.")
+            terminal.press(b"n", b"Nothing was moved.")
             assert victim.exists()
             if sys.platform != "darwin" or os.environ.get("CI") == "true":
-                press(terminal, b"d", b"to the Trash? y/N")
-                press(terminal, b"y", b"Space is freed when you empty the Trash.")
+                terminal.press(b"d", b"to the Trash? y/N")
+                terminal.press(b"y", b"Space is freed when you empty the Trash.")
                 assert not victim.exists()
-                press(terminal, b"j", b"keep")
+                terminal.press(b"j", b"keep")
                 if sys.platform != "darwin":
                     trash = root / "data" / "Trash"
                     assert (trash / "files" / "trash-me" / "data.bin").is_file()
