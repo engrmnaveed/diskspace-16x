@@ -25,18 +25,7 @@ public enum DiskScanner {
         preview: (@Sendable (ScanReport) -> Void)? = nil,
         isCancelled: @escaping @Sendable () -> Bool = { false }
     ) throws -> ScanReport {
-        guard !path.isEmpty, !path.utf8.contains(0) else {
-            throw ScanFailure(path: path, reason: "Supply a valid directory path.")
-        }
-        // Preserve '..' so the OS resolves it correctly even after an intermediate symlink.
-        // Remove trailing separators so O_NOFOLLOW applies to the selected directory itself.
-        let absolute = path.utf8.first == 0x2F ? path : FileManager.default.currentDirectoryPath + "/" + path
-        // Path separators are bytes, even when a filename begins with a combining mark.
-        let components = absolute.utf8.split(separator: 0x2F)
-            .map { String(decoding: $0, as: UTF8.self) }
-            .filter { $0 != "." }
-        let scope = "/" + components.joined(separator: "/")
-        let rootName = components.last ?? "/"
+        let (scope, rootName) = try normalized(path)
         raiseOpenFileLimit()
 
         do {
@@ -65,6 +54,52 @@ public enum DiskScanner {
             throw ScanFailure(path: scope, reason: error.localizedDescription)
         }
     }
+
+    /// Scans one folder of an earlier scan of `root` again, without previews. Exclude
+    /// patterns stay relative to `root`. Merge the result with `ScanReport.replacing(_:)`.
+    ///
+    /// Hard links are counted once within the folder. A file that also has a link outside
+    /// it may be counted on both sides until a full rescan.
+    public static func rescan(
+        folder: String,
+        in root: String,
+        excludes: ExcludeRules = ExcludeRules(),
+        progress: (@Sendable (ScanProgress) -> Void)? = nil,
+        isCancelled: @escaping @Sendable () -> Bool = { false }
+    ) throws -> ScanReport {
+        let (scope, name) = try normalized(folder)
+        let (base, _) = try normalized(root)
+        guard scope == base || scope.hasPrefix(base == "/" ? "/" : base + "/") else {
+            throw ScanFailure(path: scope, reason: "The folder isn't inside the scanned folder.")
+        }
+        raiseOpenFileLimit()
+        do {
+            return try withDatalessMaterializationDisabled {
+                var scan = Traversal(
+                    progress: progress, excludes: excludes, excludeRoot: base,
+                    metadata: MetadataAccess(isCancelled: isCancelled), isCancelled: isCancelled
+                )
+                return try scan.scan(path: scope, rootName: name)
+            }
+        } catch let error as DatalessPolicyError {
+            throw ScanFailure(path: scope, reason: error.localizedDescription)
+        }
+    }
+
+    /// An absolute scope path and its display name.
+    private static func normalized(_ path: String) throws -> (scope: String, name: String) {
+        guard !path.isEmpty, !path.utf8.contains(0) else {
+            throw ScanFailure(path: path, reason: "Supply a valid directory path.")
+        }
+        // Preserve '..' so the OS resolves it correctly even after an intermediate symlink.
+        // Remove trailing separators so O_NOFOLLOW applies to the selected directory itself.
+        let absolute = path.utf8.first == 0x2F ? path : FileManager.default.currentDirectoryPath + "/" + path
+        // Path separators are bytes, even when a filename begins with a combining mark.
+        let components = absolute.utf8.split(separator: 0x2F)
+            .map { String(decoding: $0, as: UTF8.self) }
+            .filter { $0 != "." }
+        return ("/" + components.joined(separator: "/"), components.last ?? "/")
+    }
 }
 
 private struct Traversal {
@@ -72,6 +107,9 @@ private struct Traversal {
     let isCancelled: @Sendable () -> Bool
     let depthLimit: Int?
     let excludes: ExcludeRules
+    /// The path exclude patterns are relative to. A folder rescan keeps the original
+    /// scan root, so anchored patterns such as `/build` still apply there.
+    let excludeRoot: String?
     let metadata: MetadataAccess
     private var previewUpdates: PreviewUpdates?
     private var issues: [ScanIssue] = []
@@ -85,12 +123,14 @@ private struct Traversal {
         depthLimit: Int? = nil,
         previewUpdates: PreviewUpdates? = nil,
         excludes: ExcludeRules,
+        excludeRoot: String? = nil,
         metadata: MetadataAccess,
         isCancelled: @escaping @Sendable () -> Bool
     ) {
         self.progress = progress
         self.depthLimit = depthLimit
         self.excludes = excludes
+        self.excludeRoot = excludeRoot
         self.previewUpdates = previewUpdates
         self.metadata = metadata
         self.isCancelled = isCancelled
@@ -174,9 +214,10 @@ private struct Traversal {
 
             let parentPath = stack[level].path
             let childPath = parentPath == "/" ? "/" + name.displayName : parentPath + "/" + name.displayName
+            let base = excludeRoot ?? path
             let relative: [UInt8]? = excludes.isEmpty || !name.isUTF8
                 ? nil
-                : Array(childPath.utf8.dropFirst(path == "/" ? 1 : path.utf8.count + 1))
+                : Array(childPath.utf8.dropFirst(base == "/" ? 1 : base.utf8.count + 1))
             if let relative, excludes.matchesAnyType(relative: relative, name: Array(name.displayName.utf8)) {
                 excludedCount += 1
                 continue

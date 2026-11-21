@@ -511,6 +511,8 @@ struct ResultsView: View {
     private func rowActions(_ entry: ScanEntry) -> some View {
         if entry.isDirectory {
             Button("Open Folder") { workspace.browse(entry) }
+            Button("Rescan Folder") { workspace.rescanFolder(entry) }
+                .disabled(!workspace.canRescan)
             Divider()
         }
         Button("Reveal in Finder") { workspace.reveal(entry) }

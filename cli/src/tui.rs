@@ -36,7 +36,7 @@ pub fn run(path: &Path, excludes: Excludes, plain: bool, read_only: bool) -> io:
 
     let _mode = TerminalMode::enter()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-    let worker = ScanWorker::start(path.to_path_buf(), excludes)?;
+    let mut worker = ScanWorker::start(path.to_path_buf(), None, excludes.clone())?;
     let ranking = RankWorker::start()?;
     let mut explorer = Explorer::new(path);
     explorer.read_only = read_only;
@@ -93,6 +93,9 @@ pub fn run(path: &Path, excludes: Excludes, plain: bool, read_only: bool) -> io:
                             })
                             .collect();
                         explorer.finish_trash(results);
+                    }
+                    Action::Rescan { root, folder } => {
+                        worker = ScanWorker::start(folder, Some(root), excludes.clone())?;
                     }
                     Action::Quit => return explorer.quit(),
                 }
@@ -179,7 +182,9 @@ struct ScanWorker {
 }
 
 impl ScanWorker {
-    fn start(path: PathBuf, excludes: Excludes) -> io::Result<Self> {
+    /// Scans `path`, or rescans that folder of an earlier scan of `root` without
+    /// previews.
+    fn start(path: PathBuf, root: Option<PathBuf>, excludes: Excludes) -> io::Result<Self> {
         let cancelled = Arc::new(AtomicBool::new(false));
         let update = Arc::new(Mutex::new(ScanUpdate::default()));
         let worker_cancelled = Arc::clone(&cancelled);
@@ -187,7 +192,7 @@ impl ScanWorker {
         let thread = thread::Builder::new()
             .name("space16x-scan".into())
             .spawn(move || {
-                let result = scanner::scan(&path, &excludes, true, &worker_cancelled, |event| {
+                let notify = |event: ScanEvent| {
                     let mut pending = worker_update
                         .lock()
                         .unwrap_or_else(|error| error.into_inner());
@@ -203,7 +208,13 @@ impl ScanWorker {
                     };
                     drop(pending);
                     drop(superseded);
-                });
+                };
+                let result = match &root {
+                    Some(root) => {
+                        scanner::rescan(root, &path, &excludes, &worker_cancelled, notify)
+                    }
+                    None => scanner::scan(&path, &excludes, true, &worker_cancelled, notify),
+                };
                 let mut pending = worker_update
                     .lock()
                     .unwrap_or_else(|error| error.into_inner());

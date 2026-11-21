@@ -24,8 +24,9 @@ Run `space16x` or `space16x PATH` from an interactive terminal. Scan progress an
 | `a` | Switch between allocated and apparent sizes, in both views. |
 | Space | Mark or unmark the selected item for the Trash, then move down. |
 | `d` or Delete | Move the marked items, or the selected item if none are marked, to the Trash after you confirm with `y`. |
+| `r` | Rescan the open folder, or the whole scope from the largest-files view. |
 | `e` | Show scan issues. |
-| `c` | Cancel an active scan and keep the available preview. |
+| `c` | Cancel an active scan and keep the available preview, or cancel a rescan and keep the earlier results. |
 | ? | Show keyboard help. |
 | `q` or Ctrl-C | Exit the explorer. |
 
@@ -42,6 +43,12 @@ Moved items leave the results at once. Folder totals, rankings, and item counts 
 - Items are renamed within their own disk and never copied. If a disk has no Trash you can use, such as a read-only mount, the item stays where it is and the footer says why.
 
 The explorer doesn't move items while a scan is running, or items it couldn't fully read: cloud-only, protected, unscanned, or incomplete ones. Pass `--read-only`, or set `SPACE16X_READ_ONLY=1`, to turn marking and trashing off, for example on a shared server.
+
+## Rescan a folder
+
+After you delete or add files outside Space 16X, press `r` to scan the open folder again without rescanning everything. The new results replace that folder in place, and the totals, item counts, and states of the folders above it update. Exclude patterns still apply relative to the folder you first scanned. The footer reports the folder's new size and its earlier one. Press `c` to cancel a rescan and keep the earlier results. If the folder no longer exists, it leaves the results.
+
+A hard-linked file inside the folder that also has a link outside it may be counted on both sides after a folder rescan. A full rescan counts it once again.
 
 ## Exclude files and folders
 

@@ -67,6 +67,12 @@ pub(super) enum Action {
     CancelScan,
     /// Move these entries to the Trash, then report the results to `finish_trash`.
     Trash(Vec<Arc<Entry>>),
+    /// Scan `folder` again, with exclude patterns relative to `root`, and report the
+    /// result to `finish`.
+    Rescan {
+        root: PathBuf,
+        folder: PathBuf,
+    },
     Quit,
 }
 
@@ -125,6 +131,8 @@ pub(super) struct Explorer {
     pub(super) prompt: Option<TrashPlan>,
     pub(super) notice: Option<Notice>,
     folder: Option<Arc<Entry>>,
+    /// The folder being scanned again, and the status to return to afterwards.
+    rescan: Option<(PathBuf, Status)>,
     requested_ranking: Option<(RankKey, Weak<Entry>)>,
     ranking: Option<Ranked>,
     selection_target: Option<PathBuf>,
@@ -155,6 +163,7 @@ impl Explorer {
             prompt: None,
             notice: None,
             folder: None,
+            rescan: None,
             requested_ranking: None,
             ranking: None,
             selection_target: None,
@@ -182,7 +191,15 @@ impl Explorer {
         changed
     }
 
+    pub(super) fn is_rescanning(&self) -> bool {
+        self.rescan.is_some()
+    }
+
     pub(super) fn finish(&mut self, result: io::Result<Report>) {
+        if let Some((folder, previous)) = self.rescan.take() {
+            self.finish_rescan(&folder, previous, result);
+            return;
+        }
         self.status = match result {
             Ok(report) => {
                 self.install(report);
@@ -599,6 +616,101 @@ impl Explorer {
         }
     }
 
+    /// Scans the open folder again, or the whole scope in the largest files view.
+    fn request_rescan(&mut self) -> Action {
+        if self.is_active() {
+            self.notice = Some(Notice::warning(
+                "Let the scan finish, or press c to stop it, before rescanning.",
+            ));
+            return Action::Stay;
+        }
+        let Some(report) = &self.report else {
+            return Action::Stay;
+        };
+        let root = report.root.path.clone();
+        let folder = match (self.mode, &self.folder) {
+            (Mode::Folders, Some(folder)) => folder.path.clone(),
+            _ => root.clone(),
+        };
+        let previous = std::mem::replace(&mut self.status, Status::Scanning);
+        self.rescan = Some((folder.clone(), previous));
+        self.progress = None;
+        Action::Rescan { root, folder }
+    }
+
+    /// Replaces the rescanned folder in place. A cancelled or failed rescan keeps the
+    /// earlier results, except that a folder that no longer exists leaves them.
+    fn finish_rescan(&mut self, folder: &Path, previous: Status, result: io::Result<Report>) {
+        let name = format!(
+            "“{}”",
+            terminal_path(folder.file_name().map_or(folder, Path::new))
+        );
+        let Some(report) = &self.report else {
+            self.status = previous;
+            return;
+        };
+        let whole = *folder == report.root.path;
+        let before = find(&report.root, folder).map(|entry| entry.allocated_bytes);
+        match result {
+            Ok(subtree) => {
+                let after = subtree.root.allocated_bytes;
+                let Some(updated) = report.replacing(subtree) else {
+                    self.status = previous;
+                    self.notice = Some(Notice::warning(format!(
+                        "{name} is no longer in the results."
+                    )));
+                    return;
+                };
+                self.marked
+                    .retain(|path| find(&updated.root, path).is_some());
+                self.install(updated);
+                // Rescanning one folder doesn't finish a cancelled or failed scan.
+                self.status = if whole { Status::Complete } else { previous };
+                self.notice = Some(Notice::info(match before {
+                    Some(before) if before != after => format!(
+                        "Rescanned {name}: {}, was {}.",
+                        format_bytes(after),
+                        format_bytes(before)
+                    ),
+                    _ => format!("Rescanned {name}: {}, unchanged.", format_bytes(after)),
+                }));
+            }
+            Err(error)
+                if error.kind() == io::ErrorKind::Interrupted
+                    && matches!(self.status, Status::Cancelling) =>
+            {
+                self.status = previous;
+                self.notice = Some(Notice::info("Rescan cancelled. The earlier results stay."));
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound && !whole => {
+                self.status = previous;
+                let gone = Arc::clone(&report.root);
+                if let Some(root) = without(&gone, folder) {
+                    let updated = Report {
+                        root,
+                        issues: report
+                            .issues
+                            .iter()
+                            .filter(|issue| !issue.path.starts_with(folder))
+                            .cloned()
+                            .collect(),
+                        excluded_count: report.excluded_count,
+                        is_preview: report.is_preview,
+                    };
+                    self.marked.retain(|path| !path.starts_with(folder));
+                    self.install(updated);
+                }
+                self.notice = Some(Notice::warning(format!(
+                    "{name} no longer exists, so it left the results."
+                )));
+            }
+            Err(error) => {
+                self.status = previous;
+                self.notice = Some(Notice::warning(format!("Couldn't rescan {name}: {error}")));
+            }
+        }
+    }
+
     /// Removes the moved items from the tree in place, so totals, rankings, and item
     /// counts update without a rescan, and reports the outcome in the footer.
     pub(super) fn finish_trash(&mut self, results: Vec<(Arc<Entry>, io::Result<PathBuf>)>) {
@@ -722,6 +834,7 @@ impl Explorer {
             KeyCode::Char('a') => self.toggle_metric(),
             KeyCode::Char(' ') => self.toggle_mark(),
             KeyCode::Char('d') | KeyCode::Delete => self.plan_trash(),
+            KeyCode::Char('r') => return self.request_rescan(),
             KeyCode::Char('e' | 'i') => self.open_panel(Panel::Issues),
             KeyCode::Char('?') => self.open_panel(Panel::Help),
             _ => {}
@@ -896,6 +1009,89 @@ mod tests {
     fn notice(explorer: &Explorer) -> (&str, bool) {
         let notice = explorer.notice.as_ref().expect("a notice");
         (notice.text.as_str(), notice.warning)
+    }
+
+    fn rescan_request(explorer: &mut Explorer) -> (PathBuf, PathBuf) {
+        match key(explorer, KeyCode::Char('r')) {
+            Action::Rescan { root, folder } => (root, folder),
+            _ => panic!("r should request a rescan"),
+        }
+    }
+
+    fn subtree(root: Arc<Entry>) -> io::Result<Report> {
+        Ok(Report {
+            root,
+            issues: Vec::new(),
+            excluded_count: 0,
+            is_preview: false,
+        })
+    }
+
+    #[test]
+    fn rescans_the_open_folder_in_place() {
+        let mut explorer = trash_fixture();
+        key(&mut explorer, KeyCode::Enter);
+        settle_ranking(&mut explorer);
+        assert_eq!(
+            rescan_request(&mut explorer),
+            ("/r".into(), "/r/big".into())
+        );
+        assert!(explorer.is_active() && explorer.is_rescanning());
+        assert!(matches!(
+            key(&mut explorer, KeyCode::Char('r')),
+            Action::Stay
+        ));
+        assert!(notice(&explorer).1);
+
+        let big = folder("/r/big", vec![file("/r/big/1", 300), file("/r/big/3", 900)]);
+        explorer.finish(subtree(big));
+        settle_ranking(&mut explorer);
+        assert!(matches!(explorer.status, Status::Complete));
+        assert!(!explorer.is_rescanning());
+        assert_eq!(
+            notice(&explorer),
+            ("Rescanned “big”: 1 KB, was 500 B.", false)
+        );
+        assert_eq!(names(&explorer), ["3", "1"]);
+        assert_eq!(
+            explorer.report.as_ref().unwrap().root.allocated_bytes,
+            1_310
+        );
+    }
+
+    #[test]
+    fn a_cancelled_or_failed_rescan_keeps_the_results() {
+        let mut explorer = trash_fixture();
+        explorer.status = Status::Cancelled;
+        assert_eq!(rescan_request(&mut explorer), ("/r".into(), "/r".into()));
+        assert!(matches!(
+            key(&mut explorer, KeyCode::Char('c')),
+            Action::CancelScan
+        ));
+        explorer.finish(Err(io::Error::from(io::ErrorKind::Interrupted)));
+        assert!(matches!(explorer.status, Status::Cancelled));
+        assert_eq!(
+            notice(&explorer),
+            ("Rescan cancelled. The earlier results stay.", false)
+        );
+        assert_eq!(explorer.report.as_ref().unwrap().root.allocated_bytes, 610);
+
+        key(&mut explorer, KeyCode::Enter);
+        settle_ranking(&mut explorer);
+        rescan_request(&mut explorer);
+        explorer.finish(Err(io::Error::from(io::ErrorKind::NotFound)));
+        assert!(matches!(explorer.status, Status::Cancelled));
+        assert!(
+            notice(&explorer)
+                .0
+                .ends_with("no longer exists, so it left the results.")
+        );
+        let root = &explorer.report.as_ref().unwrap().root;
+        assert_eq!((root.allocated_bytes, root.children.len()), (110, 2));
+
+        rescan_request(&mut explorer);
+        explorer.finish(Err(io::Error::from(io::ErrorKind::PermissionDenied)));
+        assert!(notice(&explorer).0.starts_with("Couldn't rescan “r”"));
     }
 
     #[test]
