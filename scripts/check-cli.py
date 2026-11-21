@@ -3,6 +3,7 @@
 
 import json
 import os
+import pwd
 from pathlib import Path
 import resource
 import shutil
@@ -41,7 +42,7 @@ def check(binary, root):
         # Basic answers Pro subcommands with an install hint.
         hint = run(binary, "diff", "old.json", "new.json", status=1)
         assert "Space 16X Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
-        for option in (("--older-than", "30"), ("--types", "5")):
+        for option in (("--older-than", "30"), ("--types", "5"), ("--by-owner",)):
             hint = run(binary, "scan", root, *option, status=1)
             assert "Space 16X Pro" in hint.stderr and not hint.stdout, hint.stderr
         assert "install.sh --pro" in run(binary, "--help").stdout
@@ -406,6 +407,18 @@ def check_types(binary):
         everything = json.loads(run(binary, "scan", root, "--types", 10, "--json").stdout)
         assert "" in [row["type"] for row in everything["types"]], everything
         for invalid in (("--types",), ("--types", "2", "--depth", "1"), ("--top", "1", "--types", "1")):
+            assert run(binary, "scan", root, *invalid, status=1).stderr
+
+        # --by-owner sums each user's files and folders. This user owns all of them.
+        owners = json.loads(run(binary, "scan", root, "--by-owner", "--json").stdout)
+        assert len(owners["owners"]) == 1 and "entries" not in owners, owners
+        owner = owners["owners"][0]
+        assert owner["uid"] == os.getuid() and owner["owner"] == pwd.getpwuid(os.getuid()).pw_name, owner
+        assert owner["itemCount"] == owners["itemCount"] and owner["allocatedBytes"] == owners["allocatedBytes"]
+        text = run(binary, "scan", root, "--by-owner").stdout.splitlines()
+        assert text[0].split() == ["Size", "Items", "Owner"] and text[1].endswith(owner["owner"]), text
+        assert text[-1].endswith("[total]"), text
+        for invalid in (("--by-owner", "--types", "1"), ("--by-owner", "--top", "1"), ("--by-owner", "--by-owner")):
             assert run(binary, "scan", root, *invalid, status=1).stderr
 
 

@@ -7,6 +7,7 @@
 
 mod diff;
 mod modified;
+mod owners;
 mod types;
 
 pub use modified::format_date;
@@ -43,6 +44,8 @@ pub struct ScanOptions {
     older_than: Option<u32>,
     /// List the N largest file types instead of entries.
     types: Option<usize>,
+    /// List each owner's bytes and items instead of entries.
+    by_owner: bool,
 }
 
 impl ScanOptions {
@@ -69,14 +72,19 @@ impl ScanOptions {
                 self.types = Some(limit);
                 Ok(())
             }
+            "--by-owner" if !self.by_owner => {
+                self.by_owner = true;
+                Ok(())
+            }
             _ => Err(format!("Use {flag} once.")),
         }
     }
 
     /// Checks the options against the rest of the scan command.
     pub fn check(&self, selection: Option<Selection>) -> Result<(), String> {
-        if self.types.is_some() && selection.is_some() {
-            return Err("Use one of --depth, --top and --types.".into());
+        let reports = [selection.is_some(), self.types.is_some(), self.by_owner];
+        if reports.into_iter().filter(|&chosen| chosen).count() > 1 {
+            return Err("Use one of --depth, --top, --types and --by-owner.".into());
         }
         Ok(())
     }
@@ -90,15 +98,33 @@ impl ScanOptions {
         excludes: &[String],
         json: bool,
     ) -> io::Result<bool> {
-        let Some(limit) = self.types else {
-            return Ok(false);
-        };
         let stdout = io::stdout().lock();
-        if json {
-            let result = types::JsonTypes::new(report, limit, metric);
-            report::write_json_report(stdout, report, metric, excludes, self.older_than, result)?;
-        } else {
-            types::write_plain(stdout, report, limit, metric)?;
+        match (self.types, self.by_owner, json) {
+            (Some(limit), _, true) => {
+                let result = types::JsonTypes::new(report, limit, metric);
+                report::write_json_report(
+                    stdout,
+                    report,
+                    metric,
+                    excludes,
+                    self.older_than,
+                    result,
+                )?;
+            }
+            (Some(limit), _, false) => types::write_plain(stdout, report, limit, metric)?,
+            (None, true, true) => {
+                let result = owners::JsonOwners::new(report, metric);
+                report::write_json_report(
+                    stdout,
+                    report,
+                    metric,
+                    excludes,
+                    self.older_than,
+                    result,
+                )?;
+            }
+            (None, true, false) => owners::write_plain(stdout, report, metric)?,
+            (None, false, _) => return Ok(false),
         }
         Ok(true)
     }
