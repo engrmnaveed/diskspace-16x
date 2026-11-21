@@ -1,0 +1,177 @@
+import AppKit
+import SpaceCore
+import SpacePro
+import SwiftUI
+
+/// The focused window's workspace, which the menu commands act on.
+struct FocusedWorkspaceKey: FocusedValueKey {
+    typealias Value = ScanWorkspace
+}
+
+extension FocusedValues {
+    var workspace: ScanWorkspace? {
+        get { self[FocusedWorkspaceKey.self] }
+        set { self[FocusedWorkspaceKey.self] = newValue }
+    }
+}
+
+/// One Space 16X window with its own scan. Pro's **File → New Window** opens more.
+struct WorkspaceWindow: View {
+    @ViewState private var workspace = ScanWorkspace()
+
+    var body: some View {
+        WorkspaceView(workspace: workspace)
+            .frame(minWidth: 760, minHeight: 500)
+            .onDisappear { workspace.cancelScan() }
+            .focusedSceneValue(\.workspace, workspace)
+    }
+}
+
+/// The menus, acting on the focused window's workspace. Without a focused window, as
+/// when only Settings is open, they act on an idle workspace and stay disabled.
+@MainActor
+struct WorkspaceCommands: Commands {
+    @FocusedValue(\.workspace) private var focused
+    @AppStorage(ProFeatures.defaultsKey) private var proFeatures = false
+    @Environment(\.openWindow) private var openWindow
+
+    @MainActor private static let idle = ScanWorkspace()
+    private var workspace: ScanWorkspace { focused ?? Self.idle }
+    private var hasWindow: Bool { focused != nil }
+
+    var body: some Commands {
+        CommandGroup(before: .toolbar) {
+            Picker("Size", selection: Binding(
+                get: { workspace.sizeMetric },
+                set: { workspace.sizeMetric = $0 }
+            )) {
+                Text("Allocated Size").tag(SizeMetric.allocated)
+                Text("Apparent Size").tag(SizeMetric.logical)
+            }
+            .pickerStyle(.inline)
+            .disabled(!hasWindow)
+            Divider()
+        }
+        CommandGroup(replacing: .newItem) {
+            if proFeatures {
+                Button("New Window") { openWindow(id: "workspace") }
+                    .keyboardShortcut("n")
+            }
+            Button("Choose Folder…", action: workspace.chooseFolder)
+                .keyboardShortcut("o")
+                .disabled(!hasWindow || !workspace.canChooseFolder)
+            Button("Open Scan…", action: workspace.openScan)
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+                .disabled(!hasWindow || !workspace.canChooseFolder)
+        }
+        CommandGroup(replacing: .saveItem) {
+            Button("Export Scan…", action: workspace.exportScan)
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(!workspace.canExport)
+        }
+        CommandMenu("Scan") {
+            Button("Scan Again", action: workspace.rescan)
+                .keyboardShortcut("r")
+                .disabled(!workspace.canRescan)
+            Button("Rescan Folder") { workspace.rescanFolder() }
+                .keyboardShortcut("r", modifiers: [.command, .option])
+                .disabled(!workspace.canRescan)
+            Button("Cancel Scan", action: workspace.cancelScan)
+                .keyboardShortcut(".", modifiers: .command)
+                .disabled(!workspace.isScanning || workspace.isCancelling)
+            if proFeatures {
+                Divider()
+                Button("Compare with Saved Scan…", action: workspace.compareWithSavedScan)
+                    .keyboardShortcut("k", modifiers: [.command, .shift])
+                    .disabled(!workspace.canCompare)
+                Button("Stop Comparing", action: workspace.stopComparing)
+                    .disabled(workspace.comparison == nil)
+                Button("Save Footprint Receipt…") { workspace.showsReceiptSheet = true }
+                    .disabled(!workspace.canSaveReceipt)
+                Menu("Compare with History") {
+                    ForEach(workspace.savedScans) { record in
+                        Button(record.date.formatted(date: .abbreviated, time: .shortened)) {
+                            workspace.compare(with: record)
+                        }
+                    }
+                }
+                .disabled(!workspace.canCompare || workspace.savedScans.isEmpty)
+                Button("Save to History", action: workspace.saveToHistory)
+                    .keyboardShortcut("s", modifiers: [.command, .option])
+                    .disabled(!workspace.canSaveToHistory)
+                Button("Show History in Finder", action: workspace.showHistoryInFinder)
+                Button("Find Duplicates", action: workspace.findDuplicates)
+                    .disabled(!workspace.canBrowse || workspace.isScanning || workspace.isFindingDuplicates)
+                Divider()
+                Button("Explain Disk Space") { workspace.explainDisk() }
+                    .keyboardShortcut("x", modifiers: [.command, .shift])
+                    .disabled(!hasWindow || workspace.isExplaining)
+            }
+            Divider()
+            Button("Show Scan Details") { workspace.showsDetails = true }
+                .keyboardShortcut("i")
+                .disabled(!workspace.canBrowse)
+        }
+        CommandMenu("Browse") {
+            Button("Folder List") {
+                workspace.mode = .folders
+                workspace.folderPresentation = .list
+            }
+            .keyboardShortcut("1")
+            .disabled(!workspace.canBrowse)
+            Button("Largest Files") { workspace.mode = .largestFiles }
+                .keyboardShortcut("2")
+                .disabled(!workspace.canBrowse)
+            Button("Folder Treemap") {
+                workspace.mode = .folders
+                workspace.folderPresentation = .treemap
+            }
+            .keyboardShortcut("3")
+            .disabled(!workspace.canBrowse)
+            Button("Folder Donut") {
+                workspace.mode = .folders
+                workspace.folderPresentation = .donut
+            }
+            .keyboardShortcut("4")
+            .disabled(!workspace.canBrowse)
+            if proFeatures {
+                Button("File Types") {
+                    workspace.mode = .folders
+                    workspace.folderPresentation = .types
+                }
+                .keyboardShortcut("5")
+                .disabled(!workspace.canBrowse)
+                Button("Cleanup Suggestions") { workspace.mode = .cleanup }
+                    .keyboardShortcut("6")
+                    .disabled(!workspace.canBrowse)
+                Button("Duplicates") { workspace.mode = .duplicates }
+                    .keyboardShortcut("7")
+                    .disabled(!workspace.canBrowse)
+            }
+            Divider()
+            Button("Open Selected Folder", action: workspace.openSelectedFolder)
+                .keyboardShortcut(.downArrow, modifiers: .command)
+                .disabled(workspace.selectedEntry?.isDirectory != true || !workspace.canBrowse)
+            Button("Go to Parent Folder", action: workspace.browseParent)
+                .keyboardShortcut(.upArrow, modifiers: .command)
+                .disabled(!workspace.canBrowseParent)
+            Divider()
+            Button("Quick Look", action: workspace.toggleQuickLook)
+                .keyboardShortcut("y")
+                .disabled(!workspace.canQuickLook)
+            Button("Reveal in Finder", action: workspace.revealSelected)
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(workspace.selectedEntry == nil || !workspace.canReveal)
+            Button("Copy Path", action: workspace.copySelectedPath)
+                .keyboardShortcut("c", modifiers: [.command, .option])
+                .disabled(workspace.selectedEntry == nil || !workspace.canBrowse)
+            Divider()
+            Button(workspace.selectedPaths.count > 1
+                ? "Move \(workspace.selectedPaths.count) Items to Trash…"
+                : "Move to Trash…"
+            ) { workspace.requestTrash() }
+                .keyboardShortcut(.delete, modifiers: .command)
+                .disabled(!workspace.canMoveToTrash)
+        }
+    }
+}

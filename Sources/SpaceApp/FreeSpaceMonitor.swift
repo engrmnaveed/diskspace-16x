@@ -101,7 +101,13 @@ struct FreeSpaceMenu: View {
         Divider()
         Button("Open Space 16X") {
             NSApp.activate()
-            openWindow(id: "workspace")
+            // Bring back a window that's open, or open one when all are closed.
+            let windows = NSApp.windows.filter { $0.identifier?.rawValue.hasPrefix("workspace") == true && $0.isVisible }
+            if let window = windows.first {
+                window.makeKeyAndOrderFront(nil)
+            } else {
+                openWindow(id: "workspace")
+            }
         }
         SettingsLink { Text("Settings…") }
         Divider()

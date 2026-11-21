@@ -198,5 +198,10 @@ Focus the file table to use arrow keys for row selection. Core commands are avai
 | Reveal a selected item in Finder | ⇧⌘R |
 | Copy a selected path | ⌥⌘C |
 | Show scan details | ⌘I |
+| Pro: open a new window with its own scan | ⌘N |
+| Pro: show file types, cleanup suggestions or duplicates | ⌘5, ⌘6, ⌘7 |
+| Pro: compare with a saved scan | ⇧⌘K |
+| Pro: save the scan to the history | ⌥⌘S |
+| Pro: explain the disk's space | ⇧⌘X |
 
 If access to a folder is restricted, open **Scan Details** to see any skipped paths, or scan a location you can read. The app and CLI keep scan data in memory. Redirect CLI output to save a report intentionally.
