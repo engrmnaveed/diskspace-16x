@@ -1,0 +1,13 @@
+[1,2,{"progname":"ncdu","progver":"1.19","timestamp":1700000000},
+[{"name":"/srv","asize":4096,"dsize":4096,"dev":2049,"ino":2},
+{"name":"one","asize":10,"dsize":4096,"ino":12,"hlnkc":true,"nlink":2},
+[{"name":"sub","asize":4096,"dsize":4096,"extra":{"a":[1,{"b":"]"}]}},
+{"name":"two","asize":10,"dsize":4096,"ino":12,"nlink":2},
+{"name":"other","asize":10,"dsize":4096,"dev":7,"ino":12,"nlink":2},
+{"name":"link","asize":7,"dsize":0,"notreg":true},
+{"name":"café","asize":1,"dsize":512,"mtime":1700000000.25}],
+[{"name":"skipped","excluded":"pattern"},[{"name":"x"}],{"name":"y"}],
+{"name":"proc","excluded":"otherfs"},
+{"name":"node_modules","excluded":"pattern"},
+[{"name":"denied","read_error":true}],
+{"name":"é😀 \"q\"","asize":3,"dsize":0}]]

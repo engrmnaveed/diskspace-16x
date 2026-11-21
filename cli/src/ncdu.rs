@@ -847,6 +847,58 @@ mod tests {
         assert_eq!(imported.report.root().item_count(), 2);
     }
 
+    /// The same table drives `testMatchesTheSharedExportFixtures` in the Swift package.
+    #[test]
+    fn matches_the_shared_export_fixtures() {
+        use serde_json::{Value, json};
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/scan-exports");
+        let expected: Value =
+            serde_json::from_slice(&std::fs::read(fixtures.join("expected.json")).unwrap())
+                .unwrap();
+        let summary = |entry: Entry<'_>| {
+            let mut value = json!({
+                "path": entry.path().to_str().unwrap(),
+                "allocatedBytes": entry.allocated_bytes(),
+                "apparentBytes": entry.apparent_bytes(),
+                "itemCount": entry.item_count(),
+            });
+            for (state, flag) in [
+                (EntryState::HardLinkAlias, "hardLinkAlias"),
+                (EntryState::CloudOnly, "cloudOnly"),
+            ] {
+                if entry.state() == state {
+                    value[flag] = Value::Bool(true);
+                }
+            }
+            value
+        };
+        let cases = expected["cases"].as_array().unwrap();
+        assert_eq!(cases.len(), 2);
+        for case in cases {
+            let file = case["file"].as_str().unwrap();
+            let imported = import(&std::fs::read(fixtures.join(file)).unwrap()).unwrap();
+            let report = &imported.report;
+            assert_eq!(summary(report.root()), case["root"], "{file}");
+            let entries: Vec<_> = report.root().descendants().map(summary).collect();
+            assert_eq!(Value::from(entries), case["entries"], "{file}");
+            assert_eq!(report.excluded_count, case["excludedCount"], "{file}");
+            assert_eq!(json!(imported.excludes), case["excludes"], "{file}");
+            let issues: Vec<_> = report
+                .issues
+                .iter()
+                .map(|issue| {
+                    let kind = match issue.kind {
+                        IssueKind::PermissionDenied => "permissionDenied",
+                        IssueKind::NotPermitted => "notPermitted",
+                        IssueKind::Error => "error",
+                    };
+                    json!({"path": issue.path.to_str().unwrap(), "kind": kind})
+                })
+                .collect();
+            assert_eq!(Value::from(issues), case["issues"], "{file}");
+        }
+    }
+
     #[test]
     fn rejects_files_it_cannot_read() {
         for (text, message) in [
