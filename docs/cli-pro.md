@@ -94,6 +94,27 @@ Owners come from the user database. The Linux release builds are static and read
 
 JSON reports put `owners` in place of `depth` and `entries`. Each owner has `owner` (the user name, or `null` without one), `uid`, `allocatedBytes`, `apparentBytes` and `itemCount`.
 
+## Duplicates
+
+```text
+space16x duplicates [PATH] [--min-size SIZE] [--json] [--threads N] [EXCLUDES]
+```
+
+`space16x duplicates` lists files with the same contents, grouped, with the space the extra copies use. It's the one command that reads file contents, and only because you ran it: scans and every other command read metadata alone. It scans PATH, groups files of at least SIZE bytes (default `1M`) by length, and reads only files that share a length with another, first their first 64 KB and then the whole file when those match. Contents are compared with SipHash under random keys chosen for each run, so a false match is about as likely as 1 in 2^64 for each pair of files and can't be engineered.
+
+```text
+     Extra        Size  Copies  Files
+   1.48 GB     1.48 GB       2  /Users/me/Projects/app/.git/objects/pack/pack-e4fb.pack
+                                /Users/me/Archive/app/.git/objects/pack/pack-e4fb.pack
+  538.9 MB    538.9 MB       2  /Users/me/Models/model.safetensors
+                                /Users/me/Projects/ml/model.safetensors
+   2.02 GB  2 groups, 4 files  [total]
+```
+
+**Extra** is the allocated space of every copy but the largest, which moving those copies to the Trash and emptying it would free, unless they're clones or hard links. Hard links aren't copies: the scan counts each hard-linked file once, so they never appear. On APFS, copies made with Finder or `cp -c` may be clones that share their blocks. [`scan --exclusive`](#exclusive-size) shows what deleting them frees. `--min-size` takes bytes or a decimal unit, as in `500K`, `10M` or `2GB`. Each group's files are listed in path order, and groups are ranked by their extra space. Files that can't be read are left out and reported as issues, which makes the exit code `2`. The `--threads`, `--exclude` and `--exclude-from` options work as in `scan`, and reading also uses the threads.
+
+JSON reports have the usual scan fields, then `minSize`, `duplicateBytes` (the extra space of all groups) and `groups`. Each group has `apparentBytes` (each copy's length), `extraBytes` and `files`, each with `path` and `allocatedBytes`. Remove copies with the explorer's Move to Trash, or in the Mac app's **Duplicates** view.
+
 ## Exclusive size
 
 ```text

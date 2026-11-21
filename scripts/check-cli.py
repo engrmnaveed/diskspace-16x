@@ -42,6 +42,7 @@ def check(binary, root):
         # Basic answers Pro subcommands with an install hint.
         for command in (
             ("diff", "old.json", "new.json"), ("history",), ("history", "save", root), ("explain",),
+            ("duplicates", root),
         ):
             hint = run(binary, *command, status=1)
             assert "Space 16X Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
@@ -403,6 +404,40 @@ def check_exclusive(binary):
             assert run(binary, "scan", root, *invalid, status=1).stderr
 
 
+def check_duplicates(binary):
+    """Pro: duplicates groups files with the same contents, on request."""
+    with tempfile.TemporaryDirectory(prefix="space16x-duplicates-") as directory:
+        root = Path(directory).resolve()
+        (root / "b").mkdir()
+        same = os.urandom(150_000)
+        late = bytearray(same)
+        late[-1] ^= 1
+        for name, contents in (
+            ("a.bin", same), ("b/copy.bin", same), ("late.bin", bytes(late)), ("small1", b"x" * 900),
+            ("small2", b"x" * 900),
+        ):
+            (root / name).write_bytes(contents)
+        os.link(root / "a.bin", root / "b" / "link.bin")
+        report = json.loads(run(binary, "duplicates", root, "--min-size", "1K", "--json").stdout)
+        groups = [[str(Path(item["path"]).relative_to(root)) for item in group["files"]] for group in report["groups"]]
+        assert groups == [["a.bin", "b/copy.bin"]], groups
+        assert report["minSize"] == 1000 and report["groups"][0]["apparentBytes"] == 150_000, report
+        assert report["duplicateBytes"] == report["groups"][0]["extraBytes"] > 0, report
+        text = run(binary, "duplicates", root, "--min-size", "500").stdout
+        assert "small1" in text and "2 groups, 4 files" in text, text
+        assert "0 groups" in run(binary, "duplicates", root).stdout
+        unreadable = root / "b" / "copy.bin"
+        unreadable.chmod(0)
+        try:
+            if os.geteuid() != 0:
+                partial = run(binary, "duplicates", root, "--min-size", "1K", "--json", status=2)
+                assert json.loads(partial.stdout)["groups"] == [], partial.stdout
+        finally:
+            unreadable.chmod(0o644)
+        for invalid in (("--min-size",), ("--min-size", "big"), ("--json", "--json")):
+            assert run(binary, "duplicates", root, *invalid, status=1).stderr
+
+
 def check_explain(binary):
     """Pro: explain shows the volume of a folder and the space a scan can't see."""
     with tempfile.TemporaryDirectory(prefix="space16x-explain-") as directory:
@@ -595,6 +630,7 @@ def main():
         check_explain(binary)
         check_cleanup(binary)
         check_exclusive(binary)
+        check_duplicates(binary)
     print("CLI acceptance checks passed.")
 
 

@@ -73,6 +73,8 @@ struct Space16XApp: App {
                         .keyboardShortcut("s", modifiers: [.command, .option])
                         .disabled(!workspace.canSaveToHistory)
                     Button("Show History in Finder", action: workspace.showHistoryInFinder)
+                    Button("Find Duplicates", action: workspace.findDuplicates)
+                        .disabled(!workspace.canBrowse || workspace.isScanning || workspace.isFindingDuplicates)
                     Divider()
                     Button("Explain Disk Space") { workspace.explainDisk() }
                         .keyboardShortcut("x", modifiers: [.command, .shift])
@@ -114,6 +116,9 @@ struct Space16XApp: App {
                     .disabled(!workspace.canBrowse)
                     Button("Cleanup Suggestions") { workspace.mode = .cleanup }
                         .keyboardShortcut("6")
+                        .disabled(!workspace.canBrowse)
+                    Button("Duplicates") { workspace.mode = .duplicates }
+                        .keyboardShortcut("7")
                         .disabled(!workspace.canBrowse)
                 }
                 Divider()
