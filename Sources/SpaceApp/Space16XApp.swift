@@ -38,6 +38,9 @@ struct Space16XApp: App {
                 Button("Scan Again", action: workspace.rescan)
                     .keyboardShortcut("r")
                     .disabled(!workspace.canRescan)
+                Button("Rescan Folder") { workspace.rescanFolder() }
+                    .keyboardShortcut("r", modifiers: [.command, .option])
+                    .disabled(!workspace.canRescan)
                 Button("Cancel Scan", action: workspace.cancelScan)
                     .keyboardShortcut(".", modifiers: .command)
                     .disabled(!workspace.isScanning || workspace.isCancelling)

@@ -253,7 +253,9 @@ struct WorkspaceView: View {
                 .controlSize(.small)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text(workspace.isCancelling ? "Cancelling scan…" : "Scanning deeper folders…")
+                Text(workspace.isCancelling
+                    ? "Cancelling scan…"
+                    : workspace.rescanningFolder.map { "Rescanning “\($0)”…" } ?? "Scanning deeper folders…")
                     .font(.subheadline.weight(.semibold))
                 Text(workspace.progress?.currentPath ?? workspace.scanPath ?? "")
                     .font(.caption)

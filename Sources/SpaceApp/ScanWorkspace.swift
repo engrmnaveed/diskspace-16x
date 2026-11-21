@@ -76,6 +76,8 @@ final class ScanWorkspace {
     private(set) var scanHasResults = false
     private(set) var progress: ScanProgress?
     private(set) var isCancelling = false
+    /// The folder **Rescan Folder** is scanning again, if any.
+    private(set) var rescanningFolder: String?
     private var isPresentingPicker = false
     private(set) var notice: Notice?
     private(set) var selectedEntry: ScanEntry?
@@ -209,19 +211,120 @@ final class ScanWorkspace {
         startScan(URL(filePath: path, directoryHint: .isDirectory))
     }
 
-    func startScan(_ url: URL) {
-        guard canChooseFolder else { return }
-        let excludes: ExcludeRules
+    /// The exclude patterns from Settings, or nil after showing why they don't parse.
+    private func excludeRules() -> ExcludeRules? {
         do {
-            excludes = try ExcludeRules(patterns: ExcludeSettings.patterns)
+            return try ExcludeRules(patterns: ExcludeSettings.patterns)
         } catch {
             notice = Notice(
                 title: "Check your exclude patterns",
                 message: (error.localizedDescription) + " Fix it in Settings, then scan again.",
                 isError: true
             )
+            return nil
+        }
+    }
+
+    /// Scans `entry`, or the open folder, again and replaces it in the results in place.
+    /// In Largest Files, or at the top folder, this is a full rescan.
+    func rescanFolder(_ entry: ScanEntry? = nil) {
+        guard canRescan, !isTrashing, let report else { return }
+        let folder = entry ?? (mode == .folders ? currentFolder : nil) ?? report.root
+        guard folder.isDirectory else { return }
+        guard folder.path != report.root.path else { return rescan() }
+        guard let excludes = excludeRules() else { return }
+        let root = report.root.path
+        let path = folder.path
+        scanPath = path
+        rescanningFolder = folder.name
+        progress = nil
+        notice = nil
+
+        let (updates, continuation) = AsyncStream.makeStream(
+            of: ScanProgress.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        let worker = Task.detached(priority: .userInitiated) {
+            defer { continuation.finish() }
+            return try DiskScanner.rescan(
+                folder: path,
+                in: root,
+                excludes: excludes,
+                progress: { continuation.yield($0) },
+                isCancelled: { Task.isCancelled }
+            )
+        }
+        scanTask = Task { [weak self] in
+            let progressTask = Task { [weak self] in
+                for await update in updates {
+                    guard !Task.isCancelled else { return }
+                    self?.progress = update
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+            }
+            defer {
+                progressTask.cancel()
+                self?.scanTask = nil
+                self?.scanPath = nil
+                self?.rescanningFolder = nil
+                self?.progress = nil
+                self?.isCancelling = false
+            }
+            do {
+                let result = try await withTaskCancellationHandler {
+                    try await worker.value
+                } onCancel: {
+                    worker.cancel()
+                }
+                try Task.checkCancellation()
+                self?.finishRescan(of: folder, with: result)
+            } catch {
+                let cancelled = error is CancellationError || Task.isCancelled
+                self?.failRescan(of: folder, error: error, cancelled: cancelled)
+            }
+        }
+    }
+
+    private func finishRescan(of folder: ScanEntry, with result: ScanReport) {
+        guard let merged = report?.replacing(result) else {
+            notice = Notice(
+                title: "Couldn’t update “\(folder.name)”",
+                message: "It’s no longer in the results. Scan again to refresh them.",
+                isError: true
+            )
             return
         }
+        acceptReport(merged)
+        let before = folder.bytes(for: sizeMetric)
+        let after = result.root.bytes(for: sizeMetric)
+        notice = Notice(
+            title: "Rescanned “\(folder.name)”",
+            message: before == after
+                ? "\(ScanFormat.size(after)), unchanged."
+                : "\(ScanFormat.size(after)), was \(ScanFormat.size(before))."
+        )
+    }
+
+    /// A cancelled or failed rescan keeps the earlier results, except that a folder that
+    /// no longer exists leaves them.
+    private func failRescan(of folder: ScanEntry, error: Error, cancelled: Bool) {
+        if cancelled {
+            notice = Notice(title: "Rescan cancelled", message: "The earlier results stay.")
+        } else if let report, (try? URL(filePath: folder.path).checkResourceIsReachable()) != true {
+            acceptReport(report.removing([folder.path]))
+            notice = Notice(title: "“\(folder.name)” no longer exists", message: "It left the results.")
+        } else {
+            notice = Notice(
+                title: "Couldn’t rescan “\(folder.name)”",
+                message: error.localizedDescription,
+                isError: true
+            )
+        }
+    }
+
+    func startScan(_ url: URL) {
+        guard canChooseFolder else { return }
+        guard let excludes = excludeRules() else { return }
         let didAccess = url.startAccessingSecurityScopedResource()
         let path = url.path(percentEncoded: false)
         scanPath = path
