@@ -213,6 +213,27 @@ space16x scan ~/Projects --older-than 180
 space16x scan /srv --older-than 365 --top 20 --json
 ```
 
+### File types
+
+```text
+space16x scan [PATH] --types N [--apparent] [--older-than DAYS] [--json] ...
+```
+
+`--types N` lists the N file types that use the most space in the scan, with their size and file count, in place of entries. The rest are summed in one line, and the last line is the scan's total. Press `t` in the explorer for the same list for the open folder, ranked by the current size, and `t` or Esc to close it.
+
+```text
+      Size      Files  Type
+  48.12 GB        214  .mov
+   6.30 GB     12,480  .jpg
+   1.02 GB      3,911  (no extension)
+   2.75 GB     40,177  (38 other types)
+  58.19 GB     56,782  /Users/me/Pictures  [total]
+```
+
+A file's type is the text after the last dot of its name, in lowercase for ASCII letters, so `Clip.MOV` and `clip.mov` are both `.mov`, and `backup.tar.gz` is `.gz`. A name that starts with a dot, such as `.bashrc`, has no extension, and neither does a name whose text after the dot is empty, contains a space, or is longer than 16 bytes, as in `report.2026-11-21T10-00-00`. Each hard-linked file counts once, at the path the scan counts it. `--types` takes no `--depth` or `--top`.
+
+JSON reports put `typeLimit`, `typeCount` (the number of distinct types in the scan) and `types` in place of `depth` and `entries`. Each type has `type` (the extension without its dot, or an empty string), `allocatedBytes`, `apparentBytes` and `fileCount`. `--apparent` ranks types by apparent size, and `--older-than` counts only older files.
+
 ## Scan exit codes
 
 | Code | Meaning |

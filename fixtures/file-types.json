@@ -1,0 +1,20 @@
+{
+  "description": "File type cases shared by the Rust and Swift tests. A file's type is the text after its last dot in ASCII lowercase, or empty when it has none: a leading dot starts a name, and an extension can't be empty, contain a space, or be longer than 16 bytes.",
+  "names": [
+    {"name": "Holiday.MOV", "type": "mov"},
+    {"name": "photo.jpeg", "type": "jpeg"},
+    {"name": "archive.tar.gz", "type": "gz"},
+    {"name": "Makefile", "type": ""},
+    {"name": ".bashrc", "type": ""},
+    {"name": ".config.json", "type": "json"},
+    {"name": "trailing.", "type": ""},
+    {"name": "two..dots", "type": "dots"},
+    {"name": "Résumé.PDF", "type": "pdf"},
+    {"name": "Café.JPÉG", "type": "jpÉg"},
+    {"name": "draft.final version", "type": ""},
+    {"name": "backup.2026-11-21T10-00-00", "type": ""},
+    {"name": "exactly.sixteen-bytes-ok", "type": "sixteen-bytes-ok"},
+    {"name": "name.seventeen-bytes-x", "type": ""},
+    {"name": "x.Ab1", "type": "ab1"}
+  ]
+}

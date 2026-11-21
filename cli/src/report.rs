@@ -163,7 +163,7 @@ fn needs_escape(character: char) -> bool {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct JsonReport<'a> {
+struct JsonReport<'a, R> {
     schema_version: u8,
     edition: &'static str,
     scope: Cow<'a, str>,
@@ -183,7 +183,7 @@ struct JsonReport<'a> {
     is_partial: bool,
     issues: Vec<JsonIssue<'a>>,
     #[serde(flatten)]
-    result: JsonSelection,
+    result: R,
 }
 
 #[derive(Serialize)]
@@ -285,9 +285,7 @@ pub(crate) fn write_json(
     excludes: &[String],
     older_than_days: Option<u32>,
 ) -> io::Result<()> {
-    let mut out = io::BufWriter::new(out);
     let tree = &report.tree;
-    let scope = JsonPath::from(tree.root_path());
     let result = match selection {
         Selection::Depth(depth) => JsonSelection::Depth {
             depth,
@@ -312,6 +310,20 @@ pub(crate) fn write_json(
                 .collect(),
         },
     };
+    write_json_report(out, report, metric, excludes, older_than_days, result)
+}
+
+/// Writes the fields every scan report has, then `result`'s fields, such as entries.
+pub(crate) fn write_json_report(
+    out: impl Write,
+    report: &Report,
+    metric: Metric,
+    excludes: &[String],
+    older_than_days: Option<u32>,
+    result: impl Serialize,
+) -> io::Result<()> {
+    let mut out = io::BufWriter::new(out);
+    let scope = JsonPath::from(report.tree.root_path());
     let json = JsonReport {
         schema_version: 3,
         edition: EDITION,

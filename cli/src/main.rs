@@ -60,8 +60,9 @@ Scan exit codes: 0 complete, 1 error, 2 partial.
 
 #[cfg(not(feature = "pro"))]
 const EDITION_HELP: &str = "
-This is Space 16X Basic. Space 16X Pro, also free, adds space16x diff to compare scans.
-Install it with install.sh --pro. See docs/install.md.
+This is Space 16X Basic. Space 16X Pro, also free, adds space16x diff to compare scans,
+modification dates, scan --older-than and scan --types. Install it with install.sh --pro.
+See docs/install.md.
 ";
 
 #[cfg(feature = "pro")]
@@ -74,14 +75,18 @@ This is Space 16X Pro. It adds:
              Count only files last modified more than DAYS days ago, and the folders
              that hold them. JSON reports add newestModified, as Unix seconds, to each
              entry: the file's time, or the newest time of any file in a folder.
-The explorer adds a Modified column with each item's newest modification date.
+  scan --types N
+             List the N file types (extensions) that use the most space instead of
+             entries, with their file counts.
+The explorer adds a Modified column with each item's newest modification date, and t
+lists the file types in the open folder.
 ";
 
 /// Subcommands only Space 16X Pro has. Basic builds answer them with an install hint.
 const PRO_COMMANDS: &[&str] = &["diff"];
 
 /// Options only Space 16X Pro's scan takes. Basic builds answer them with an install hint.
-const PRO_SCAN_OPTIONS: &[&str] = &["--older-than"];
+const PRO_SCAN_OPTIONS: &[&str] = &["--older-than", "--types"];
 
 #[cfg(feature = "pro")]
 use pro::ScanOptions as ProScanOptions;
@@ -372,23 +377,37 @@ fn run_scan(options: ScanOptions) -> io::Result<u8> {
         None => {}
     }
     #[cfg(feature = "pro")]
-    let scan = options.pro.narrow(scan);
-    let stdout = io::stdout().lock();
-    if options.json {
+    let (scan, written) = {
+        let scan = options.pro.narrow(scan);
+        let written = options
+            .pro
+            .write_report(&scan, options.metric, sources, options.json)?;
+        (scan, written)
+    };
+    #[cfg(not(feature = "pro"))]
+    let written = false;
+    if !written && options.json {
         #[cfg(feature = "pro")]
         let older_than = options.pro.older_than_days();
         #[cfg(not(feature = "pro"))]
         let older_than = None;
         report::write_json(
-            stdout,
+            io::stdout().lock(),
             &scan,
             options.selection,
             options.metric,
             sources,
             older_than,
         )?;
-    } else {
-        report::write_plain(stdout, &scan, options.selection, options.metric)?;
+    } else if !written {
+        report::write_plain(
+            io::stdout().lock(),
+            &scan,
+            options.selection,
+            options.metric,
+        )?;
+    }
+    if !options.json {
         report_issues(&scan.issues, true);
         report_excluded(scan.excluded_count, sources.len());
         #[cfg(feature = "pro")]
@@ -645,6 +664,8 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
                 .into(),
         );
     }
+    #[cfg(feature = "pro")]
+    pro.check(selection)?;
     Ok(Command::Scan(ScanOptions {
         path: path.unwrap_or_else(|| PathBuf::from(".")),
         selection: selection.unwrap_or(Selection::Depth(1)),
@@ -868,6 +889,10 @@ mod tests {
                 args(&["scan", "--older-than", "30"]),
                 Ok(Command::ProOnly("--older-than"))
             );
+            assert_eq!(
+                args(&["scan", "--types", "10"]),
+                Ok(Command::ProOnly("--types"))
+            );
         }
         #[cfg(feature = "pro")]
         {
@@ -880,8 +905,13 @@ mod tests {
                 panic!("scan --older-than should parse in Pro");
             };
             assert_eq!(scan.pro.older_than_days(), Some(30));
+            assert!(args(&["scan", "--types", "10", "--older-than", "9", "--json"]).is_ok());
             for invalid in [
-                &["scan", "--older-than"][..],
+                &["scan", "--types"][..],
+                &["scan", "--types", "3", "--depth", "2"],
+                &["scan", "--top", "3", "--types", "3"],
+                &["scan", "--types", "1", "--types", "2"],
+                &["scan", "--older-than"],
                 &["scan", "--older-than", "-1"],
                 &["scan", "--older-than", "1", "--older-than", "2"],
                 &["scan", "--older-than", "1", "--export", "-"],

@@ -20,6 +20,13 @@ enum FolderPresentation: String, CaseIterable {
     case list = "List"
     case treemap = "Treemap"
     case donut = "Donut"
+    /// Pro: the folder's file types.
+    case types = "Types"
+
+    /// The views the Contents picker offers. Types needs **Settings → Pro features**.
+    static func available(pro: Bool) -> [FolderPresentation] {
+        pro ? allCases : allCases.filter { $0 != .types }
+    }
 }
 
 /// A sortable table column. `.reverse` means largest first for sizes and counts, Z–A for names.
@@ -358,6 +365,9 @@ final class ScanWorkspace {
     /// Leaves Pro's sort orders when **Settings → Pro features** turns off.
     func stopProFeatures() {
         stopComparing()
+        if folderPresentation == .types {
+            folderPresentation = .list
+        }
         if sortOrder.first?.key == .modified {
             sortOrder = [.largestFirst]
         }

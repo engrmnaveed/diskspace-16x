@@ -41,7 +41,7 @@ def check(binary, root):
         # Basic answers Pro subcommands with an install hint.
         hint = run(binary, "diff", "old.json", "new.json", status=1)
         assert "Space 16X Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
-        for option in (("--older-than", "30"),):
+        for option in (("--older-than", "30"), ("--types", "5")):
             hint = run(binary, "scan", root, *option, status=1)
             assert "Space 16X Pro" in hint.stderr and not hint.stdout, hint.stderr
         assert "install.sh --pro" in run(binary, "--help").stdout
@@ -384,6 +384,31 @@ def check_modified(binary):
             assert run(binary, "scan", root, *invalid, status=1).stderr
 
 
+def check_types(binary):
+    """Pro: --types lists the space each file extension uses."""
+    with tempfile.TemporaryDirectory(prefix="space16x-types-") as directory:
+        root = Path(directory).resolve()
+        (root / "clips").mkdir()
+        for name, size in (("clips/a.MOV", 300_000), ("clips/b.mov", 200_000), ("notes.txt", 9_000),
+                           ("Makefile", 5_000), (".bashrc", 5_000), ("x.tar.gz", 40_000)):
+            (root / name).write_bytes(os.urandom(size))
+        os.link(root / "clips" / "a.MOV", root / "clips" / "alias.mov")
+        report = json.loads(run(binary, "scan", root, "--types", 2, "--json").stdout)
+        assert report["typeLimit"] == 2 and report["typeCount"] == 4, report
+        assert [row["type"] for row in report["types"]] == ["mov", "gz"], report
+        mov = report["types"][0]
+        assert mov["fileCount"] == 2, mov
+        assert mov["allocatedBytes"] == allocated_bytes(root / "clips" / "a.MOV") + allocated_bytes(root / "clips" / "b.mov")
+        assert "entries" not in report and report["allocatedBytes"] >= mov["allocatedBytes"], report
+        text = run(binary, "scan", root, "--types", 1).stdout.splitlines()
+        assert text[0].split() == ["Size", "Files", "Type"], text
+        assert text[1].endswith(".mov") and "(3 other types)" in text[2] and text[3].endswith("[total]"), text
+        everything = json.loads(run(binary, "scan", root, "--types", 10, "--json").stdout)
+        assert "" in [row["type"] for row in everything["types"]], everything
+        for invalid in (("--types",), ("--types", "2", "--depth", "1"), ("--top", "1", "--types", "1")):
+            assert run(binary, "scan", root, *invalid, status=1).stderr
+
+
 def check_deep_tree(binary, root):
     # Each traversal level keeps a descriptor open. Start only the child at launchd's soft limit.
     deepest = root.joinpath(*(["d"] * 300))
@@ -413,6 +438,7 @@ def main():
     if edition(binary) == "pro":
         check_diff(binary)
         check_modified(binary)
+        check_types(binary)
     print("CLI acceptance checks passed.")
 
 
