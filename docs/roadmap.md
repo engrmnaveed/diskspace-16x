@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — Milestone 5 (Pro analysis, v0.7.0) is in progress. The owner reviewed v0.6.0 and approved M5 and M6 on 2026-11-21. Work one milestone per session: release v0.7.0 when every M5 item has landed and CI on `main` is green, then stop. A fresh session starts M6 (v0.8.0). Everything in M5 is Pro: Rust code goes under `cli/src/pro/` behind the `pro` feature, and Mac code in `SpacePro`, shown when **Settings → Pro features** is on. Pro per-node data (modification time, owner) lives in side tables keyed by the arena's `NodeId`, so Basic's tree and memory don't grow, and Basic only gains hints for the new Pro subcommands and flags. M5.1 (newest modification time, `--older-than`, Mac Modified column) M5.2 (`--types`, TUI `t`, Mac Types view) M5.3 (`--by-owner`), M5.4 (`history` and Mac saved scans) and M5.5 (promo, QA, benchmarks) are done. Next: M5.6, release v0.7.0 on `release/v0.7.0` once CI on `main` is green. Basic's Linux x86-64 archive is about 589 KB against its 600 KB budget.
+**Resume here** — Milestone 5 (Pro analysis) is complete and published as v0.7.0: newest modification times with the Modified column and `scan --older-than`, file types (`scan --types`, the explorer's `t`, the Mac Types view), `scan --by-owner`, and the scan history (`space16x history` and the Mac app's saved scans), with the promo refreshed. Next is Milestone 6 (Pro deep, v0.8.0), which the owner approved on 2026-11-21. A fresh session starts it: first split M6 into items in Progress from §5, as M5 is, then build them one PR at a time and release v0.8.0. Nothing comes after M6. Pro per-node data lives in the tree's details side table keyed by `NodeId` (`cli/src/scanner/details.rs`, zero-sized in Basic). Read file contents only on an explicit user action (M6 duplicates are opt-in). Basic's published Linux x86-64 archive is 592,316 bytes against its 600 KB budget, so watch it closely.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -50,7 +50,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 - [x] M5.3 Owners: `scan --by-owner` (bytes and items per user, names from the user database) in `cli/src/pro/owners.rs`. CLI only: the Mac app scans one user's files.
 - [x] M5.4 Scan history: `space16x history` (save a scan, list saved scans, compare a folder with its saved scans through `diff`) under `$XDG_STATE_HOME/space16x/history`, and Mac saved scans (**Save to History**, Compare with a saved scan) under `~/Library/Application Support/Space 16X/History`. Only an explicit save writes anything.
 - [x] M5.5 Promo refresh, manual QA rows, benchmarks and both editions' archive sizes in `docs/qa.md`
-- [ ] M5.6 Release v0.7.0
+- [x] M5.6 Release v0.7.0
 
 ### Later milestones
 - [ ] M6 (v0.8+) Pro deep: explain my disk, smart cleanup, exclusive size, duplicates, HTML report, terminal treemap, Mac menu bar
