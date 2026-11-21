@@ -83,7 +83,7 @@ final class RescanTests: XCTestCase {
         let root = report.root
         return ScanReport(
             root: ScanEntry(
-                path: path, name: root.name, isDirectory: true, isHardLinkAlias: false,
+                path: path, isDirectory: true, isHardLinkAlias: false,
                 isCloudOnly: false, isPending: false, logicalBytes: root.logicalBytes,
                 allocatedBytes: root.allocatedBytes, itemCount: root.itemCount, children: root.children
             ),

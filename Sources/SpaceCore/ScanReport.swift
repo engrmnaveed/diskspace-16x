@@ -5,10 +5,29 @@ public enum SizeMetric: String, CaseIterable, Sendable, Codable {
     case logical
 }
 
+/// A scanned folder's path, shared by everything in it. Entries keep only their own
+/// name and a reference to their folder, and build their paths on demand.
+public final class ScanLocation: Sendable {
+    public let path: String
+
+    public init(path: String) {
+        self.path = path
+    }
+
+    /// The path of an item named `name` in this folder.
+    func path(of name: String) -> String {
+        path == "/" ? "/" + name : path + "/" + name
+    }
+}
+
 public struct ScanEntry: Identifiable, Sendable {
     public var id: String { path }
-    public let path: String
+    /// The full path, built from the containing folder's path and the name.
+    public var path: String { container?.path(of: name) ?? name }
     public let name: String
+    /// The folder that holds this entry. Only a scan of `/` has a root without one, and
+    /// its name is its path.
+    public let container: ScanLocation?
     public let isDirectory: Bool
     /// A later directory entry for an inode whose bytes already contribute elsewhere in the scan.
     public let isHardLinkAlias: Bool
@@ -20,6 +39,55 @@ public struct ScanEntry: Identifiable, Sendable {
     /// Files and folders below this entry, counting each hard-linked file once.
     public let itemCount: UInt64
     public let children: [ScanEntry]
+
+    init(
+        name: String, container: ScanLocation?, isDirectory: Bool, isHardLinkAlias: Bool,
+        isCloudOnly: Bool, isPending: Bool, logicalBytes: UInt64, allocatedBytes: UInt64,
+        itemCount: UInt64, children: [ScanEntry]
+    ) {
+        self.name = name
+        self.container = container
+        self.isDirectory = isDirectory
+        self.isHardLinkAlias = isHardLinkAlias
+        self.isCloudOnly = isCloudOnly
+        self.isPending = isPending
+        self.logicalBytes = logicalBytes
+        self.allocatedBytes = allocatedBytes
+        self.itemCount = itemCount
+        self.children = children
+    }
+
+    /// An entry at `path`, whose name is the last path component.
+    init(
+        path: String, isDirectory: Bool, isHardLinkAlias: Bool, isCloudOnly: Bool,
+        isPending: Bool, logicalBytes: UInt64, allocatedBytes: UInt64, itemCount: UInt64,
+        children: [ScanEntry]
+    ) {
+        let bytes = path.utf8
+        let slash = bytes.lastIndex(of: 0x2F)
+        let name = slash.map { String(decoding: bytes[bytes.index(after: $0)...], as: UTF8.self) } ?? ""
+        self.init(
+            name: name.isEmpty ? path : name,
+            container: name.isEmpty ? nil : ScanLocation(path: parentPath(of: path)),
+            isDirectory: isDirectory, isHardLinkAlias: isHardLinkAlias, isCloudOnly: isCloudOnly,
+            isPending: isPending, logicalBytes: logicalBytes, allocatedBytes: allocatedBytes,
+            itemCount: itemCount, children: children
+        )
+    }
+
+    /// The location children of this folder share.
+    func location() -> ScanLocation {
+        ScanLocation(path: path)
+    }
+
+    /// Whether this entry's path sorts before `other`'s, comparing UTF-8 bytes without
+    /// building either path.
+    func pathPrecedes(_ other: ScanEntry) -> Bool {
+        if let container, container === other.container {
+            return name.utf8.lexicographicallyPrecedes(other.name.utf8)
+        }
+        return PathBytes(self).lexicographicallyPrecedes(PathBytes(other))
+    }
 
     public func bytes(for metric: SizeMetric) -> UInt64 {
         switch metric {
@@ -36,9 +104,32 @@ public struct ScanEntry: Identifiable, Sendable {
         let left = bytes(for: metric)
         let right = other.bytes(for: metric)
         if left == right {
-            return path.utf8.lexicographicallyPrecedes(other.path.utf8)
+            return pathPrecedes(other)
         }
         return left > right
+    }
+}
+
+/// An entry's path as UTF-8 bytes: the folder's path, a separator, then the name.
+private struct PathBytes: Sequence, IteratorProtocol {
+    private var folder: String.UTF8View.Iterator?
+    private var separator: Bool
+    private var name: String.UTF8View.Iterator
+
+    init(_ entry: ScanEntry) {
+        folder = entry.container?.path.utf8.makeIterator()
+        separator = entry.container.map { $0.path != "/" } ?? false
+        name = entry.name.utf8.makeIterator()
+    }
+
+    mutating func next() -> UInt8? {
+        if let byte = folder?.next() { return byte }
+        folder = nil
+        if separator {
+            separator = false
+            return 0x2F
+        }
+        return name.next()
     }
 }
 
@@ -64,7 +155,7 @@ extension Array where Element == ScanEntry {
                 comparison = left.name.localizedStandardCompare(right.name)
             }
             if comparison == .orderedSame {
-                return left.path.utf8.lexicographicallyPrecedes(right.path.utf8)
+                return left.pathPrecedes(right)
             }
             return (comparison == .orderedAscending) == ascending
         }

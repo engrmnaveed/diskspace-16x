@@ -43,7 +43,7 @@ extension ScanEntry {
         var updated = children
         updated[index] = new
         return ScanEntry(
-            path: path, name: name, isDirectory: isDirectory, isHardLinkAlias: isHardLinkAlias,
+            name: name, container: container, isDirectory: isDirectory, isHardLinkAlias: isHardLinkAlias,
             isCloudOnly: isCloudOnly, isPending: updated.contains(where: \.isPending),
             logicalBytes: logicalBytes.swapping(old.logicalBytes, for: new.logicalBytes),
             allocatedBytes: allocatedBytes.swapping(old.allocatedBytes, for: new.allocatedBytes),
