@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Save a scan and browse it later or on another computer. `space16x scan --export FILE` saves the whole scan in ncdu's JSON format, and `--export -` writes it to standard output. `space16x --import FILE` or `--import -` opens it in the explorer, read-only, so `ssh -C server space16x scan / --export - | space16x --import -` scans a server and browses the result locally. ncdu and gdu open these exports, and Space 16X opens theirs. Without a terminal, `--import` prints the one-level report.
+- Build the CLI with full link-time optimization and one codegen unit, which keeps the release archives smaller than 0.5.0's with export and import added. Scan speed is unchanged.
+- Fix a trailing slash after the scan root in the total line of text reports, which 0.5.0 added.
+
 ## 0.5.0
 
 - Scan faster with less memory in the CLI. Scans read metadata on several threads, one per core up to 8, and `--threads N` sets the count for `scan` and the explorer. Use `--threads 1` on hard disks and network filesystems. Every thread count gives the same report. On macOS, the scanner reads each folder's file metadata in a single bulk call, so a 1,000,000-file scan takes about 1.2 seconds instead of 5.5. The scanner keeps each file's name instead of its full path, which cuts peak memory by more than half. The JSON schema and exit codes are unchanged. Issues are now listed in path order.

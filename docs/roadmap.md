@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — v0.5.0 is published, and Milestone 3 (Speed) is complete. Next: start M4 in a new session, after reading its section (§5): ncdu export/import, `volumes`, the Pro edition scaffolding, `diff` and Mac Compare, and the promo. Pro per-node data goes in side tables keyed by the arena's `NodeId` (§4). The published Linux x86-64 archive is 588,488 bytes, so the Basic build has only about 11 KB left under its 600 KB budget.
+**Resume here** — M4 is in progress, one PR per item below. M4.1 (ncdu export/import in the CLI) is done. Next: M4.2, Open Scan… and Export Scan… in the Mac app, reading and writing the same format as `cli/src/ncdu.rs`. Pro per-node data goes in side tables keyed by the arena's `NodeId` (§4). Full LTO with one codegen unit (M4.1) brought a local Linux x86-64 archive to about 575 KB with export and import, against the 600 KB Basic budget.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -35,8 +35,16 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 - [x] M3.6 Benchmarks at 100K and 1M files in `docs/qa.md`
 - [x] M3.7 Release v0.5.0
 
+### M4 (v0.6.0) Carry, compare, editions [Basic + Pro scaffolding]
+- [x] M4.1 Rust: `scan --export FILE|-` writes ncdu JSON v1 with `space16x_*` keys (states, issues, excludes, non-UTF-8 names), and `--import FILE|-` opens a saved scan in the explorer, read-only, including ncdu and gdu exports and a pipe from `ssh`. A streaming reader and writer in `cli/src/ncdu.rs` with no new dependency. Full LTO and one codegen unit keep the archive under budget.
+- [ ] M4.2 Mac: **Open Scan…** and **Export Scan…** in the same format, with a shared fixture both scanners' tests read
+- [ ] M4.3 Basic volumes: `space16x volumes` (used, free and inodes from `statvfs`, text and JSON) and a volume list on the Mac start screen
+- [ ] M4.4 Edition scaffolding: the `pro` Cargo feature, Basic hints for Pro subcommands, `(pro)` in `--version` and `"edition": "pro"`, `space16x-pro-<target>` archives, `install.sh --pro`, CI for both editions, Mac **Settings → Pro features** and a `SpacePro` target, docs
+- [ ] M4.5 Pro: `space16x diff OLD NEW|PATH [--top N] [--json]` and Mac **Compare**
+- [ ] M4.6 Promo refresh, manual QA rows, archive sizes for both editions in `docs/qa.md`
+- [ ] M4.7 Release v0.6.0
+
 ### Later milestones
-- [ ] M4 (v0.6) Carry, compare, editions: ncdu export/import, `volumes`, Pro edition scaffolding, `diff` and Mac Compare, promo
 - [ ] M5 (v0.7) Pro analysis: mtime and `--older-than`, file types, `--by-owner`, history
 - [ ] M6 (v0.8+) Pro deep: explain my disk, smart cleanup, exclusive size, duplicates, HTML report, terminal treemap, Mac menu bar
 

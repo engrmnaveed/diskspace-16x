@@ -21,11 +21,12 @@ Use the private report for follow-up. Let the maintainer know if you prefer to s
 
 ## Scope
 
-Space 16X scans filesystem metadata only. Its scanners never open file contents or write, and it never contacts the network. Its one write is Move to Trash: after the user confirms, it moves the chosen items into the Trash on their own disk. It never copies them to another disk or deletes them permanently. In-scope reports include:
+Space 16X scans filesystem metadata only. Its scanners never open file contents or write, and it never contacts the network. Its one change to your files is Move to Trash: after the user confirms, it moves the chosen items into the Trash on their own disk. It never copies them to another disk or deletes them permanently. Apart from that, it writes only an export file the user names. In-scope reports include:
 
 - scanner behavior that follows symlinks, crosses devices, or opens files contrary to [the CLI contract](docs/cli.md)
 - Move to Trash behavior that acts on items the user didn't confirm, deletes or copies instead of moving, follows a symbolic link to its target, or uses a Trash folder that another user controls
 - terminal or UI output that a crafted filename can use to spoof results or inject terminal escape sequences
+- importing a crafted scan file that crashes Space 16X, reads or changes local files, or offers to trash anything
 - installer behavior that writes outside its managed paths or accepts an unverified executable
 - weaknesses in the release, signing, or provenance workflows
 

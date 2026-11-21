@@ -14,7 +14,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub use exclude::Excludes;
-use fs::{Identity, MetadataAccess, Operation, is_cloud_error, with_local_metadata};
+pub(crate) use fs::Identity;
+use fs::{MetadataAccess, Operation, is_cloud_error, with_local_metadata};
 pub use tree::{Entry, NodeId, Tree, TreeBuilder};
 use walk::{Inline, Scope, Task};
 

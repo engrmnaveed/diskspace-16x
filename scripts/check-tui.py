@@ -4,6 +4,7 @@
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import tempfile
 import termios
@@ -161,6 +162,28 @@ def check_rescan(binary):
             terminal.finish(0)
 
 
+def check_import(binary):
+    """Browse a saved scan from a file and from a pipe, read-only."""
+    with tempfile.TemporaryDirectory(prefix="space16x-import-") as directory:
+        scope = Path(directory).resolve() / "saved"
+        (scope / "kept-folder").mkdir(parents=True)
+        (scope / "kept-folder" / "inner.bin").write_bytes(os.urandom(30_000))
+        export = Path(directory) / "scan.json"
+        subprocess.run([binary, "scan", scope, "--export", export], check=True, capture_output=True)
+        with Terminal([binary, "--import", export]) as terminal:
+            terminal.expect(b"kept-folder")
+            terminal.expect(b"imported")
+            terminal.press(b"r", b"This scan was imported")
+            terminal.press(b"\r", b"inner.bin")
+            terminal.send(b"q")
+            terminal.finish(0)
+        with export.open("rb") as stream, Terminal([binary, "--import", "-"], stdin=stream) as terminal:
+            terminal.expect(b"kept-folder")
+            terminal.press(b"d", b"This scan was imported")
+            terminal.send(b"q")
+            terminal.finish(0)
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit(f"Usage: {sys.argv[0]} PATH-TO-SPACE16X")
@@ -174,7 +197,8 @@ def main():
         check_sort_size_and_color(binary, fixture)
     check_trash(binary)
     check_rescan(binary)
-    print("Terminal navigation, sorting, color, Trash, rescan, resize, and restoration checks passed.")
+    check_import(binary)
+    print("Terminal navigation, sorting, color, Trash, rescan, import, resize, and restoration checks passed.")
 
 
 if __name__ == "__main__":

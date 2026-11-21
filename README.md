@@ -32,9 +32,10 @@ space16x scan "$HOME/Downloads" --top 20
 space16x scan --top 10 --json > report.json
 space16x --exclude node_modules --exclude '*.log' ~/Projects
 space16x scan /mnt/archive --threads 1
+ssh -C server space16x scan / --export - | space16x --import -
 ```
 
-Use the arrow keys and Enter to drill into a folder, `/` to filter, `f` for the largest files, `s` to sort by size, item count, or name, `a` for apparent sizes, `r` to rescan the open folder, and `?` for help. Press Space to mark items and `d` to move them to the Trash after you confirm. Space is freed when you empty the Trash. Pass `--read-only` to turn this off. The `scan` command provides plain text and JSON for scripts. Scans read metadata on up to 8 threads. Pass `--threads 1` on hard disks and network filesystems.
+Use the arrow keys and Enter to drill into a folder, `/` to filter, `f` for the largest files, `s` to sort by size, item count, or name, `a` for apparent sizes, `r` to rescan the open folder, and `?` for help. Press Space to mark items and `d` to move them to the Trash after you confirm. Space is freed when you empty the Trash. Pass `--read-only` to turn this off. The `scan` command provides plain text and JSON for scripts. Scans read metadata on up to 8 threads. Pass `--threads 1` on hard disks and network filesystems. `scan --export` saves a scan in ncdu's JSON format, and `--import` browses a saved scan read-only, including one from ncdu or gdu, so you can scan a server and browse it locally.
 
 Exit code `0` means the scan completed, `2` means it returned partial results, and `1` means the scan could not start or complete. A partial JSON report carries its issues and totals on standard output. See the [CLI reference](docs/cli.md) and [example report](docs/example-report.json).
 

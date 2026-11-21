@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import resource
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -119,6 +120,9 @@ def check(binary, root):
     unfiltered = json.loads(run(binary, "scan", root, "--json").stdout)
     assert unfiltered["excludedCount"] == 0 and unfiltered["excludes"] == []
 
+    check_export_and_import(binary, root, first, alias, sparse)
+    check_ncdu_and_gdu(binary, root)
+
     zero_depth = json.loads(run(binary, "scan", root, "--depth", 0, "--json").stdout)
     assert zero_depth["entries"] == [] and zero_depth["allocatedBytes"] == total_bytes
     zero_top = json.loads(run(binary, "scan", root, "--top", 0, "--json").stdout)
@@ -150,8 +154,111 @@ def check(binary, root):
         assert f"{blocked}:" not in plain.stderr
         unreadable = run(binary, "scan", blocked, "--json", status=1)
         assert not unreadable.stdout and unreadable.stderr
+        # A partial scan exports its issues, and the import is partial too.
+        saved = run(binary, "scan", root, "--export", "-", status=2).stdout
+        issues = json.loads(saved)[2]["space16x_issues"]
+        assert [issue["path"] for issue in issues] == [str(blocked)], issues
+        assert issues[0]["kind"] == "permissionDenied"
+        imported = import_text(binary, saved, status=2)
+        assert imported.stdout == plain.stdout, imported.stdout
+        assert "skipped 1 protected path" in imported.stderr, imported.stderr
     finally:
         blocked.chmod(0o700)
+
+
+def import_text(binary, text, status=0):
+    """Runs --import - with `text` on standard input."""
+    result = subprocess.run(
+        [binary, "--import", "-"], input=text, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == status, f"{result.returncode}: {result.stderr}"
+    return result
+
+
+def entries(directory):
+    """The info objects of an ncdu directory array, by name, with folders as lists."""
+    return {
+        (item[0] if isinstance(item, list) else item)["name"]: item for item in directory[1:]
+    }
+
+
+def check_export_and_import(binary, root, first, alias, sparse):
+    """Exports are ncdu JSON that --import, ncdu and gdu read."""
+    export = root.parent / f"{root.name}-export.json"
+    try:
+        listing = run(binary, "scan", root, "--export", export)
+        assert listing.stdout == run(binary, "scan", root).stdout
+        saved = json.loads(export.read_text(encoding="utf-8"))
+        assert saved[:2] == [1, 2], saved[:2]
+        assert saved[2]["progname"] == "space16x" and saved[2]["space16x_issues"] == []
+        assert saved[3][0] == {"name": str(root)}
+        folder = entries(saved[3])["Nested folder"]
+        files = entries(folder)
+        assert files[first.name] == {
+            "name": first.name, "asize": 8192, "dsize": allocated_bytes(first),
+        }
+        assert files[alias.name] == {
+            "name": alias.name, "asize": 0, "dsize": 0, "space16x_state": "hardLinkAlias",
+        }
+        assert files[sparse.name]["asize"] == sparse.stat().st_size
+        assert "symlink" not in entries(saved[3])
+
+        streamed = run(binary, "scan", root, "--export", "-").stdout
+        assert json.loads(streamed)[3] == saved[3]
+        assert run(binary, "--import", export).stdout == listing.stdout
+        assert import_text(binary, streamed).stdout == listing.stdout
+        excluded = run(binary, "scan", root, "--exclude", "*.dat", "--export", "-").stdout
+        assert json.loads(excluded)[2]["space16x_excludes"] == ["*.dat"]
+        assert "excluded 4 paths matching 1 pattern" in import_text(binary, excluded).stderr
+
+        for arguments in (
+            ("scan", root, "--export", "-", "--json"),
+            ("scan", root, "--export", root / "missing" / "scan.json"),
+            ("--import", root / "missing.json"),
+            ("--import", first),
+            ("--import", export, root),
+        ):
+            assert run(binary, *arguments, status=1).stderr
+    finally:
+        export.unlink(missing_ok=True)
+
+    # Exports from ncdu and gdu use their own fields, such as folder sizes and inodes.
+    foreign = json.dumps([1, 2, {"progname": "ncdu"}, [
+        {"name": "/srv", "asize": 4096, "dsize": 4096, "dev": 9},
+        {"name": "one", "asize": 10, "dsize": 4096, "ino": 5, "nlink": 2},
+        [{"name": "logs", "dsize": 4096}, {"name": "two", "asize": 10, "dsize": 4096, "ino": 5, "hlnkc": True}],
+        {"name": "proc", "excluded": "otherfs"},
+    ]])
+    lines = import_text(binary, foreign).stdout.splitlines()
+    assert lines == ["      4 KB  /srv/one", "       0 B  /srv/logs", "      4 KB  /srv  [total]"], lines
+
+
+def check_ncdu_and_gdu(binary, root):
+    """When ncdu or gdu is installed, each reads our export and we read theirs."""
+    expected = run(binary, "scan", root).stdout
+    export = root.parent / f"{root.name}-ours.json"
+    theirs = root.parent / f"{root.name}-theirs.json"
+    run(binary, "scan", root, "--export", export)
+    try:
+        for tool, write, read in (
+            ("ncdu", ["-0", "-x", "-o", theirs, root], ["-0", "-f", export, "-o", "-"]),
+            ("gdu", ["-n", "-o", theirs, root], ["-n", "-f", export]),
+        ):
+            path = shutil.which(tool)
+            if path is None:
+                print(f"{tool} isn't installed, so its interoperability check was skipped.")
+                continue
+            run(path, *write)
+            assert run(binary, "--import", theirs).stdout == expected, tool
+            output = run(path, *read).stdout
+            assert "Nested folder" in output, output
+            if tool == "ncdu":
+                reexport = json.loads(output)
+                assert entries(reexport[3]).keys() == {"Nested folder"}, reexport
+            print(f"{tool} opened the export, and Space 16X opened {tool}'s.")
+    finally:
+        export.unlink(missing_ok=True)
+        theirs.unlink(missing_ok=True)
 
 
 def check_deep_tree(binary, root):

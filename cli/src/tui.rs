@@ -17,7 +17,7 @@ use ranker::RankWorker;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::{
     io::{self, IsTerminal},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -26,13 +26,18 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub fn run(
-    path: &Path,
-    excludes: Excludes,
-    threads: usize,
-    plain: bool,
-    read_only: bool,
-) -> io::Result<()> {
+/// What the explorer shows.
+pub enum Source {
+    Scan {
+        path: PathBuf,
+        excludes: Excludes,
+        threads: usize,
+    },
+    /// A saved scan. Its files may be on another computer, so it is read-only.
+    Imported(Report),
+}
+
+pub fn run(source: Source, plain: bool, read_only: bool) -> io::Result<()> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -42,22 +47,38 @@ pub fn run(
 
     let _mode = TerminalMode::enter()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-    let mut worker = ScanWorker::start(path.to_path_buf(), None, excludes.clone(), threads)?;
     let ranking = RankWorker::start()?;
-    let mut explorer = Explorer::new(path);
-    explorer.read_only = read_only;
+    let (mut worker, mut explorer, excludes, threads) = match source {
+        Source::Scan {
+            path,
+            excludes,
+            threads,
+        } => {
+            let worker = ScanWorker::start(path.clone(), None, excludes.clone(), threads)?;
+            (Some(worker), Explorer::new(&path), excludes, threads)
+        }
+        Source::Imported(report) => {
+            let mut explorer = Explorer::new(report.tree.root_path());
+            explorer.imported = true;
+            explorer.finish(Ok(report));
+            (None, explorer, Excludes::default(), 1)
+        }
+    };
+    explorer.read_only = read_only || explorer.imported;
     let started = Instant::now();
     let mut last_tick = 0;
     let mut dirty = true;
 
     loop {
-        let worker_finished = worker.thread.is_finished();
-        dirty |= explorer.apply(worker.take());
-        if worker_finished && explorer.is_active() {
-            explorer.finish(Err(io::Error::other(
-                "The scan worker stopped unexpectedly.",
-            )));
-            dirty = true;
+        if let Some(worker) = &worker {
+            let worker_finished = worker.thread.is_finished();
+            dirty |= explorer.apply(worker.take());
+            if worker_finished && explorer.is_active() {
+                explorer.finish(Err(io::Error::other(
+                    "The scan worker stopped unexpectedly.",
+                )));
+                dirty = true;
+            }
         }
         if let Some(result) = ranking.take() {
             dirty |= explorer.accept_ranking(result);
@@ -89,7 +110,7 @@ pub fn run(
                 }
                 match explorer.key(key) {
                     Action::Stay => {}
-                    Action::CancelScan => worker.cancel(),
+                    Action::CancelScan => worker.iter().for_each(ScanWorker::cancel),
                     Action::Trash(items) => {
                         let results = items
                             .into_iter()
@@ -101,7 +122,12 @@ pub fn run(
                         explorer.finish_trash(results);
                     }
                     Action::Rescan { root, folder } => {
-                        worker = ScanWorker::start(folder, Some(root), excludes.clone(), threads)?;
+                        worker = Some(ScanWorker::start(
+                            folder,
+                            Some(root),
+                            excludes.clone(),
+                            threads,
+                        )?);
                     }
                     Action::Quit => return explorer.quit(),
                 }
