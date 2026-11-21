@@ -4,7 +4,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — Milestone 6 (Pro deep, v0.8.0), the last milestone the owner approved on 2026-11-21, has landed M6.1–M6.9 on `main`: explain my disk, cleanup suggestions, exclusive size, opt-in duplicates, the HTML report and terminal treemap, the Mac menu-bar monitor, Build Footprint receipts, multiple windows, and the promo refresh with QA rows and benchmarks. Next is M6.10: release v0.8.0 as the Working agreement says, then tick M6, set this note to "Roadmap complete: paused for owner review after v0.8.0." and stop. Nothing comes after M6. The **Later** list below holds what M6 cut. Basic's local Linux x86-64 archive is 590,246 bytes against its 600 KB budget.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — Roadmap complete: paused for owner review after v0.8.0. Milestones 1–6 shipped as v0.3.0–v0.8.0. M6 (Pro deep) added `space16x explain`, cleanup suggestions, clone-aware exclusive size, opt-in duplicates, the HTML report and the explorer's treemap, and in the Mac app the menu-bar free-space monitor, Build Footprint receipts and multiple windows. Don't start new work until the owner reviews it. The **Later** list below holds what M6 cut.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -60,7 +60,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** —
 - [x] M6.7 Mac Build Footprint receipts: while comparing, **Scan → Save Footprint Receipt…** or the receipt button beside the comparison asks for the operation's name and writes a Markdown receipt the user names (`SpacePro/FootprintReceipt.swift`): both scan times, the totals and item counts, what files gained and lost, and the 25 largest file changes matched by relative path, with notes for partial scans and different folders
 - [x] M6.8 Mac multiple windows: the app's `Window` is now a `WindowGroup` with one `ScanWorkspace` per window (`SpaceApp/WorkspaceCommands.swift`), **File → New Window** (⌘N) appears with Pro features on, and the menus act on the focused window through a focused scene value. Automatic window tabbing is off, so Basic stays one window. The menu bar's **Open Space 16X** brings back an open window before opening one.
 - [x] M6.9 Promo refresh (Pro's `scan --cleanup` in the CLI and the Mac app's Duplicates, 29 s, and a new README preview from the larger fixture), manual QA rows for every M6 feature, benchmarks and both editions' archive sizes in `docs/qa.md`, and the **Later** list
-- [ ] M6.10 Release v0.8.0
+- [x] M6.10 Release v0.8.0
 
 ### Later
 Work cut from M6 for the owner to schedule after the review. M6 shipped simpler versions of these:
