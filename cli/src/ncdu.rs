@@ -885,7 +885,7 @@ mod tests {
             value
         };
         let cases = expected["cases"].as_array().unwrap();
-        assert_eq!(cases.len(), 2);
+        assert_eq!(cases.len(), 3);
         for case in cases {
             let file = case["file"].as_str().unwrap();
             let imported = import(&std::fs::read(fixtures.join(file)).unwrap()).unwrap();

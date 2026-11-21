@@ -221,8 +221,11 @@ private struct ExportReader {
         var excludes: [String] = []
         var excludedCount: UInt64?
         var savedIssues: [ScanIssue]?
+        var program = ""
         try object { reader, key in
             switch key {
+            case "progname":
+                program = try reader.text()
             case "space16x_excludedCount":
                 excludedCount = try reader.number()
             case "space16x_excludes":
@@ -256,6 +259,9 @@ private struct ExportReader {
             isCloudOnly: rootInfo.state == "cloudOnly", device: rootInfo.device ?? 0
         )]
         var links = Set<LinkIdentity>()
+        // gdu marks only the second and later links to a file, so each one is an alias.
+        // ncdu marks every link, so only a repeated device and inode is.
+        let isGdu = program == "gdu"
         var patternMatches: UInt64 = 0
         while true {
             switch try token() {
@@ -308,7 +314,8 @@ private struct ExportReader {
                 continue
             }
             let isAlias = entry.state == "hardLinkAlias"
-                || ((entry.isHardLink || entry.links > 1)
+                || (isGdu && entry.isHardLink)
+                || (!isGdu && (entry.isHardLink || entry.links > 1)
                     && !links.insert(LinkIdentity(device: device, inode: entry.inode)).inserted)
             stack[stack.count - 1].add(ScanEntry(
                 name: name, container: parent.location, isDirectory: false,

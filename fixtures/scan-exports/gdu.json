@@ -1,0 +1,8 @@
+[1,2,{"progname":"gdu","progver":"v5.25.0","timestamp":1700000000},
+[{"name":"/home/me","asize":4096,"dsize":4096,"mtime":1700000000},
+{"name":"a.bin","asize":5,"dsize":4096,"mtime":1700000000},
+[{"name":"copies","asize":4096,"dsize":4096,"mtime":1700000000},
+{"name":"a-link.bin","asize":5,"dsize":4096,"mtime":1700000000,"ino":77,"hlnkc":true},
+{"name":"b-link.bin","asize":5,"dsize":4096,"mtime":1700000000,"ino":77,"hlnkc":true}],
+{"name":"socket","notreg":true},
+[{"name":"empty","mtime":1700000000}]]]

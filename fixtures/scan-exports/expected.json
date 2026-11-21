@@ -139,6 +139,52 @@
           "itemCount": 0
         }
       ]
+    },
+    {
+      "file": "gdu.json",
+      "root": {
+        "path": "/home/me",
+        "allocatedBytes": 4096,
+        "apparentBytes": 5,
+        "itemCount": 3
+      },
+      "excludedCount": 0,
+      "excludes": [],
+      "issues": [],
+      "entries": [
+        {
+          "path": "/home/me/a.bin",
+          "allocatedBytes": 4096,
+          "apparentBytes": 5,
+          "itemCount": 0
+        },
+        {
+          "path": "/home/me/copies",
+          "allocatedBytes": 0,
+          "apparentBytes": 0,
+          "itemCount": 0
+        },
+        {
+          "path": "/home/me/copies/a-link.bin",
+          "allocatedBytes": 0,
+          "apparentBytes": 0,
+          "itemCount": 0,
+          "hardLinkAlias": true
+        },
+        {
+          "path": "/home/me/copies/b-link.bin",
+          "allocatedBytes": 0,
+          "apparentBytes": 0,
+          "itemCount": 0,
+          "hardLinkAlias": true
+        },
+        {
+          "path": "/home/me/empty",
+          "allocatedBytes": 0,
+          "apparentBytes": 0,
+          "itemCount": 0
+        }
+      ]
     }
   ]
 }

@@ -54,7 +54,7 @@ final class SavedScanTests: XCTestCase {
         let table = try JSONDecoder().decode(
             Table.self, from: Data(contentsOf: Self.fixtures.appendingPathComponent("expected.json"))
         )
-        XCTAssertEqual(table.cases.count, 2)
+        XCTAssertEqual(table.cases.count, 3)
         for testCase in table.cases {
             let saved = try SavedScan(contentsOf: Self.fixtures.appendingPathComponent(testCase.file))
             let report = saved.report
