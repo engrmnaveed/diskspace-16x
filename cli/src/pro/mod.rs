@@ -6,6 +6,7 @@
 //! lean.
 
 mod diff;
+mod history;
 mod modified;
 mod owners;
 mod types;
@@ -25,6 +26,7 @@ use crate::scanner;
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
     Diff(DiffOptions),
+    History(history::HistoryCommand),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -160,8 +162,88 @@ pub fn parse(
 ) -> Result<crate::Command, String> {
     match name {
         "diff" => parse_diff(arguments),
+        "history" => parse_history(arguments),
         _ => Err(format!("Unknown Pro command {name:?}.")),
     }
+}
+
+/// Parses `history [PATH]`, `history save [PATH]` and `history diff [PATH]`.
+fn parse_history(arguments: impl Iterator<Item = OsString>) -> Result<crate::Command, String> {
+    let mut arguments = arguments.peekable();
+    let action = match arguments.peek().and_then(|argument| argument.to_str()) {
+        Some(action @ ("save" | "list" | "diff")) => {
+            let action = action.to_owned();
+            arguments.next();
+            action
+        }
+        _ => "list".to_owned(),
+    };
+    let mut path = None;
+    let mut excludes = crate::ExcludeOptions::default();
+    let mut threads = None;
+    let mut json = false;
+    let mut since = None;
+    let mut selection = None;
+    let mut metric = None;
+    let mut literal = false;
+    let mut chosen = 0;
+    while let Some(argument) = arguments.next() {
+        if literal || !crate::is_option(&argument) {
+            crate::set_path(&mut path, crate::checked_path(argument)?)?;
+            continue;
+        }
+        chosen += 1;
+        match (action.as_str(), argument.to_str()) {
+            (_, Some("-h" | "--help")) if chosen == 1 && path.is_none() => {
+                return Ok(crate::Command::Help);
+            }
+            (_, Some("--")) => literal = true,
+            ("save", Some(flag @ ("--exclude" | "--exclude-from"))) => {
+                excludes.take(flag, &mut arguments)?
+            }
+            ("save" | "diff", Some("--threads")) => {
+                crate::take_threads(&mut threads, &mut arguments)?
+            }
+            ("list" | "diff", Some("--json")) if !json => json = true,
+            ("diff", Some("--since")) if since.is_none() => {
+                let days = arguments
+                    .next()
+                    .and_then(|value| value.to_str()?.parse::<u32>().ok())
+                    .ok_or("--since requires a number of days.")?;
+                since = Some(days);
+            }
+            ("diff", Some(flag @ ("--depth" | "--top"))) if selection.is_none() => {
+                let number = arguments
+                    .next()
+                    .and_then(|value| value.to_str()?.parse::<usize>().ok())
+                    .ok_or_else(|| format!("{flag} requires a nonnegative integer."))?;
+                selection = Some(if flag == "--depth" {
+                    Selection::Depth(number)
+                } else {
+                    Selection::Top(number)
+                });
+            }
+            ("diff", Some("--apparent")) if metric.is_none() => metric = Some(Metric::Apparent),
+            _ => return Err(format!("Unknown or repeated option {argument:?}.")),
+        }
+    }
+    let command = match action.as_str() {
+        "save" => history::HistoryCommand::Save {
+            path: path.unwrap_or_else(|| PathBuf::from(".")),
+            excludes,
+            threads,
+        },
+        "diff" => history::HistoryCommand::Diff {
+            path: path.unwrap_or_else(|| PathBuf::from(".")),
+            since: since.unwrap_or(0),
+            selection: selection.unwrap_or(Selection::Depth(1)),
+            metric: metric.unwrap_or_default(),
+            json,
+            threads,
+        },
+        _ => history::HistoryCommand::List { path, json },
+    };
+    Ok(crate::Command::Pro(Command::History(command)))
 }
 
 fn parse_diff(mut arguments: impl Iterator<Item = OsString>) -> Result<crate::Command, String> {
@@ -215,6 +297,7 @@ fn parse_diff(mut arguments: impl Iterator<Item = OsString>) -> Result<crate::Co
 pub fn run(command: Command) -> io::Result<u8> {
     match command {
         Command::Diff(options) => run_diff(options),
+        Command::History(command) => history::run(command),
     }
 }
 
@@ -273,6 +356,61 @@ mod tests {
 
     fn args(values: &[&str]) -> Result<crate::Command, String> {
         parse("diff", values.iter().map(OsString::from))
+    }
+
+    #[test]
+    fn parses_history_actions() {
+        let history = |values: &[&str]| parse("history", values.iter().map(OsString::from));
+        let command = |command| Ok(crate::Command::Pro(Command::History(command)));
+        assert_eq!(
+            history(&[]),
+            command(history::HistoryCommand::List {
+                path: None,
+                json: false
+            })
+        );
+        assert_eq!(
+            history(&["/srv", "--json"]),
+            command(history::HistoryCommand::List {
+                path: Some("/srv".into()),
+                json: true
+            })
+        );
+        assert!(matches!(
+            history(&["save", "--exclude", "*.log", "--threads", "2"]),
+            Ok(crate::Command::Pro(Command::History(history::HistoryCommand::Save {
+                ref path, threads: Some(2), ..
+            }))) if path == Path::new(".")
+        ));
+        assert_eq!(
+            history(&["diff", "/srv", "--since", "7", "--top", "5", "--json"]),
+            command(history::HistoryCommand::Diff {
+                path: "/srv".into(),
+                since: 7,
+                selection: Selection::Top(5),
+                metric: Metric::Allocated,
+                json: true,
+                threads: None,
+            })
+        );
+        // A folder named like an action can still be listed.
+        assert!(matches!(
+            history(&["./save"]),
+            Ok(crate::Command::Pro(Command::History(
+                history::HistoryCommand::List { path: Some(_), .. }
+            )))
+        ));
+        assert_eq!(history(&["save", "--help"]), Ok(crate::Command::Help));
+        for invalid in [
+            &["save", "--json"][..],
+            &["list", "--since", "2"],
+            &["diff", "--since"],
+            &["diff", "--depth", "1", "--top", "1"],
+            &["a", "b"],
+            &["list", "--exclude", "x"],
+        ] {
+            assert!(history(invalid).is_err(), "{invalid:?}");
+        }
     }
 
     #[test]

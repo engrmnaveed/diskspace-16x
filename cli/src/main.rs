@@ -60,9 +60,9 @@ Scan exit codes: 0 complete, 1 error, 2 partial.
 
 #[cfg(not(feature = "pro"))]
 const EDITION_HELP: &str = "
-This is Space 16X Basic. Space 16X Pro, also free, adds space16x diff to compare scans,
-modification dates, and scan --older-than, --types and --by-owner. Install it with
-install.sh --pro. See docs/install.md.
+This is Space 16X Basic. Space 16X Pro, also free, adds space16x diff and history to
+compare scans over time, modification dates, and scan --older-than, --types and
+--by-owner. Install it with install.sh --pro. See docs/install.md.
 ";
 
 #[cfg(feature = "pro")]
@@ -80,12 +80,21 @@ This is Space 16X Pro. It adds:
              entries, with their file counts.
   scan --by-owner
              List the space and items each user owns instead of entries.
+  space16x history save [PATH] [--threads N] [EXCLUDES]
+             Scan PATH and keep the scan in the history folder,
+             $XDG_STATE_HOME/space16x/history or ~/.local/state/space16x/history.
+  space16x history [PATH] [--json]
+             List the kept scans, newest first, of PATH or of every folder.
+  space16x history diff [PATH] [--since DAYS] [--depth N | --top N] [--apparent]
+                        [--json] [--threads N]
+             Compare PATH now with its newest kept scan, or the newest one at least
+             DAYS days old.
 The explorer adds a Modified column with each item's newest modification date, and t
 lists the file types in the open folder.
 ";
 
 /// Subcommands only Space 16X Pro has. Basic builds answer them with an install hint.
-const PRO_COMMANDS: &[&str] = &["diff"];
+const PRO_COMMANDS: &[&str] = &["diff", "history"];
 
 /// Options only Space 16X Pro's scan takes. Basic builds answer them with an install hint.
 const PRO_SCAN_OPTIONS: &[&str] = &["--older-than", "--types", "--by-owner"];

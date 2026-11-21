@@ -306,6 +306,13 @@ fn walk(
     Ok(report)
 }
 
+/// The absolute path a scan of `path` reports as its root, without `.` components or
+/// a trailing separator.
+#[cfg(feature = "pro")]
+pub fn scope(path: &Path) -> io::Result<PathBuf> {
+    scan_scope(path)
+}
+
 fn scan_scope(path: &Path) -> io::Result<PathBuf> {
     if path.as_os_str().is_empty() {
         return Err(io::Error::new(

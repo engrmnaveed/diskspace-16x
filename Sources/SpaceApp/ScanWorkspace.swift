@@ -97,6 +97,8 @@ final class ScanWorkspace {
     private(set) var importedFile: String?
     /// The exclude patterns the results were scanned with, for Export Scan.
     private(set) var reportExcludes: [String] = []
+    /// Pro: saved scans of the current root in the history, newest first.
+    private(set) var savedScans: [SavedScanRecord] = []
     /// Mounted volumes for the start screen.
     private(set) var volumes: [VolumeSummary] = []
     /// Pro: the saved scan the results are compared with, and the open folder's changes.
@@ -198,6 +200,7 @@ final class ScanWorkspace {
     var canReveal: Bool { canBrowse && !isImported }
     var canExport: Bool { canBrowse && canChooseFolder }
     var canCompare: Bool { canBrowse && canChooseFolder && ProFeatures.isEnabled }
+    var canSaveToHistory: Bool { canExport && ProFeatures.isEnabled }
 
     /// Suggests Full Disk Access only when macOS privacy controls kept items out of this scan.
     var accessAdvice: AccessAdvice {
@@ -340,10 +343,16 @@ final class ScanWorkspace {
         }
     }
 
-    /// Pro: compares the results with the saved scan at `url`.
-    func compare(with url: URL) {
+    /// Pro: compares the results with a scan saved in the history.
+    func compare(with record: SavedScanRecord) {
+        let name = record.date.formatted(date: .abbreviated, time: .shortened)
+        compare(with: ScanHistory.standard.url(for: record), name: name)
+    }
+
+    /// Pro: compares the results with the saved scan at `url`, called `name` in messages.
+    func compare(with url: URL, name: String? = nil) {
         guard canCompare else { return }
-        let name = url.lastPathComponent
+        let name = name ?? url.lastPathComponent
         Task {
             let loaded = await Task.detached(priority: .userInitiated) {
                 Result { try SavedScan(contentsOf: url) }
@@ -379,6 +388,50 @@ final class ScanWorkspace {
         folderChanges = nil
         if sortOrder.first?.byChange == true {
             sortOrder = [.largestFirst]
+        }
+    }
+
+    /// Pro: keeps the results in the history, to compare with later.
+    func saveToHistory() {
+        guard canSaveToHistory, let report else { return }
+        let saved = SavedScan(report: report, excludes: reportExcludes)
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) {
+                Result { try ScanHistory.standard.save(saved, version: version) }
+            }.value
+            switch outcome {
+            case .success:
+                notice = Notice(
+                    title: "Saved to History",
+                    message: "Compare… lists this scan. Saved scans are in ~/Library/Application Support/Space 16X/History."
+                )
+                refreshSavedScans()
+            case let .failure(error):
+                notice = Notice(title: "Couldn’t save the scan", message: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    /// Pro: reads the history's saved scans of the current root.
+    func refreshSavedScans() {
+        guard ProFeatures.isEnabled, let root = report?.root.path else {
+            savedScans = []
+            return
+        }
+        Task {
+            let records = await Task.detached(priority: .utility) {
+                ScanHistory.standard.records(of: root)
+            }.value
+            if report?.root.path == root { savedScans = records }
+        }
+    }
+
+    /// Opens the history folder in Finder.
+    func showHistoryInFinder() {
+        let folder = ScanHistory.standard.directory
+        if FileManager.default.fileExists(atPath: folder.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([folder])
         }
     }
 
@@ -779,9 +832,11 @@ final class ScanWorkspace {
         case nil:
             break
         }
+        let newRoot = report?.root.path != result.root.path
         let continuing = scanHasResults
         scanHasResults = true
         report = result
+        if newRoot { refreshSavedScans() }
         issuePaths = Set(result.issues.map(\.path))
         let protectedIssues = result.protectedIssues
         protectedPaths = Set(protectedIssues.map(\.path))

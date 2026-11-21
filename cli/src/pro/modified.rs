@@ -63,20 +63,68 @@ pub fn older_than(report: Report, cutoff: u32) -> Report {
 
 /// A modification time as a local date, such as 2026-11-21.
 pub fn format_date(seconds: u32) -> String {
-    let time = seconds as libc::time_t;
-    let mut parts = MaybeUninit::<libc::tm>::zeroed();
-    // SAFETY: both pointers are valid, and localtime_r writes only into `parts`.
-    if unsafe { libc::localtime_r(&time, parts.as_mut_ptr()) }.is_null() {
-        return String::from("-");
-    }
-    // SAFETY: localtime_r succeeded and filled in the struct.
-    let parts = unsafe { parts.assume_init() };
-    format!(
-        "{:04}-{:02}-{:02}",
-        parts.tm_year + 1900,
-        parts.tm_mon + 1,
-        parts.tm_mday
+    calendar(u64::from(seconds), true).map_or_else(
+        || "-".into(),
+        |parts| {
+            format!(
+                "{:04}-{:02}-{:02}",
+                parts.tm_year + 1900,
+                parts.tm_mon + 1,
+                parts.tm_mday
+            )
+        },
     )
+}
+
+/// A time as a local date and minute, such as 2026-11-21 16:15.
+pub fn format_time(seconds: u64) -> String {
+    calendar(seconds, true).map_or_else(
+        || "-".into(),
+        |parts| {
+            format!(
+                "{:04}-{:02}-{:02} {:02}:{:02}",
+                parts.tm_year + 1900,
+                parts.tm_mon + 1,
+                parts.tm_mday,
+                parts.tm_hour,
+                parts.tm_min
+            )
+        },
+    )
+}
+
+/// A time in UTC for file names, such as 20261121T161500Z.
+pub fn utc_stamp(seconds: u64) -> String {
+    calendar(seconds, false).map_or_else(
+        || "00000000T000000Z".into(),
+        |parts| {
+            format!(
+                "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
+                parts.tm_year + 1900,
+                parts.tm_mon + 1,
+                parts.tm_mday,
+                parts.tm_hour,
+                parts.tm_min,
+                parts.tm_sec
+            )
+        },
+    )
+}
+
+/// The calendar fields of a time, in local time or UTC.
+fn calendar(seconds: u64, local: bool) -> Option<libc::tm> {
+    let time = libc::time_t::try_from(seconds).ok()?;
+    let mut parts = MaybeUninit::<libc::tm>::zeroed();
+    // SAFETY: both pointers are valid, and the call writes only into `parts`.
+    let result = unsafe {
+        if local {
+            libc::localtime_r(&time, parts.as_mut_ptr())
+        } else {
+            libc::gmtime_r(&time, parts.as_mut_ptr())
+        }
+    };
+    // SAFETY: the call succeeded and filled in the struct.
+    (!result.is_null()).then(|| unsafe { parts.assume_init() })
 }
 
 #[cfg(test)]
@@ -171,6 +219,8 @@ mod tests {
             ["2026-06-30", "2026-07-01", "2026-07-02"].contains(&date.as_str()),
             "{date}"
         );
+        assert_eq!(utc_stamp(1_782_907_200), "20260701T120000Z");
+        assert!(format_time(1_782_907_200).starts_with("2026-0"));
         assert_eq!(cutoff(1, UNIX_EPOCH + Duration::from_secs(100)), 0);
         assert_eq!(
             cutoff(1, UNIX_EPOCH + Duration::from_secs(200_000)),

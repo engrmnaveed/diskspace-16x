@@ -232,10 +232,7 @@ mod tests {
             .map(|line| line.split_whitespace().collect())
             .collect();
         assert_eq!(lines[0], ["Size", "Items", "Owner"]);
-        assert_eq!(
-            lines.last().unwrap(),
-            &["1", "KB", "5", "/srv", "[total]"]
-        );
+        assert_eq!(lines.last().unwrap(), &["1", "KB", "5", "/srv", "[total]"]);
     }
 
     #[test]

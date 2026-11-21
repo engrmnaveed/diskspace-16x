@@ -13,10 +13,10 @@ import tempfile
 import time
 
 
-def run(binary, *arguments, status=0, cwd=None, preexec_fn=None):
+def run(binary, *arguments, status=0, cwd=None, preexec_fn=None, env=None):
     result = subprocess.run(
         [binary, *map(str, arguments)], capture_output=True, text=True, check=False,
-        cwd=cwd, preexec_fn=preexec_fn,
+        cwd=cwd, preexec_fn=preexec_fn, env=env,
     )
     assert result.returncode == status, (
         f"Expected exit {status} for {arguments}, got {result.returncode}: "
@@ -40,8 +40,9 @@ def edition(binary):
 def check(binary, root):
     if edition(binary) == "basic":
         # Basic answers Pro subcommands with an install hint.
-        hint = run(binary, "diff", "old.json", "new.json", status=1)
-        assert "Space 16X Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
+        for command in (("diff", "old.json", "new.json"), ("history",), ("history", "save", root)):
+            hint = run(binary, *command, status=1)
+            assert "Space 16X Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
         for option in (("--older-than", "30"), ("--types", "5"), ("--by-owner",)):
             hint = run(binary, "scan", root, *option, status=1)
             assert "Space 16X Pro" in hint.stderr and not hint.stdout, hint.stderr
@@ -422,6 +423,51 @@ def check_types(binary):
             assert run(binary, "scan", root, *invalid, status=1).stderr
 
 
+def check_history(binary):
+    """Pro: history keeps scans only when asked, lists them, and compares with them."""
+    with tempfile.TemporaryDirectory(prefix="space16x-history-") as directory:
+        base = Path(directory).resolve()
+        state = base / "state"
+        env = {**os.environ, "XDG_STATE_HOME": str(state)}
+        root = base / "data"
+        (root / "grow").mkdir(parents=True)
+        (root / "grow" / "a.bin").write_bytes(os.urandom(10_000))
+        (root / "skip.log").write_bytes(os.urandom(50_000))
+
+        # Nothing is written until a scan is saved.
+        empty = run(binary, "history", env=env)
+        assert empty.stdout == "" and "no saved scans" in empty.stderr and not state.exists(), empty
+        none = run(binary, "history", "diff", root, env=env, status=1)
+        assert "No saved scan" in none.stderr, none.stderr
+
+        saved = run(binary, "history", "save", root, "--exclude", "*.log", env=env)
+        assert saved.stdout.startswith(f"Saved {root} ("), saved.stdout
+        folder = state / "space16x" / "history"
+        assert folder.stat().st_mode & 0o777 == 0o700
+        listing = json.loads(run(binary, "history", root, "--json", env=env).stdout)
+        assert listing["directory"]["path"] == str(folder) and len(listing["scans"]) == 1, listing
+        scan = listing["scans"][0]
+        assert scan["scope"] == str(root) and scan["itemCount"] == 2 and not scan["isPartial"], scan
+        export = Path(scan["path"]["path"])
+        assert export.parent == folder and export.stat().st_mode & 0o777 == 0o600
+        assert json.loads(export.read_text(encoding="utf-8"))[2]["space16x_excludes"] == ["*.log"]
+        assert json.loads(run(binary, "history", base, "--json", env=env).stdout)["scans"] == []
+        text = run(binary, "history", env=env).stdout.splitlines()
+        assert text[0].split() == ["Saved", "Size", "Items", "Path"] and text[1].endswith(str(root)), text
+
+        # diff compares the folder now with the saved scan, using its excludes.
+        (root / "grow" / "a.bin").write_bytes(os.urandom(400_000))
+        (root / "more.log").write_bytes(os.urandom(90_000))
+        change = json.loads(run(binary, "history", "diff", root, "--json", env=env).stdout)
+        assert [Path(row["path"]).name for row in change["entries"]] == ["grow"], change
+        assert change["old"]["allocatedBytes"] == scan["allocatedBytes"], change
+        assert run(binary, "history", "diff", root, "--since", 2, env=env, status=1).stderr
+        plain = run(binary, "history", "diff", root, env=env)
+        assert "comparing with the scan saved" in plain.stderr and "[total]" in plain.stdout, plain
+        for invalid in (("history", "save", "--json"), ("history", "list", "--since", "1"), ("history", "a", "b")):
+            assert run(binary, *invalid, env=env, status=1).stderr
+
+
 def check_deep_tree(binary, root):
     # Each traversal level keeps a descriptor open. Start only the child at launchd's soft limit.
     deepest = root.joinpath(*(["d"] * 300))
@@ -452,6 +498,7 @@ def main():
         check_diff(binary)
         check_modified(binary)
         check_types(binary)
+        check_history(binary)
     print("CLI acceptance checks passed.")
 
 
