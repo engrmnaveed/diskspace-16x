@@ -82,6 +82,9 @@ def check_sort_size_and_color(binary, fixture):
             terminal.press(b"t", b"File types")
             terminal.expect(b".bin")
             terminal.press(b"t", b"nested-alpha")
+            # u lists cleanup suggestions in the whole scan, and u again leaves them.
+            terminal.press(b"u", b"cleanup suggestions")
+            terminal.press(b"u", b"nested-alpha")
 
         terminal.press(b"s", b"by items")
         terminal.press(b"a", b"apparent")

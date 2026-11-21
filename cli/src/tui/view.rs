@@ -134,6 +134,8 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer, tick: usi
         (Mode::Folders, 50..) => " Folders ",
         (Mode::Largest, 50..) => " Largest files ",
         (Mode::Largest, 28..=49) => " Largest ",
+        #[cfg(feature = "pro")]
+        (Mode::Cleanup, 28..) => " Cleanup ",
         _ => "",
     };
     let left_width = (brand.width() + mode.width()).min(usize::from(area.width));
@@ -236,6 +238,10 @@ fn draw_summary(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
             Mode::Folders if count == 1 => " · 1 item".into(),
             Mode::Folders => format!(" · {count} items"),
             Mode::Largest => format!(" · {count} shown (up to {LARGEST_LIMIT})"),
+            #[cfg(feature = "pro")]
+            Mode::Cleanup if count == 1 => " · 1 suggestion".into(),
+            #[cfg(feature = "pro")]
+            Mode::Cleanup => format!(" · {count} suggestions"),
         }
     };
     paint(
@@ -305,6 +311,8 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         let empty = if explorer.is_ranking() {
             if explorer.mode == Mode::Largest {
                 "Ranking largest files…"
+            } else if explorer.mode != Mode::Folders {
+                "Finding cleanup suggestions…"
             } else {
                 "Ranking folder contents…"
             }
@@ -325,6 +333,12 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
                     "Waiting for local files to rank…"
                 }
                 _ if explorer.mode == Mode::Largest => "No counted files to rank.",
+                _ if explorer.mode != Mode::Folders && explorer.is_active() => {
+                    "Cleanup suggestions appear when the scan finishes."
+                }
+                _ if explorer.mode != Mode::Folders => {
+                    "No cleanup suggestions: no node_modules, build output or caches of 1 MB or more."
+                }
                 _ => "No scanned items here.",
             }
         } else if explorer.is_active() {
@@ -374,7 +388,17 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         let entry = tree.entry(id);
         let selected = explorer.offset + index == explorer.selected;
         let row = line_at(area, index as u16 + 1);
-        let path = terminal_path(&explorer.row_path(entry));
+        #[cfg_attr(not(feature = "pro"), allow(unused_mut))]
+        let mut path = terminal_path(&explorer.row_path(entry));
+        #[cfg(feature = "pro")]
+        if explorer.mode == Mode::Cleanup
+            && let Some(rule) = entry
+                .parent()
+                .and_then(|parent| crate::pro::cleanup_rule(parent, entry))
+        {
+            path.push_str("  · ");
+            path.push_str(rule.label);
+        }
         let marked = explorer.marked.contains(&entry.path());
         let line = columns.entry(entry, &path, total, selected, marked);
         let style = if selected { SELECTED } else { Style::default() };
@@ -825,6 +849,8 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         ("a", "Switch between allocated and apparent sizes"),
         #[cfg(feature = "pro")]
         ("t", "Show file types in the open folder"),
+        #[cfg(feature = "pro")]
+        ("u", "List folders tools recreate, to trash them"),
         trash[0],
         trash[1],
         ("r", "Rescan the open folder, or all in largest"),

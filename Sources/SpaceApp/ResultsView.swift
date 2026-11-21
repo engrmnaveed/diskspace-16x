@@ -76,7 +76,7 @@ struct ResultsView: View {
 
             HStack(alignment: .bottom, spacing: 17) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(workspace.mode == .folders ? scope.name : "Largest Files")
+                    Text(workspace.mode == .folders ? scope.name : workspace.mode.rawValue)
                         .font(.system(size: 28, weight: .semibold))
                         .tracking(-0.6)
                         .lineLimit(1)
@@ -119,6 +119,11 @@ struct ResultsView: View {
             let count = ScanFormat.items(scope.children.count)
             if scope.isPending { return "\(count) found so far" + suffix }
             return count + suffix
+        }
+        if workspace.mode == .cleanup {
+            if workspace.report?.isPreview == true { return "Suggestions appear when the scan finishes" }
+            let total = workspace.rows.reduce(UInt64(0)) { $0 + $1.bytes(for: workspace.sizeMetric) }
+            return "\(ScanFormat.size(total)) in folders that tools recreate when needed"
         }
         if workspace.report?.isPreview == true { return "Largest files found so far" + suffix }
         return "Top \(ScanWorkspace.largestFileLimit) files across the scan root" + suffix
@@ -414,7 +419,7 @@ struct ResultsView: View {
             return .handled
         }
         .quickLookPreview($workspace.quickLookURL)
-        .accessibilityLabel(workspace.mode == .folders ? "Folder contents" : "Largest files")
+        .accessibilityLabel(workspace.mode == .folders ? "Folder contents" : workspace.mode.rawValue)
         .overlay {
             if workspace.isLoadingRows && workspace.rows.isEmpty {
                 ProgressView("Ranking items…")
@@ -442,7 +447,11 @@ struct ResultsView: View {
         if scope.isPending {
             return workspace.isScanning ? "Waiting for scanned items…" : "Contents were not scanned"
         }
-        return workspace.mode == .folders ? "No scanned items here" : "No files to rank"
+        switch workspace.mode {
+        case .folders: return "No scanned items here"
+        case .largestFiles: return "No files to rank"
+        case .cleanup: return "No node_modules, build output or caches of 1 MB or more"
+        }
     }
 
     @ViewBuilder
@@ -482,7 +491,13 @@ struct ResultsView: View {
                 Text(entry.name)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if workspace.mode == .largestFiles, let parent = relativeParent(of: entry, to: scope) {
+                if workspace.mode == .cleanup, let label = workspace.cleanupLabels[entry.path] {
+                    Text([label, relativeParent(of: entry, to: scope)].compactMap { $0 }.joined(separator: " · "))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else if workspace.mode == .largestFiles, let parent = relativeParent(of: entry, to: scope) {
                     Text(parent)
                         .font(.caption2)
                         .foregroundStyle(.secondary)

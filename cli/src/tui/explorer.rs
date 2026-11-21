@@ -19,6 +19,9 @@ const FILTER_LIMIT: usize = 256;
 pub(super) enum Mode {
     Folders,
     Largest,
+    /// Pro: cleanup suggestions in the whole scan.
+    #[cfg(feature = "pro")]
+    Cleanup,
 }
 
 /// How folder contents are ordered. The largest-files view always ranks by size.
@@ -275,7 +278,7 @@ impl Explorer {
         self.report.as_ref()?;
         match self.mode {
             Mode::Folders => self.folder,
-            Mode::Largest => Some(NodeId::ROOT),
+            _ => Some(NodeId::ROOT),
         }
     }
 
@@ -351,12 +354,12 @@ impl Explorer {
         Some(self.rows_tree()?.entry(id))
     }
 
-    /// A row's name in the folder view, or its path below the scope in the largest
-    /// files view.
+    /// A row's name in the folder view, or its path below the scope in the views of the
+    /// whole scan.
     pub(super) fn row_path(&self, entry: Entry<'_>) -> PathBuf {
         match self.mode {
             Mode::Folders => PathBuf::from(entry.name()),
-            Mode::Largest => entry.tree().relative_path(entry.id(), NodeId::ROOT),
+            _ => entry.tree().relative_path(entry.id(), NodeId::ROOT),
         }
     }
 
@@ -460,7 +463,7 @@ impl Explorer {
         match (self.mode, kind) {
             (Mode::Folders, EntryKind::Directory) => self.switch_folder(&path, None),
             (Mode::Folders, EntryKind::File) => self.open_panel(Panel::Details),
-            (Mode::Largest, _) => {
+            _ => {
                 if let Some(parent) = path.parent() {
                     self.switch_folder(parent, Some(&path));
                 }
@@ -472,8 +475,9 @@ impl Explorer {
         if !self.query.is_empty() {
             self.query.clear();
             self.refresh();
-        } else if self.mode == Mode::Largest {
-            self.toggle_largest();
+        } else if self.mode != Mode::Folders {
+            self.mode = Mode::Folders;
+            self.reset_ranking(None);
         } else if let (Some(report), Some(folder)) = (&self.report, self.folder)
             && folder != NodeId::ROOT
         {
@@ -489,8 +493,22 @@ impl Explorer {
             return;
         }
         self.mode = match self.mode {
-            Mode::Folders => Mode::Largest,
             Mode::Largest => Mode::Folders,
+            _ => Mode::Largest,
+        };
+        self.query.clear();
+        self.reset_ranking(None);
+    }
+
+    /// Pro: lists the folders in the scan that tools recreate, for Move to Trash.
+    #[cfg(feature = "pro")]
+    fn toggle_cleanup(&mut self) {
+        if self.report.is_none() {
+            return;
+        }
+        self.mode = match self.mode {
+            Mode::Cleanup => Mode::Folders,
+            _ => Mode::Cleanup,
         };
         self.query.clear();
         self.reset_ranking(None);
@@ -919,6 +937,8 @@ impl Explorer {
             KeyCode::Char('?') => self.open_panel(Panel::Help),
             #[cfg(feature = "pro")]
             KeyCode::Char('t') => self.open_types(),
+            #[cfg(feature = "pro")]
+            KeyCode::Char('u') => self.toggle_cleanup(),
             _ => {}
         }
         Action::Stay
@@ -1388,6 +1408,61 @@ mod tests {
         };
         assert_eq!(types.len(), 1);
         assert_eq!(types[0].allocated_bytes, 120);
+    }
+
+    #[cfg(feature = "pro")]
+    #[test]
+    fn lists_cleanup_suggestions_for_the_trash() {
+        let mut explorer = Explorer::new(Path::new("/r"));
+        let web = folder(
+            "/r/web",
+            vec![
+                folder(
+                    "/r/web/node_modules",
+                    vec![file("/r/web/node_modules/a.js", 2_000_000)],
+                ),
+                file("/r/web/index.js", 3_000_000),
+            ],
+        );
+        let rust = folder(
+            "/r/rust",
+            vec![
+                file("/r/rust/Cargo.toml", 10),
+                folder(
+                    "/r/rust/target",
+                    vec![file("/r/rust/target/app", 4_000_000)],
+                ),
+            ],
+        );
+        show(&mut explorer, folder("/r", vec![web, rust]));
+        explorer.status = Status::Complete;
+        key(&mut explorer, KeyCode::Char('u'));
+        settle_ranking(&mut explorer);
+        assert!(explorer.mode == Mode::Cleanup);
+        assert_eq!(names(&explorer), ["target", "node_modules"]);
+        assert_eq!(
+            explorer.row_path(explorer.current().unwrap()),
+            Path::new("rust/target")
+        );
+
+        key(&mut explorer, KeyCode::Char(' '));
+        key(&mut explorer, KeyCode::Char(' '));
+        key(&mut explorer, KeyCode::Char('d'));
+        let plan = explorer.prompt.as_ref().expect("d asks to confirm");
+        assert_eq!(plan.bytes, 6_000_000);
+        assert_eq!(confirm(&mut explorer).len(), 2);
+
+        // Enter jumps to the suggestion in its folder, and u or Esc leaves the view.
+        key(&mut explorer, KeyCode::Char('u'));
+        key(&mut explorer, KeyCode::Char('u'));
+        settle_ranking(&mut explorer);
+        key(&mut explorer, KeyCode::Enter);
+        settle_ranking(&mut explorer);
+        assert!(explorer.mode == Mode::Folders);
+        assert_eq!(names(&explorer)[explorer.selected], "target");
+        key(&mut explorer, KeyCode::Char('u'));
+        key(&mut explorer, KeyCode::Esc);
+        assert!(explorer.mode == Mode::Folders);
     }
 
     #[test]

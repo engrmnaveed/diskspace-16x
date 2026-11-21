@@ -133,6 +133,11 @@ pub(super) fn rank(request: RankRequest) -> Ranked {
             items.into_iter().map(Entry::id).collect()
         }
         Mode::Largest => largest_files(scope, LARGEST_LIMIT, metric),
+        #[cfg(feature = "pro")]
+        Mode::Cleanup => crate::pro::cleanup_suggestions(scope, metric)
+            .into_iter()
+            .map(|suggestion| suggestion.id)
+            .collect(),
     };
     Ranked {
         key: request.key,

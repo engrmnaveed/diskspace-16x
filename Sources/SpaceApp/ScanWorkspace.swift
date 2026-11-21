@@ -7,12 +7,20 @@ import UniformTypeIdentifiers
 enum BrowseMode: String, CaseIterable {
     case folders = "Folders"
     case largestFiles = "Largest Files"
+    /// Pro: folders that tools recreate, for Move to Trash.
+    case cleanup = "Cleanup"
 
     var symbol: String {
         switch self {
         case .folders: "folder"
         case .largestFiles: "list.number"
+        case .cleanup: "sparkles"
         }
+    }
+
+    /// The modes the sidebar offers. Cleanup needs **Settings → Pro features**.
+    static func available(pro: Bool) -> [BrowseMode] {
+        pro ? allCases : allCases.filter { $0 != .cleanup }
     }
 }
 
@@ -114,6 +122,8 @@ final class ScanWorkspace {
     var folderPresentation: FolderPresentation = .list
     /// Up to 32 entries of the current folder, largest first, for the treemap and donut.
     private(set) var chartRows: [ScanEntry] = []
+    /// Pro: what each cleanup suggestion in `rows` holds, by path.
+    private(set) var cleanupLabels: [String: String] = [:]
 
     var sizeMetric: SizeMetric = SizeMetric(rawValue: UserDefaults.standard.string(forKey: "sizeMetric") ?? "")
         ?? .allocated
@@ -399,6 +409,9 @@ final class ScanWorkspace {
     /// Leaves Pro's sort orders when **Settings → Pro features** turns off.
     func stopProFeatures() {
         stopComparing()
+        if mode == .cleanup {
+            mode = .folders
+        }
         if folderPresentation == .types {
             folderPresentation = .list
         }
@@ -875,7 +888,7 @@ final class ScanWorkspace {
                 guard let next = scope.last?.children.first(where: { $0.id == folder.id && $0.isDirectory }) else { break }
                 scope.append(next)
             }
-            let sameLocation = mode == .largestFiles || oldScope.last?.id == scope.last?.id
+            let sameLocation = mode != .folders || oldScope.last?.id == scope.last?.id
             if !sameLocation { selection = nil }
             loadRows(keepingRows: sameLocation)
         } else if mode != .folders {
@@ -911,9 +924,16 @@ final class ScanWorkspace {
             await previousTask?.value
             guard !Task.isCancelled else { return }
             let worker = Task.detached(priority: .userInitiated) {
-                let ranked = switch mode {
-                case .folders: folder.rankedChildren(by: metric)
-                case .largestFiles: report.largestFiles(limit: Self.largestFileLimit, by: metric)
+                var labels: [String: String] = [:]
+                let ranked: [ScanEntry]
+                switch mode {
+                case .folders: ranked = folder.rankedChildren(by: metric)
+                case .largestFiles: ranked = report.largestFiles(limit: Self.largestFileLimit, by: metric)
+                case .cleanup:
+                    // Suggestions come from a finished scan, never a preview.
+                    let found = report.isPreview ? [] : CleanupSuggestions.find(in: report, metric: metric)
+                    ranked = found.map(\.entry)
+                    for suggestion in found { labels[suggestion.entry.path] = suggestion.rule.label }
                 }
                 let changes = comparison?.changes(in: folder, at: names, metric: metric)
                 let rows: [ScanEntry]
@@ -929,7 +949,7 @@ final class ScanWorkspace {
                 } else {
                     rows = ranked.ordered(by: sort.key, ascending: sort.order == .forward, metric: metric)
                 }
-                return (rows: rows, chart: Array(ranked.prefix(32)), changes: changes)
+                return (rows: rows, chart: Array(ranked.prefix(32)), changes: changes, labels: labels)
             }
             let result = await withTaskCancellationHandler {
                 await worker.value
@@ -941,6 +961,7 @@ final class ScanWorkspace {
             rows = result.rows
             chartRows = result.chart
             folderChanges = result.changes
+            cleanupLabels = result.labels
             let rowPaths = Set(rows.map(\.path))
             if !selectedPaths.isSubset(of: rowPaths) { selectedPaths.formIntersection(rowPaths) }
             selectedEntry = selection.flatMap(entry(withPath:))

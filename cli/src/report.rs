@@ -248,7 +248,7 @@ pub(crate) struct JsonPath<'a> {
 }
 
 impl JsonPath<'static> {
-    fn owned(path: &Path) -> Self {
+    pub(crate) fn owned(path: &Path) -> Self {
         let JsonPath { path, path_bytes } = JsonPath::from(path);
         JsonPath {
             path: Cow::Owned(path.into_owned()),

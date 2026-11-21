@@ -112,6 +112,9 @@ struct Space16XApp: App {
                     }
                     .keyboardShortcut("5")
                     .disabled(!workspace.canBrowse)
+                    Button("Cleanup Suggestions") { workspace.mode = .cleanup }
+                        .keyboardShortcut("6")
+                        .disabled(!workspace.canBrowse)
                 }
                 Divider()
                 Button("Open Selected Folder", action: workspace.openSelectedFolder)
