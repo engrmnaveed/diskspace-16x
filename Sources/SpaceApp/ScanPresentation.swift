@@ -45,6 +45,13 @@ enum ScanFormat {
         bytes < 1024 ? exactSize(bytes) : "\(exactSize(bytes)) (\(ByteFormat.binary(bytes)))"
     }
 
+    /// A signed change in size, such as "+1.2 GB" or "−300 MB".
+    static func change(_ delta: Int64) -> String {
+        if delta == 0 { return "No change" }
+        let size = size(delta.magnitude)
+        return delta > 0 ? "+\(size)" : "−\(size)"
+    }
+
     static func items(_ count: Int) -> String {
         count == 1 ? "1 item" : "\(count.formatted()) items"
     }

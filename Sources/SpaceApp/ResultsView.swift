@@ -1,9 +1,18 @@
 import SpaceCore
+import SpacePro
 import QuickLook
 import SwiftUI
 
 struct ResultsView: View {
     @Bindable var workspace: ScanWorkspace
+    @AppStorage(ProFeatures.defaultsKey) private var proFeatures = false
+    /// Shows the Change column only while comparing. Conditional columns need macOS 14.4.
+    @ViewState private var columns = TableColumnCustomization<ScanEntry>()
+
+    /// Pro's Compare adds a Change column to the folder list.
+    private var showsChanges: Bool {
+        proFeatures && workspace.comparison != nil && workspace.mode == .folders
+    }
 
     var body: some View {
         if let scope = workspace.visibleScope {
@@ -27,6 +36,12 @@ struct ResultsView: View {
             } message: {
                 let bytes = workspace.pendingTrash.reduce(UInt64(0)) { $0 + $1.allocatedBytes }
                 Text("\(ScanFormat.size(bytes)) of allocated space. Space is freed when you empty the Trash.")
+            }
+            .onChange(of: proFeatures) { _, enabled in
+                if !enabled { workspace.stopComparing() }
+            }
+            .onChange(of: showsChanges, initial: true) { _, shown in
+                columns[visibility: "change"] = shown ? .visible : .hidden
             }
         }
     }
@@ -243,14 +258,77 @@ struct ResultsView: View {
             .labelsHidden()
             .frame(width: 210)
             Spacer(minLength: 0)
+            if proFeatures {
+                compareControl
+            }
         }
         .tint(Color(nsColor: .controlAccentColor))
         .padding(.horizontal, 24)
         .padding(.vertical, 8)
     }
 
+    /// Pro: starts a comparison, or summarizes the open folder's change and stops it.
+    @ViewBuilder
+    private var compareControl: some View {
+        if let comparison = workspace.comparison {
+            let changes = workspace.folderChanges
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.left.arrow.right")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text(changes?.total.map { "\(ScanFormat.change($0)) since “\(comparison.name)”" }
+                    ?? "New since “\(comparison.name)”")
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let removed = changes?.removed, !removed.isEmpty {
+                    Text("· \(ScanFormat.items(removed.count)) removed")
+                        .foregroundStyle(.secondary)
+                        .help(removed.prefix(12).map(\.name).joined(separator: "\n"))
+                }
+                Button(action: workspace.stopComparing) {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Stop comparing")
+                .accessibilityLabel("Stop comparing")
+            }
+            .font(.subheadline)
+        } else {
+            Button(action: workspace.compareWithSavedScan) {
+                Label("Compare…", systemImage: "arrow.left.arrow.right")
+            }
+            .buttonStyle(.borderless)
+            .font(.subheadline)
+            .disabled(!workspace.canCompare)
+            .help("Compare with a saved scan to see what grew or shrank (Pro)")
+        }
+    }
+
+    @ViewBuilder
+    private func changeCell(_ entry: ScanEntry) -> some View {
+        switch workspace.folderChanges?.change(for: entry) {
+        case .added:
+            Text("New")
+                .foregroundStyle(.orange)
+                .help("Not in the saved scan")
+        case let .changed(delta) where delta != 0:
+            Text(ScanFormat.change(delta))
+                .monospacedDigit()
+                .foregroundStyle(delta > 0 ? Color.orange : SpaceColor.accent)
+                .help(delta > 0 ? "Grew since the saved scan" : "Shrank since the saved scan")
+        default:
+            Text("—")
+                .foregroundStyle(.tertiary)
+                .accessibilityLabel("No change")
+        }
+    }
+
     private func resultsTable(scope: ScanEntry) -> some View {
-        Table(workspace.rows, selection: $workspace.selectedPaths, sortOrder: $workspace.sortOrder) {
+        Table(
+            workspace.rows, selection: $workspace.selectedPaths, sortOrder: $workspace.sortOrder,
+            columnCustomization: $columns
+        ) {
             TableColumn("Name", sortUsing: EntrySort(key: .name, order: .forward)) { entry in
                 nameCell(entry, scope: scope)
             }
@@ -266,6 +344,14 @@ struct ResultsView: View {
             }
             .width(min: 52, ideal: 72, max: 110)
 
+            TableColumn("Change", sortUsing: EntrySort.biggestGrowth) { entry in
+                changeCell(entry)
+            }
+            .width(min: 80, ideal: 100, max: 150)
+            .customizationID("change")
+            .defaultVisibility(.hidden)
+            .disabledCustomizationBehavior(.visibility)
+
             TableColumn("Share") { entry in
                 shareCell(entry, of: scope)
             }
@@ -273,6 +359,8 @@ struct ResultsView: View {
 
         }
         .tableStyle(.inset(alternatesRowBackgrounds: false))
+        // Rebuild the table when the Change column appears or leaves, so its cells fill in.
+        .id(showsChanges)
         .contextMenu(forSelectionType: String.self) { identifiers in
             if identifiers.count > 1 {
                 Button("Move \(identifiers.count) Items to Trash…") {

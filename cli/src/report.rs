@@ -233,9 +233,9 @@ struct JsonIssue<'a> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct JsonPath<'a> {
-    path: Cow<'a, str>,
+    pub(crate) path: Cow<'a, str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    path_bytes: Option<String>,
+    pub(crate) path_bytes: Option<String>,
 }
 
 impl JsonPath<'static> {

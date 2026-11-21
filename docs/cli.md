@@ -162,7 +162,38 @@ On macOS, a startup-disk scan counts firmlinked directories such as `/Users` at 
 
 ## Pro commands
 
-Space 16X Pro adds `space16x diff`, which compares two scans.
+### Compare scans with diff
+
+```text
+space16x diff OLD NEW|PATH [--depth N | --top N] [--apparent] [--json] [--threads N]
+```
+
+`space16x diff` shows what grew or shrank. OLD is a saved scan: a `scan --export` file, an ncdu or gdu export, or `-` for standard input. NEW is another saved scan, or a folder to scan now. A folder scan uses OLD's exclude patterns and `--threads`, so both sides count the same things. Entries match by their path below each root, so the roots can differ, as for a server's export compared with a backup.
+
+```sh
+space16x scan ~ --export ~/home-monday.json
+space16x diff ~/home-monday.json ~
+space16x diff ~/home-monday.json ~ --top 10
+ssh server space16x scan /srv --export - | space16x diff - srv-last-week.json
+```
+
+```text
+     Change        Old        New  Path
+   +12.4 GB    20.0 GB    32.4 GB  /Users/me/Library
+    +2.1 GB          -     2.1 GB  /Users/me/Videos  [added]
+    -1.2 GB     3.0 GB     1.8 GB  /Users/me/Downloads
+   +13.3 GB   420.0 GB   433.3 GB  /Users/me  [total]
+```
+
+| Option | Behavior |
+| --- | --- |
+| `--depth N` | List changed entries through N levels, each folder's changes ranked by size of change. The default is one level. Folders whose total didn't change aren't expanded. |
+| `--top N` | List the N files that changed the most, either way, including files only one scan has. |
+| `--apparent` | Compare apparent sizes instead of allocated bytes. |
+| `--json` | Write schema 3 with `schemaVersion`, `edition`, `rankedBy`, `old` and `new` summaries (`scope`, `allocatedBytes`, `apparentBytes`, `itemCount`, `isPartial`), `changeBytes`, and either `depth` and `entries` or `topLimit` and `topFiles`. Each change has `path`, `kind`, `oldBytes`, `newBytes` (`null` when that scan doesn't have it), and a signed `changeBytes`. |
+| `--threads N` | Threads for scanning NEW when it's a folder. |
+
+Entries only one scan has are marked `[added]` or `[removed]`. The exit code is `0`, `2` when either scan is partial, and `1` for errors.
 
 ## Scan exit codes
 

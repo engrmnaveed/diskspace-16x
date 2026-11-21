@@ -67,7 +67,9 @@ Install it with install.sh --pro. See docs/install.md.
 #[cfg(feature = "pro")]
 const EDITION_HELP: &str = "
 This is Space 16X Pro. It adds:
-  space16x diff  Compare two scans (arrives in this release)
+  space16x diff OLD NEW|PATH [--depth N | --top N] [--apparent] [--json] [--threads N]
+             Compare a saved scan with another one, or with PATH scanned now using the
+             saved scan's excludes. Lists what changed, or the N files that changed most.
 ";
 
 /// Subcommands only Space 16X Pro has. Basic builds answer them with an install hint.
@@ -454,7 +456,7 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Command, Strin
             let name = *name.expect("the command is listed");
             arguments.next();
             #[cfg(feature = "pro")]
-            return pro::parse(name, arguments).map(Command::Pro);
+            return pro::parse(name, arguments);
             #[cfg(not(feature = "pro"))]
             return Ok(Command::ProOnly(name));
         }

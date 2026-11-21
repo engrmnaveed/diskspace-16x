@@ -17,7 +17,7 @@ Space 16X is a project by Muhammad Naveed Akram, developed under the [16X Brains
 3. Press Space to preview a selected item with Quick Look, reveal it in Finder, or copy its path. To free space, select items and press ⌘⌫. After you confirm, they move to the Trash and the results update in place. Space is freed when you empty the Trash. After you change files elsewhere, **Scan → Rescan Folder** (⌥⌘R) updates just the open folder.
 4. To keep a scan, choose **File → Export Scan…**. **File → Open Scan…** browses it later, read-only, along with scans saved by the CLI, ncdu, or gdu.
 
-The Mac app uses allocated size for totals, rankings, and chart shares. Choose **View → Size → Apparent Size** to use file lengths instead. The **Items** column counts the files and folders inside each folder. To skip folders such as `node_modules` or caches, list patterns under **Settings → Exclude from scans**. **Settings → Pro features** turns on the Pro edition's views, such as Compare. It is off by default. On a large scan, the first two levels are available while deeper folders are scanned. The progress strip shows the current path, and the list marks pending folders. A cancelled scan keeps the preview and labels its unfinished folders.
+The Mac app uses allocated size for totals, rankings, and chart shares. Choose **View → Size → Apparent Size** to use file lengths instead. The **Items** column counts the files and folders inside each folder. To skip folders such as `node_modules` or caches, list patterns under **Settings → Exclude from scans**. **Settings → Pro features** turns on the Pro edition's views. It is off by default. With it on, **Compare…** above the folder list opens a saved scan and adds a **Change** column that shows what grew or shrank, ranked when you click its header. On a large scan, the first two levels are available while deeper folders are scanned. The progress strip shows the current path, and the list marks pending folders. A cancelled scan keeps the preview and labels its unfinished folders.
 
 The treemap shows the largest items with a positive size. Remaining bytes are grouped as **Other Items**. Switch back to **List** to inspect each item.
 
@@ -74,7 +74,7 @@ space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercont
 space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
-Add `--pro` after `sh -s --` to install Space 16X Pro, a free edition with more analysis, starting with `space16x diff` to compare scans. It replaces Basic, and installing without `--pro` switches back.
+Add `--pro` after `sh -s --` to install Space 16X Pro, a free edition with more analysis, starting with `space16x diff`, which shows what grew or shrank since a saved scan. It replaces Basic, and installing without `--pro` switches back.
 
 To uninstall and clean up this shell's PATH, run the same installer with `--uninstall`.
 

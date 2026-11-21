@@ -289,6 +289,49 @@ def check_volumes(binary):
         assert run(binary, *invalid, status=1).stderr
 
 
+def check_diff(binary):
+    """Pro: diff compares a saved scan with a folder or another saved scan."""
+    with tempfile.TemporaryDirectory(prefix="space16x-diff-") as directory:
+        base = Path(directory).resolve()
+        root = base / "data"
+        (root / "grow").mkdir(parents=True)
+        (root / "gone").mkdir()
+        (root / "grow" / "a.bin").write_bytes(os.urandom(10_000))
+        (root / "gone" / "b.bin").write_bytes(os.urandom(20_000))
+        old = base / "old.json"
+        run(binary, "scan", root, "--exclude", "*.log", "--export", old)
+        (root / "grow" / "a.bin").write_bytes(os.urandom(500_000))
+        shutil.rmtree(root / "gone")
+        (root / "new.bin").write_bytes(os.urandom(30_000))
+        # The saved scan's excludes apply to the new scan, so the log isn't a change.
+        (root / "big.log").write_bytes(os.urandom(900_000))
+
+        report = json.loads(run(binary, "diff", old, root, "--json").stdout)
+        assert report["edition"] == "pro" and report["depth"] == 1, report
+        assert [Path(row["path"]).name for row in report["entries"]] == ["grow", "new.bin", "gone"], report
+        rows = {Path(row["path"]).name: row for row in report["entries"]}
+        assert rows["grow"]["changeBytes"] == allocated_bytes(root / "grow" / "a.bin") - rows["grow"]["oldBytes"]
+        assert rows["new.bin"]["oldBytes"] is None and rows["gone"]["newBytes"] is None
+        assert report["changeBytes"] == report["new"]["allocatedBytes"] - report["old"]["allocatedBytes"]
+        text = run(binary, "diff", old, root).stdout
+        assert text.splitlines()[0].split() == ["Change", "Old", "New", "Path"], text
+        assert "[added]" in text and "[removed]" in text and text.rstrip().endswith("[total]"), text
+
+        top = json.loads(run(binary, "diff", old, root, "--top", 2, "--json").stdout)
+        assert [Path(row["path"]).name for row in top["topFiles"]] == ["a.bin", "new.bin"], top
+        newer = base / "new.json"
+        run(binary, "scan", root, "--exclude", "*.log", "--export", newer)
+        piped = subprocess.run(
+            [binary, "diff", "-", newer, "--json"], input=old.read_text(encoding="utf-8"),
+            capture_output=True, text=True, check=False,
+        )
+        assert piped.returncode == 0 and json.loads(piped.stdout)["changeBytes"] == report["changeBytes"]
+        same = json.loads(run(binary, "diff", newer, root, "--json").stdout)
+        assert same["changeBytes"] == 0 and same["entries"] == [], same
+        for invalid in (("diff", old), ("diff", "-", "-"), ("diff", base / "missing.json", root)):
+            assert run(binary, *invalid, status=1).stderr
+
+
 def check_deep_tree(binary, root):
     # Each traversal level keeps a descriptor open. Start only the child at launchd's soft limit.
     deepest = root.joinpath(*(["d"] * 300))
@@ -315,6 +358,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="space16x-deep-") as directory:
         check_deep_tree(binary, Path(directory).resolve())
     check_volumes(binary)
+    if edition(binary) == "pro":
+        check_diff(binary)
     print("CLI acceptance checks passed.")
 
 
