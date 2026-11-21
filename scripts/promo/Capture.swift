@@ -77,11 +77,12 @@ struct Capture {
             desktop[name] = image
         }
 
-        // Pro's Compare, against the folder's scan from a few days earlier. Registered
-        // defaults stay in memory, so the capture leaves no preferences behind.
+        // Pro's Compare, against the folder's scan saved a few days earlier, with the Modified
+        // column. Registered defaults stay in memory, so the capture leaves no preferences
+        // or history behind.
         UserDefaults.standard.register(defaults: [ProFeatures.defaultsKey: true])
         workspace.folderPresentation = .list
-        workspace.compare(with: URL(filePath: arguments[6]))
+        workspace.compare(with: URL(filePath: arguments[6]), name: "Monday")
         try await waitUntil { workspace.comparison != nil && !workspace.isLoadingRows }
         workspace.sortOrder = [.biggestGrowth]
         try await waitUntil { !workspace.isLoadingRows }

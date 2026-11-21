@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import wave
 
 
@@ -31,6 +32,16 @@ FIXTURE = {
     "Backups/archive.zip": 9,
     "Assets/texture.psd": 5,
     "Assets/cover.png": 1,
+}
+# Days since each file last changed, which Pro's Modified column shows.
+AGES = {
+    "Exports/launch.mov": 0,
+    "Exports/teaser.mp4": 2,
+    "Media/interview.wav": 9,
+    "Media/b-roll.mov": 23,
+    "Backups/archive.zip": 410,
+    "Assets/texture.psd": 61,
+    "Assets/cover.png": 61,
 }
 # The same folder a few days earlier, which the Mac app's Compare scene compares with.
 BASELINE = {
@@ -54,13 +65,18 @@ def create_fixture(root, files=FIXTURE, icons=True):
         with path.open("wb") as file:
             for _ in range(mib):
                 file.write(os.urandom(1024 * 1024))
+        modified = time.time() - AGES.get(relative, 0) * 86_400
+        os.utime(path, (modified, modified))
     if not icons:
         return
     # Many small files give the item-count sort something to show.
     folder = root / "Assets" / "icons"
     folder.mkdir()
     for index in range(ICONS):
-        (folder / f"icon-{index:02}.png").write_bytes(os.urandom(2048))
+        icon = folder / f"icon-{index:02}.png"
+        icon.write_bytes(os.urandom(2048))
+        modified = time.time() - 61 * 86_400
+        os.utime(icon, (modified, modified))
 
 
 def capture(binary, work):
@@ -85,7 +101,7 @@ def capture(binary, work):
     explorer_path.write_text(json.dumps(explorer), encoding="utf-8")
     # The plain-text CLI prints absolute paths. Show the command's relative path on screen.
     report = subprocess.check_output(
-        [binary, "scan", "Projects", "--top", "5"], cwd=work, text=True,
+        [binary, "scan", "Projects", "--types", "4"], cwd=work, text=True,
     ).replace(f"{work}/", "")
     report_path = work / "report.txt"
     report_path.write_text(report, encoding="utf-8")
@@ -192,8 +208,12 @@ def cli_path(parser, binary):
     cargo = shutil.which("cargo") or Path.home() / ".cargo" / "bin" / "cargo"
     if not os.access(cargo, os.X_OK):
         parser.error("Install Rustup with Cargo or pass --cli PATH to a built Space 16X CLI.")
-    target = ROOT / "cli" / "target"
-    subprocess.run([cargo, "build", "--release", "--locked", "--target-dir", target], cwd=ROOT / "cli", check=True)
+    # The promo shows Pro's analysis, so it builds the Pro edition.
+    target = ROOT / "cli" / "target" / "promo"
+    subprocess.run(
+        [cargo, "build", "--release", "--locked", "--features", "pro", "--target-dir", target],
+        cwd=ROOT / "cli", check=True,
+    )
     return target / "release" / "space16x"
 
 
