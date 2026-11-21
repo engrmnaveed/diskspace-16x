@@ -9,7 +9,9 @@ typealias ViewState<Value> = SwiftUI.State<Value>
 @main
 struct Space16XApp: App {
     @ViewState private var workspace = ScanWorkspace()
+    @ViewState private var freeSpace = FreeSpaceMonitor()
     @AppStorage(ProFeatures.defaultsKey) private var proFeatures = false
+    @AppStorage(LowSpaceAlert.monitorKey) private var showsFreeSpace = false
 
     var body: some Scene {
         Window("Space 16X", id: "workspace") {
@@ -150,6 +152,18 @@ struct Space16XApp: App {
 
         Settings {
             SettingsView()
+        }
+
+        // Pro: free space in the menu bar, only while Settings turns it on.
+        MenuBarExtra(isInserted: Binding(
+            get: { proFeatures && showsFreeSpace },
+            set: { showsFreeSpace = $0 }
+        )) {
+            FreeSpaceMenu(monitor: freeSpace)
+        } label: {
+            Label(freeSpace.title, systemImage: "internaldrive")
+                .labelStyle(.titleAndIcon)
+                .accessibilityLabel("\(freeSpace.title) free on the startup disk")
         }
     }
 }
