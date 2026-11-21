@@ -55,7 +55,7 @@ extension ScanReport {
 
 extension ScanEntry {
     /// Files and folders this entry adds to its parent's item count.
-    fileprivate var countedItems: UInt64 {
+    var countedItems: UInt64 {
         guard !isHardLinkAlias else { return 0 }
         return itemCount == .max ? .max : itemCount + 1
     }
