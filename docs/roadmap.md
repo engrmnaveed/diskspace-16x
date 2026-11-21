@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — v0.5.0 is published, and Milestone 3 (Speed) is complete. Next: start M4 in a new session, after reading its section (§5): ncdu export/import, `volumes`, the Pro edition scaffolding, `diff` and Mac Compare, and the promo. Pro per-node data goes in side tables keyed by the arena's `NodeId` (§4). The Linux x86-64 archive is 588,710 bytes, so the Basic build has only about 11 KB left under its 600 KB budget.
+**Resume here** — v0.5.0 is published, and Milestone 3 (Speed) is complete. Next: start M4 in a new session, after reading its section (§5): ncdu export/import, `volumes`, the Pro edition scaffolding, `diff` and Mac Compare, and the promo. Pro per-node data goes in side tables keyed by the arena's `NodeId` (§4). The published Linux x86-64 archive is 588,488 bytes, so the Basic build has only about 11 KB left under its 600 KB budget.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
