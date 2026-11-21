@@ -115,7 +115,7 @@ ncdu and gdu open these exports (`ncdu -f FILE`, `gdu -f FILE`), and Space 16X o
 
 - Folder sizes count their contents only, as a scan does, so a folder's own blocks in the file aren't added.
 - Symbolic links and other special files, entries on other filesystems, and excluded entries are left out. Entries excluded by a pattern count as excluded.
-- A file with the same device and inode as an earlier one is a hard link and counts once, at its first path.
+- A file with the same device and inode as an earlier one is a hard link and counts once, at its first path. gdu marks only the second and later links to a file, so each file it marks counts as a hard link.
 - Entries with read errors are incomplete, and each one becomes an issue.
 
 Space 16X adds keys that start with `space16x_`, which other tools ignore:

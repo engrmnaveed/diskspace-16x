@@ -216,8 +216,10 @@ pub fn read(input: &mut dyn FnMut(&mut [u8]) -> io::Result<usize>) -> io::Result
     let mut excludes = Vec::new();
     let mut excluded_count = None;
     let mut issues = None;
+    let mut program = Vec::new();
     parser.object(&mut |parser, key| {
         match key {
+            b"progname" => program = parser.string()?,
             b"space16x_excludedCount" => excluded_count = Some(parser.number()?),
             b"space16x_excludes" => parser.array(&mut |parser| {
                 let pattern = parser.string()?;
@@ -252,6 +254,9 @@ pub fn read(input: &mut dyn FnMut(&mut [u8]) -> io::Result<usize>) -> io::Result
     let mut path = root_path;
     let mut devices = vec![root.device.unwrap_or(0)];
     let mut links = HashSet::new();
+    // gdu marks only the second and later links to a file, so each one is an alias.
+    // ncdu marks every link, so only a repeated device and inode is.
+    let gdu = program == b"gdu";
     let mut pattern_matches = 0;
     loop {
         match parser.token()? {
@@ -301,7 +306,9 @@ pub fn read(input: &mut dyn FnMut(&mut [u8]) -> io::Result<usize>) -> io::Result
             path.push(OsStr::from_bytes(name));
             devices.push(device);
         } else if state == EntryState::HardLinkAlias
-            || ((entry.hard_link || entry.links > 1)
+            || (gdu && entry.hard_link)
+            || (!gdu
+                && (entry.hard_link || entry.links > 1)
                 && !links.insert(Identity::new(device, entry.inode)))
         {
             builder.file(name, 0, 0, EntryState::HardLinkAlias);
@@ -839,12 +846,17 @@ mod tests {
         assert_eq!(report.root().item_count(), 6);
         assert_eq!(imported.excludes, ["a/b"]);
 
+        // gdu marks only later links, without the first one's inode.
         let gdu = br#"[1,2,{"progname":"gdu","progver":"v5.29.0","timestamp":1700000000},
             [{"name":"/home/me","mtime":1700000000},{"name":"a.bin","asize":5,"dsize":4096,"mtime":1700000000},
+            {"name":"b.bin","asize":5,"dsize":4096,"ino":77,"hlnkc":true},
             [{"name":"empty","mtime":1700000000}]]]"#;
         let imported = import(gdu).unwrap();
         assert_eq!(imported.report.root().allocated_bytes(), 4096);
         assert_eq!(imported.report.root().item_count(), 2);
+        let tree = &imported.report.tree;
+        let alias = tree.find(Path::new("/home/me/b.bin")).unwrap();
+        assert_eq!(tree.entry(alias).state(), EntryState::HardLinkAlias);
     }
 
     #[test]
