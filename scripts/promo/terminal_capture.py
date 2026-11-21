@@ -109,6 +109,17 @@ def capture_explorer(binary, fixture):
         wait_for(terminal, stream, screen, "Largest files", "55 shown", "interview.wav")
         frames["rank"] = snapshot(screen, fixture)
 
+        # Mark the two largest files and ask to move them. Answer n, so nothing moves.
+        terminal.send(b" ")
+        wait_for(terminal, stream, screen, "1 marked")
+        terminal.send(b" ")
+        wait_for(terminal, stream, screen, "2 marked")
+        terminal.send(b"d")
+        wait_for(terminal, stream, screen, "Trash? y/N")
+        frames["trash"] = snapshot(screen, fixture)
+        terminal.send(b"n")
+        wait_for(terminal, stream, screen, "Nothing was moved.")
+
         terminal.send(b"q")
         terminal.finish(0)
     return dict(columns=COLUMNS, frames=frames)

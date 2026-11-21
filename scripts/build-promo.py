@@ -19,8 +19,8 @@ import wave
 ROOT = Path(__file__).resolve().parents[1]
 PROMO = ROOT / "scripts" / "promo"
 SHOTS = [
-    ("opening", 75), ("launch", 30), ("folders", 105), ("drill", 90), ("rank", 105),
-    ("report", 90), ("map", 105), ("share", 90), ("sort", 75), ("end", 120),
+    ("opening", 75), ("launch", 30), ("folders", 90), ("drill", 75), ("rank", 90), ("trash", 75),
+    ("report", 90), ("map", 90), ("share", 90), ("sort", 75), ("end", 105),
 ]
 FPS = 30
 FIXTURE = {
