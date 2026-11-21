@@ -19,8 +19,8 @@ import wave
 ROOT = Path(__file__).resolve().parents[1]
 PROMO = ROOT / "scripts" / "promo"
 SHOTS = [
-    ("opening", 75), ("launch", 30), ("folders", 90), ("drill", 75), ("rank", 90), ("trash", 75),
-    ("report", 90), ("map", 90), ("share", 90), ("sort", 75), ("end", 105),
+    ("opening", 75), ("launch", 30), ("folders", 75), ("drill", 60), ("rank", 75), ("trash", 75),
+    ("report", 60), ("carry", 90), ("map", 75), ("share", 75), ("compare", 90), ("end", 90),
 ]
 FPS = 30
 FIXTURE = {
@@ -32,31 +32,55 @@ FIXTURE = {
     "Assets/texture.psd": 5,
     "Assets/cover.png": 1,
 }
+# The same folder a few days earlier, which the Mac app's Compare scene compares with.
+BASELINE = {
+    "Exports/launch.mov": 12,
+    "Media/interview.wav": 16,
+    "Media/b-roll.mov": 11,
+    "Backups/archive.zip": 9,
+    "Backups/old-backup.zip": 14,
+    "Assets/texture.psd": 9,
+    "Assets/cover.png": 1,
+}
 
 
 ICONS = 48
 
 
-def create_fixture(root):
-    for relative, mib in FIXTURE.items():
+def create_fixture(root, files=FIXTURE, icons=True):
+    for relative, mib in files.items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("wb") as file:
             for _ in range(mib):
                 file.write(os.urandom(1024 * 1024))
+    if not icons:
+        return
     # Many small files give the item-count sort something to show.
-    icons = root / "Assets" / "icons"
-    icons.mkdir()
+    folder = root / "Assets" / "icons"
+    folder.mkdir()
     for index in range(ICONS):
-        (icons / f"icon-{index:02}.png").write_bytes(os.urandom(2048))
+        (folder / f"icon-{index:02}.png").write_bytes(os.urandom(2048))
 
 
 def capture(binary, work):
     from promo.terminal_capture import capture_explorer
 
+    # Save the earlier version of the folder as the scan the Mac app compares with.
+    earlier = work / "earlier" / "Projects"
+    create_fixture(earlier, BASELINE, icons=False)
+    baseline = work / "projects-monday.json"
+    subprocess.run([binary, "scan", earlier, "--export", baseline], check=True, stdout=subprocess.DEVNULL)
+    shutil.rmtree(earlier.parent)
+
     projects = work / "Projects"
     create_fixture(projects)
-    explorer = capture_explorer(binary, projects)
+    # The import scene browses this folder's scan as if it came from a server's /srv.
+    server = json.loads(subprocess.check_output([binary, "scan", projects, "--export", "-"]))
+    server[3][0]["name"] = "/srv"
+    saved = work / "server.json"
+    saved.write_text(json.dumps(server), encoding="utf-8")
+    explorer = capture_explorer(binary, projects, saved)
     explorer_path = work / "explorer.json"
     explorer_path.write_text(json.dumps(explorer), encoding="utf-8")
     # The plain-text CLI prints absolute paths. Show the command's relative path on screen.
@@ -86,7 +110,7 @@ def capture(binary, work):
         *sorted(PROMO.glob("*.swift")), *(path for path in views if path.name != "Space16XApp.swift"),
     ], check=True)
     subprocess.run([
-        executable, projects, work, report_path, explorer_path, ROOT / "Branding" / "AppIcon.icns",
+        executable, projects, work, report_path, explorer_path, ROOT / "Branding" / "AppIcon.icns", baseline,
     ], check=True)
 
 
@@ -136,7 +160,7 @@ def encode(work):
     for index, (name, frames) in enumerate(SHOTS):
         inputs.extend(["-i", work / f"{name}.png"])
         # Scale up first to keep the small vertical pan smooth at 30 fps.
-        zoom = f"1+0.035*on/{frames - 1}" if name in ("opening", "map", "share", "sort", "end") else "1"
+        zoom = f"1+0.035*on/{frames - 1}" if name in ("opening", "map", "share", "compare", "end") else "1"
         filters.append(
             f"[{index}:v]scale=2160:3840:out_color_matrix=bt709,format=yuv420p,"
             f"zoompan=z='{zoom}':x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':"

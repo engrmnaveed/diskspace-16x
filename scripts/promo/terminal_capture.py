@@ -88,7 +88,7 @@ def wait_for(terminal, stream, screen, *markers):
     raise RuntimeError(f"Expected {markers!r} in Space 16X explorer. Visible screen:\n{visible}")
 
 
-def capture_explorer(binary, fixture):
+def capture_explorer(binary, fixture, saved):
     screen = pyte.Screen(COLUMNS, ROWS)
     stream = pyte.ByteStream(screen)
     frames = {}
@@ -120,6 +120,16 @@ def capture_explorer(binary, fixture):
         terminal.send(b"n")
         wait_for(terminal, stream, screen, "Nothing was moved.")
 
+        terminal.send(b"q")
+        terminal.finish(0)
+
+    # Browse a saved scan piped in on standard input, as from ssh.
+    screen.reset()
+    with saved.open("rb") as scan, Terminal(
+        [binary, "--import", "-"], columns=COLUMNS, rows=ROWS, env=environment, stdin=scan,
+    ) as terminal:
+        wait_for(terminal, stream, screen, "imported", "Exports", "Media", "/srv")
+        frames["import"] = snapshot(screen, fixture)
         terminal.send(b"q")
         terminal.finish(0)
     return dict(columns=COLUMNS, frames=frames)
