@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
-- Scan faster with less memory in the CLI. Scans read metadata on several threads, one per core up to 8, and `--threads N` sets the count for `scan` and the explorer. Use `--threads 1` on hard disks and network filesystems. Every thread count gives the same report. On macOS, the scanner reads each folder's file metadata in a single bulk call, so a 1,000,000-file scan takes about 1.4 seconds instead of 5.4. The scanner keeps each file's name instead of its full path, which cuts peak memory by more than half. The JSON schema and exit codes are unchanged. Issues are now listed in path order.
+- Scan faster with less memory in the CLI. Scans read metadata on several threads, one per core up to 8, and `--threads N` sets the count for `scan` and the explorer. Use `--threads 1` on hard disks and network filesystems. Every thread count gives the same report. On macOS, the scanner reads each folder's file metadata in a single bulk call, so a 1,000,000-file scan takes about 1.2 seconds instead of 5.5. The scanner keeps each file's name instead of its full path, which cuts peak memory by more than half. The JSON schema and exit codes are unchanged. Issues are now listed in path order.
 - Scan faster with less memory in the Mac app. The scanner reads several folders at once, up to 8, and a 1,000,000-file folder takes about 2.3 seconds instead of 5.6. Scanned items keep their names and share their folder's path instead of each storing a full path, which cuts peak memory by about two thirds. Results don't depend on the order folders finish in, including which path counts a hard-linked file.
 
 ## 0.4.0
