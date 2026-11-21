@@ -61,6 +61,18 @@ struct Space16XApp: App {
                         .disabled(!workspace.canCompare)
                     Button("Stop Comparing", action: workspace.stopComparing)
                         .disabled(workspace.comparison == nil)
+                    Menu("Compare with History") {
+                        ForEach(workspace.savedScans) { record in
+                            Button(record.date.formatted(date: .abbreviated, time: .shortened)) {
+                                workspace.compare(with: record)
+                            }
+                        }
+                    }
+                    .disabled(!workspace.canCompare || workspace.savedScans.isEmpty)
+                    Button("Save to History", action: workspace.saveToHistory)
+                        .keyboardShortcut("s", modifiers: [.command, .option])
+                        .disabled(!workspace.canSaveToHistory)
+                    Button("Show History in Finder", action: workspace.showHistoryInFinder)
                 }
                 Divider()
                 Button("Show Scan Details") { workspace.showsDetails = true }

@@ -254,6 +254,31 @@ Owners come from the user database. The Linux release builds are static and read
 
 JSON reports put `owners` in place of `depth` and `entries`. Each owner has `owner` (the user name, or `null` without one), `uid`, `allocatedBytes`, `apparentBytes` and `itemCount`.
 
+### Scan history
+
+```text
+space16x history save [PATH] [--threads N] [EXCLUDES]
+space16x history [list] [PATH] [--json]
+space16x history diff [PATH] [--since DAYS] [--depth N | --top N] [--apparent] [--json] [--threads N]
+```
+
+`history save` scans PATH and keeps the scan, so you can later see what grew since then. `history` lists the kept scans, newest first, of PATH or of every folder. `history diff` compares PATH now with its newest kept scan, using that scan's exclude patterns, and shows the same report as [`diff`](#compare-scans-with-diff). With `--since DAYS`, it uses the newest kept scan that is at least DAYS days old, which answers "what grew this week?":
+
+```sh
+space16x history save /srv               # for example, daily from cron
+space16x history /srv
+space16x history diff /srv --since 7
+space16x history diff ~ --top 10
+```
+
+```text
+Saved                   Size      Items  Path
+2026-11-21 06:00   511.42 GB    1102596  /srv
+2026-11-14 06:00   498.10 GB    1088120  /srv
+```
+
+Only `history save` writes anything. Kept scans are `scan --export` files, so `--import` and `diff` open them too, in `$XDG_STATE_HOME/space16x/history`, or `~/.local/state/space16x/history` when `XDG_STATE_HOME` isn't set. The folder is readable only by you. `index.jsonl` there lists each scan with its totals, one JSON object per line. Each scan holds every path, so a large scan can take tens of megabytes. Space 16X never deletes them: remove old ones from the folder, or move them to the Trash with the explorer, when you no longer need them. `history list --json` writes `schemaVersion`, `edition`, `directory` and `scans`, each with `file`, `path`, `scope`, `savedAt` (Unix seconds), `allocatedBytes`, `apparentBytes`, `itemCount` and `isPartial`. `history save` exits like `scan`, and `history diff` like `diff`. Both exit with `1` when there is no matching kept scan.
+
 ## Scan exit codes
 
 | Code | Meaning |

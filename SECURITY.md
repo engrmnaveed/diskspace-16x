@@ -21,7 +21,7 @@ Use the private report for follow-up. Let the maintainer know if you prefer to s
 
 ## Scope
 
-Space 16X scans filesystem metadata only. Its scanners never open file contents or write, and it never contacts the network. Its one change to your files is Move to Trash: after the user confirms, it moves the chosen items into the Trash on their own disk. It never copies them to another disk or deletes them permanently. Apart from that, it writes only an export file the user names. In-scope reports include:
+Space 16X scans filesystem metadata only. Its scanners never open file contents or write, and it never contacts the network. Its one change to your files is Move to Trash: after the user confirms, it moves the chosen items into the Trash on their own disk. It never copies them to another disk or deletes them permanently. Apart from that, it writes only an export file the user names and, in Space 16X Pro, a scan the user saves to the history: `space16x history save` writes to `$XDG_STATE_HOME/space16x/history` (by default `~/.local/state/space16x/history`), and the Mac app's Save to History to `~/Library/Application Support/Space 16X/History`, readable only by that user. In-scope reports include:
 
 - scanner behavior that follows symlinks, crosses devices, or opens files contrary to [the CLI contract](docs/cli.md)
 - Move to Trash behavior that acts on items the user didn't confirm, deletes or copies instead of moving, follows a symbolic link to its target, or uses a Trash folder that another user controls

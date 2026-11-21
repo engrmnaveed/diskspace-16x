@@ -40,6 +40,7 @@ struct ResultsView: View {
             }
             .onChange(of: proFeatures, initial: true) { _, enabled in
                 if !enabled { workspace.stopProFeatures() }
+                workspace.refreshSavedScans()
                 columns[visibility: "modified"] = enabled ? .visible : .hidden
             }
             .onChange(of: showsChanges, initial: true) { _, shown in
@@ -297,14 +298,32 @@ struct ResultsView: View {
             }
             .font(.subheadline)
         } else {
-            Button(action: workspace.compareWithSavedScan) {
+            Menu {
+                if !workspace.savedScans.isEmpty {
+                    Section("History") {
+                        ForEach(workspace.savedScans.prefix(12)) { record in
+                            Button(historyLabel(record)) { workspace.compare(with: record) }
+                        }
+                    }
+                }
+                Button("Choose a Saved Scan…", action: workspace.compareWithSavedScan)
+                Divider()
+                Button("Save to History", action: workspace.saveToHistory)
+                    .disabled(!workspace.canSaveToHistory)
+            } label: {
                 Label("Compare…", systemImage: "arrow.left.arrow.right")
             }
-            .buttonStyle(.borderless)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
             .font(.subheadline)
             .disabled(!workspace.canCompare)
-            .help("Compare with a saved scan to see what grew or shrank (Pro)")
+            .help("Compare with a saved scan to see what grew or shrank, or save this one (Pro)")
         }
+    }
+
+    private func historyLabel(_ record: SavedScanRecord) -> String {
+        let date = record.date.formatted(date: .abbreviated, time: .shortened)
+        return "\(date) · \(ScanFormat.size(record.allocatedBytes))" + (record.isPartial ? " · partial" : "")
     }
 
     @ViewBuilder
