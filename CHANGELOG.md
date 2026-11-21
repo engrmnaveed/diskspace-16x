@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 - See when files last changed in Space 16X Pro. The CLI explorer adds a **Modified** column with each item's newest modification date, a folder's being the newest of any file inside, and JSON reports add `newestModified` in Unix seconds. `space16x scan --older-than DAYS` counts only files last modified more than DAYS days ago, so sizes, rankings and top files show where old data sits. In the Mac app, with **Settings → Pro features** on, the folder list and Largest Files add a sortable **Modified** column. Pro reads the times with the same metadata calls as sizes, keeps them in a side table beside the scan tree, and Basic's memory and output are unchanged.
 - See which file types use the most space in Space 16X Pro. `space16x scan --types N` lists the N largest types by extension with their size and file count, then the rest in one line, and `--json` writes them as `types`. Press `t` in the CLI explorer for the open folder's types. In the Mac app, with **Settings → Pro features** on, **Types** joins List, Treemap and Donut (or **Browse → File Types**, ⌘5). Both apps group files the same way: `Clip.MOV` and `clip.mov` are `.mov`, and `.bashrc` has no extension.
