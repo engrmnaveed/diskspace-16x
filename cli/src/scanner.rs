@@ -1,3 +1,4 @@
+mod details;
 mod exclude;
 mod fs;
 mod parallel;
@@ -13,6 +14,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+pub use details::Details;
 pub use exclude::Excludes;
 pub(crate) use fs::Identity;
 use fs::{MetadataAccess, Operation, is_cloud_error, with_local_metadata};
@@ -272,6 +274,7 @@ fn walk(
         excludes: options.excludes,
         exclude_root_length: exclude_root_length.unwrap_or(scope.as_os_str().len()),
         device: stat.st_dev,
+        root_details: Details::from_stat(&stat),
         cancelled,
         #[cfg(target_os = "macos")]
         startup_volume: startup_volume::StartupVolume::for_scope(scope, &directory.fd),

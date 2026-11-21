@@ -9,7 +9,7 @@ space16x --version
 space16x --help
 ```
 
-Space 16X has two free editions built from the same source. **Basic** is the default and everything on this page except [Pro commands](#pro-commands). **Pro** adds those commands. Both install the same `space16x` command, so installing one replaces the other. `space16x --version` prints `space16x X.Y.Z`, or `space16x X.Y.Z (pro)` in Pro, and JSON reports set `edition` to match. In Basic, a Pro command prints a one-line hint to install Pro and exits with code `1`. See [Install Space 16X Pro](install.md#install-space-16x-pro).
+Space 16X has two free editions built from the same source. **Basic** is the default and everything on this page except [Pro commands](#pro-commands). **Pro** adds those commands. Both install the same `space16x` command, so installing one replaces the other. `space16x --version` prints `space16x X.Y.Z`, or `space16x X.Y.Z (pro)` in Pro, and JSON reports set `edition` to match. In Basic, a Pro command or option prints a one-line hint to install Pro and exits with code `1`. See [Install Space 16X Pro](install.md#install-space-16x-pro).
 
 **PATH** defaults to the current directory. The scan root must be a readable directory. Quote paths containing spaces. Use `--` to pass a path that begins with a dash.
 
@@ -194,6 +194,24 @@ ssh server space16x scan /srv --export - | space16x diff - srv-last-week.json
 | `--threads N` | Threads for scanning NEW when it's a folder. |
 
 Entries only one scan has are marked `[added]` or `[removed]`. The exit code is `0`, `2` when either scan is partial, and `1` for errors.
+
+### Modification times and --older-than
+
+Pro reads each file's modification time with the same metadata call that reads its size, so scans take no longer. A folder's time is the **newest** modification time of any file below it, which tells you when anything inside last changed. A folder without files has no time.
+
+- The explorer adds a **Modified** column with each item's newest modification date, in local time, when the terminal is at least 96 columns wide. File details show the date too. Imported scans don't carry times, so the column stays hidden for them.
+- JSON reports add `newestModified` to the root, each entry and each top file, in Unix seconds.
+
+```text
+space16x scan [PATH] --older-than DAYS [--depth N | --top N] [--json] ...
+```
+
+`--older-than DAYS` counts only files last modified more than DAYS days ago, and the folders that hold them. Sizes, item counts, rankings and top files then describe that older data alone, so `space16x scan ~ --older-than 365` shows where the files you haven't touched in a year are. Folders without such files are left out, except folders that couldn't be read completely, which stay so their state still shows. Text reports add a line on standard error with the cutoff date, and JSON reports add `olderThanDays`. `--export` still saves the whole scan. Times before 1970 count as 1970.
+
+```sh
+space16x scan ~/Projects --older-than 180
+space16x scan /srv --older-than 365 --top 20 --json
+```
 
 ## Scan exit codes
 

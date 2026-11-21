@@ -345,7 +345,17 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         frame.render_widget(widget.wrap(Wrap { trim: true }), area);
         return;
     }
-    let columns = Columns::for_width(area.width, explorer.mode, explorer.sort, explorer.metric);
+    // Pro shows modification dates when the scan read them, which an import doesn't.
+    let dated = explorer
+        .scope()
+        .is_some_and(|scope| scope.details().modified().is_some());
+    let columns = Columns::for_width(
+        area.width,
+        explorer.mode,
+        explorer.sort,
+        explorer.metric,
+        dated,
+    );
     let header = columns.heading();
     paint(frame, line_at(area, 0), Line::styled(header, ACCENT));
     explorer.set_page_rows(usize::from(area.height.saturating_sub(1)));
@@ -376,6 +386,8 @@ struct Columns {
     name: usize,
     size: usize,
     items: usize,
+    /// Pro's Modified column, which is zero-width in Basic.
+    modified: usize,
     state: usize,
     share: usize,
     /// The sorted column, marked in the heading: None in the largest-files view.
@@ -384,11 +396,15 @@ struct Columns {
 }
 
 impl Columns {
-    fn for_width(width: u16, mode: Mode, sort: Sort, metric: Metric) -> Self {
+    fn for_width(width: u16, mode: Mode, sort: Sort, metric: Metric, dated: bool) -> Self {
         let width = usize::from(width);
         let size = (width / 3).min(13);
         let items = match (mode, width) {
             (Mode::Folders, 70..) => 9,
+            _ => 0,
+        };
+        let modified = match width {
+            96.. if cfg!(feature = "pro") && dated => 12,
             _ => 0,
         };
         let state = match width {
@@ -402,9 +418,10 @@ impl Columns {
             _ => 0,
         };
         Self {
-            name: width - size - items - state - share,
+            name: width - size - items - modified - state - share,
             size,
             items,
+            modified,
             state,
             share,
             sort: (mode == Mode::Folders).then_some(sort),
@@ -428,6 +445,11 @@ impl Columns {
                 width = self.items
             )
         };
+        let modified = if self.modified == 0 {
+            String::new()
+        } else {
+            format!("{:>width$}", "Modified", width = self.modified)
+        };
         let state = if self.state == 0 {
             String::new()
         } else {
@@ -445,7 +467,7 @@ impl Columns {
         };
         let size_label = format!("{size_label}{}", arrow(Sort::Size));
         format!(
-            "{}{:>width$}{items}{state}{share}",
+            "{}{:>width$}{items}{modified}{state}{share}",
             padded(name, self.name),
             shorten(&size_label, self.size, false),
             width = self.size,
@@ -530,6 +552,12 @@ impl Columns {
                 style(MUTED),
             ));
         }
+        if self.modified != 0 {
+            spans.push(Span::styled(
+                format!("{:>width$}", modified_date(entry), width = self.modified),
+                style(MUTED),
+            ));
+        }
         if self.state != 0 {
             spans.push(Span::styled(
                 padded(&format!("  {state}"), self.state),
@@ -557,6 +585,20 @@ impl Columns {
         }
         Line::from(spans)
     }
+}
+
+/// Pro: the entry's modification date, or a folder's newest one below it.
+#[cfg(feature = "pro")]
+fn modified_date(entry: Entry<'_>) -> String {
+    entry
+        .details()
+        .modified()
+        .map_or_else(|| "-".into(), crate::pro::format_date)
+}
+
+#[cfg(not(feature = "pro"))]
+fn modified_date(_entry: Entry<'_>) -> String {
+    String::new()
 }
 
 /// Formats an item count with thousands separators, such as 12,345.
@@ -846,17 +888,19 @@ fn draw_details(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         };
         format!("{} {word} ({binary}{bytes} bytes)", format_bytes(bytes))
     };
-    frame.render_widget(
-        Paragraph::new(vec![
-            Line::styled(size_line(entry.allocated_bytes(), "allocated"), ACCENT),
-            Line::raw(size_line(entry.apparent_bytes(), "apparent")),
-            Line::styled(state, MUTED),
-            Line::raw(""),
-            Line::raw(terminal_path(&entry.path())),
-        ])
-        .wrap(Wrap { trim: false }),
-        area,
-    );
+    let mut lines = vec![
+        Line::styled(size_line(entry.allocated_bytes(), "allocated"), ACCENT),
+        Line::raw(size_line(entry.apparent_bytes(), "apparent")),
+    ];
+    if cfg!(feature = "pro") && entry.details().modified().is_some() {
+        lines.push(Line::raw(format!("Modified {}", modified_date(entry))));
+    }
+    lines.extend([
+        Line::styled(state, MUTED),
+        Line::raw(""),
+        Line::raw(terminal_path(&entry.path())),
+    ]);
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
 }
 
 fn labeled_path(frame: &mut Frame<'_>, area: Rect, label: &'static str, path: &Path) {

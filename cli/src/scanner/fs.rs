@@ -8,7 +8,7 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use super::check_cancelled;
+use super::{Details, check_cancelled};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct Identity {
@@ -72,6 +72,8 @@ pub(super) struct FileMetadata {
     /// Allocated bytes (`st_blocks` × 512), or None beyond the byte range.
     pub allocated: Option<u64>,
     pub dataless: bool,
+    /// Pro's modification time and owner.
+    pub details: Details,
 }
 
 impl From<&libc::stat> for FileMetadata {
@@ -84,6 +86,7 @@ impl From<&libc::stat> for FileMetadata {
             // POSIX st_blocks describes 512-byte units, regardless of the filesystem block size.
             allocated: (metadata.st_blocks.max(0) as u64).checked_mul(512),
             dataless: is_dataless(metadata),
+            details: Details::from_stat(metadata),
         }
     }
 }
@@ -383,10 +386,16 @@ mod bulk {
     use std::os::unix::ffi::OsStrExt;
     use std::sync::atomic::AtomicBool;
 
-    use super::{DirectoryEntry, FileMetadata, Identity, Listed, check_cancelled};
+    use super::{Details, DirectoryEntry, FileMetadata, Identity, Listed, check_cancelled};
 
     // From the macOS SDK's <sys/attr.h> and <sys/vnode.h>.
     const ATTR_CMN_ERROR: u32 = 0x2000_0000;
+    /// Pro also reads each file's modification time and owner.
+    const DETAILS: u32 = if cfg!(feature = "pro") {
+        libc::ATTR_CMN_MODTIME | libc::ATTR_CMN_OWNERID
+    } else {
+        0
+    };
     const VREG: u32 = 1;
     const VDIR: u32 = 2;
     const SF_DATALESS: u32 = 0x4000_0000;
@@ -411,7 +420,8 @@ mod bulk {
                 | libc::ATTR_CMN_OBJTYPE
                 | libc::ATTR_CMN_FLAGS
                 | libc::ATTR_CMN_FILEID
-                | ATTR_CMN_ERROR,
+                | ATTR_CMN_ERROR
+                | DETAILS,
             volattr: 0,
             dirattr: 0,
             fileattr: libc::ATTR_FILE_LINKCOUNT
@@ -505,6 +515,10 @@ mod bulk {
         };
         let device = take(libc::ATTR_CMN_DEVID, common, false)?;
         let kind = take(libc::ATTR_CMN_OBJTYPE, common, false)?;
+        // A timespec: seconds, then nanoseconds.
+        let modified = take(libc::ATTR_CMN_MODTIME, common, true)?;
+        let _nanoseconds = take(libc::ATTR_CMN_MODTIME, common, true)?;
+        let owner = take(libc::ATTR_CMN_OWNERID, common, false)?;
         let flags = take(libc::ATTR_CMN_FLAGS, common, false)?;
         let inode = take(libc::ATTR_CMN_FILEID, common, true)?;
         let links = take(libc::ATTR_FILE_LINKCOUNT, file, false)?;
@@ -533,6 +547,7 @@ mod bulk {
                             size: (size as i64).max(0) as u64,
                             allocated: Some((allocated as i64).max(0) as u64),
                             dataless: flags as u32 & SF_DATALESS != 0,
+                            details: details(modified, owner),
                         })
                     }
                     _ => Listed::Unknown,
@@ -545,6 +560,20 @@ mod bulk {
             name: OsStr::from_bytes(name).to_owned(),
             listed,
         }))
+    }
+
+    #[cfg(feature = "pro")]
+    fn details(modified: Option<u64>, owner: Option<u64>) -> Details {
+        match modified {
+            // time_t seconds, which are signed.
+            Some(seconds) => Details::new(seconds as i64, owner.map_or(0, |owner| owner as u32)),
+            None => Details::default(),
+        }
+    }
+
+    #[cfg(not(feature = "pro"))]
+    fn details(_modified: Option<u64>, _owner: Option<u64>) -> Details {
+        Details::default()
     }
 
     struct Reader<'a> {

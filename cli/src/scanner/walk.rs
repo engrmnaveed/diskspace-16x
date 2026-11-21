@@ -21,7 +21,7 @@ use super::fs::{
 use super::startup_volume::StartupVolume;
 use super::tree::{NodeId, Tree, TreeBuilder};
 use super::{
-    EntryKind, EntryState, Event, Excludes, Issue, IssueKind, Report, check_cancelled,
+    Details, EntryKind, EntryState, Event, Excludes, Issue, IssueKind, Report, check_cancelled,
     record_issue, relative_bytes,
 };
 
@@ -33,6 +33,8 @@ pub(super) struct Scope<'a> {
     /// original scan root, so anchored patterns such as `/build` still apply there.
     pub(super) exclude_root_length: usize,
     pub(super) device: libc::dev_t,
+    /// Pro's details of the scan root itself.
+    pub(super) root_details: Details,
     pub(super) cancelled: &'a AtomicBool,
     #[cfg(target_os = "macos")]
     pub(super) startup_volume: Option<StartupVolume>,
@@ -133,6 +135,8 @@ struct Child {
     state: EntryState,
     allocated: u64,
     apparent: u64,
+    /// Pro's modification time and owner, which take no space in Basic.
+    details: Details,
     folder: Option<Arc<Slot>>,
 }
 
@@ -352,8 +356,9 @@ impl<'a> Worker<'a> {
                     }
                 }
                 let identity = Identity::from(&metadata);
+                let details = Details::from_stat(&metadata);
                 if fs::is_dataless(&metadata) {
-                    add_folder(record, name, EntryState::CloudOnly, None);
+                    add_folder(record, name, EntryState::CloudOnly, details, None);
                     return Ok(());
                 }
                 let chain = ancestors.get_or_insert_with(|| {
@@ -367,7 +372,7 @@ impl<'a> Worker<'a> {
                         self.path.clone(),
                         "Skipped a directory that points back to an ancestor.",
                     ));
-                    add_folder(record, name, EntryState::Incomplete, None);
+                    add_folder(record, name, EntryState::Incomplete, details, None);
                     return Ok(());
                 }
                 let slot = Arc::new(Slot::default());
@@ -382,7 +387,13 @@ impl<'a> Worker<'a> {
                     segment.outstanding.fetch_add(1, Ordering::AcqRel);
                     Some(segment)
                 };
-                add_folder(record, name, EntryState::Local, Some(Arc::clone(&slot)));
+                add_folder(
+                    record,
+                    name,
+                    EntryState::Local,
+                    details,
+                    Some(Arc::clone(&slot)),
+                );
                 tasks.push(Task {
                     path: self.path.clone(),
                     parent: Some(Arc::clone(fd)),
@@ -430,12 +441,19 @@ impl<'a> Worker<'a> {
             state,
             allocated,
             apparent,
+            details: metadata.details,
             folder: None,
         });
     }
 }
 
-fn add_folder(record: &mut Record, name: &OsStr, state: EntryState, folder: Option<Arc<Slot>>) {
+fn add_folder(
+    record: &mut Record,
+    name: &OsStr,
+    state: EntryState,
+    details: Details,
+    folder: Option<Arc<Slot>>,
+) {
     record.names.extend_from_slice(name.as_bytes());
     record.children.push(Child {
         name_end: record.names.len() as u32,
@@ -443,6 +461,7 @@ fn add_folder(record: &mut Record, name: &OsStr, state: EntryState, folder: Opti
         state,
         allocated: 0,
         apparent: 0,
+        details,
         folder,
     });
 }
@@ -484,12 +503,12 @@ fn take_record(slot: Arc<Slot>) -> Option<Record> {
 
 /// Builds a preview tree from the records below `root`. Second-level folders whose
 /// subtrees aren't finished show as pending.
-pub(super) fn preview(path: &Path, root: &Slot) -> io::Result<Tree> {
+pub(super) fn preview(path: &Path, root: &Slot, details: Details) -> io::Result<Tree> {
     let record = root
         .record
         .get()
         .expect("the root is listed before previews");
-    Ok(compose(path, Held::Borrowed(record), true, (0, 0))?.0)
+    Ok(compose(path, Held::Borrowed(record), details, true, (0, 0))?.0)
 }
 
 /// Builds the final tree from the records below `root`, consuming them. Returns the
@@ -497,10 +516,11 @@ pub(super) fn preview(path: &Path, root: &Slot) -> io::Result<Tree> {
 pub(super) fn complete(
     path: &Path,
     root: Arc<Slot>,
+    details: Details,
     capacity: (usize, usize),
 ) -> io::Result<(Tree, Vec<NodeId>)> {
     let record = take_record(root).expect("the root is listed before composing");
-    compose(path, Held::Owned(record), false, capacity)
+    compose(path, Held::Owned(record), details, false, capacity)
 }
 
 /// Walks the records depth first, which also assigns each hard-linked file to its
@@ -508,12 +528,14 @@ pub(super) fn complete(
 fn compose(
     path: &Path,
     root: Held<'_>,
+    root_details: Details,
     preview: bool,
     capacity: (usize, usize),
 ) -> io::Result<(Tree, Vec<NodeId>)> {
     let own_state = root.get().own_state;
     let mut builder =
         TreeBuilder::with_capacity(path.to_path_buf(), own_state, capacity.0, capacity.1);
+    builder.set_details(root_details);
     let mut links = HashSet::new();
     // A pending folder earlier in depth-first order might hold the first link to a file.
     let mut pending_before = false;
@@ -552,10 +574,13 @@ fn compose(
                     }
                 }
                 builder.file(name, allocated, apparent, state);
+                builder.set_details(child.details);
                 continue;
             }
             (None, _) => {
-                builder.folder(name, child.state);
+                builder.open_folder(name, child.state);
+                builder.set_details(child.details);
+                builder.close_folder();
                 continue;
             }
             (Some(slot), _) => slot,
@@ -568,10 +593,13 @@ fn compose(
             .map(|r| r.own_state)
         else {
             pending_before = true;
-            builder.folder(name, EntryState::Pending);
+            builder.open_folder(name, EntryState::Pending);
+            builder.set_details(child.details);
+            builder.close_folder();
             continue;
         };
         builder.open_folder(name, own_state);
+        builder.set_details(child.details);
         let next = match top.0 {
             Held::Borrowed(record) => record.children[position]
                 .folder
@@ -672,7 +700,7 @@ pub(super) fn snapshot(
     issues: &[Issue],
     excluded_count: u64,
 ) -> io::Result<Report> {
-    let tree = preview(&scope.root, root)?;
+    let tree = preview(&scope.root, root, scope.root_details)?;
     let mut issues = issues.to_vec();
     sort_issues(&mut issues);
     Ok(Report {
@@ -692,7 +720,7 @@ pub(super) fn finish(
     capacity: (usize, usize),
 ) -> io::Result<Report> {
     check_cancelled(scope.cancelled)?;
-    let (tree, overflowed) = complete(&scope.root, root, capacity)?;
+    let (tree, overflowed) = complete(&scope.root, root, scope.root_details, capacity)?;
     for id in overflowed {
         issues.push(Issue {
             path: tree.path(id),
@@ -733,6 +761,7 @@ mod tests {
                 state: EntryState::Local,
                 allocated: 0,
                 apparent: 0,
+                details: Details::default(),
                 folder: Some(folder),
             });
             let record = Record {
@@ -751,7 +780,13 @@ mod tests {
     fn handles_very_deep_trees_without_recursion() {
         // Recursive drops or walks would overflow a test thread's stack at this depth.
         drop(chain(200_000));
-        let (tree, _) = complete(Path::new("/deep"), chain(200_000), (0, 0)).unwrap();
+        let (tree, _) = complete(
+            Path::new("/deep"),
+            chain(200_000),
+            Details::default(),
+            (0, 0),
+        )
+        .unwrap();
         assert_eq!(tree.root().item_count(), 199_999);
         assert_eq!(tree.root().descendants().count(), 199_999);
     }

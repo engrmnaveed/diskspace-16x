@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 
 def run(binary, *arguments, status=0, cwd=None, preexec_fn=None):
@@ -40,6 +41,9 @@ def check(binary, root):
         # Basic answers Pro subcommands with an install hint.
         hint = run(binary, "diff", "old.json", "new.json", status=1)
         assert "Space 16X Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
+        for option in (("--older-than", "30"),):
+            hint = run(binary, "scan", root, *option, status=1)
+            assert "Space 16X Pro" in hint.stderr and not hint.stdout, hint.stderr
         assert "install.sh --pro" in run(binary, "--help").stdout
 
     data = root / "Nested folder"
@@ -80,6 +84,9 @@ def check(binary, root):
     depth = json.loads(run(binary, "scan", "--json", cwd=root).stdout)
     assert depth["schemaVersion"] == 3 and depth["scope"] == str(root)
     assert depth["depth"] == 1
+    # Pro adds each entry's newest modification time.
+    dated = [entry.pop("newestModified", None) for entry in depth["entries"]]
+    assert all(dated) if edition(binary) == "pro" else not any(dated), dated
     assert depth["entries"] == [{
         "path": str(data), "allocatedBytes": total_bytes, "apparentBytes": apparent_total,
         "kind": "directory", "itemCount": 3,
@@ -332,6 +339,51 @@ def check_diff(binary):
             assert run(binary, *invalid, status=1).stderr
 
 
+def build_modified_fixture(root):
+    """Creates fixtures/modified-times.json below root and returns the table."""
+    table = json.loads(
+        (Path(__file__).parent.parent / "fixtures" / "modified-times.json").read_text(encoding="utf-8")
+    )
+    for folder in table["folders"]:
+        (root / folder).mkdir(parents=True, exist_ok=True)
+    for file in table["files"]:
+        path = root / file["path"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if "hardLinkTo" in file:
+            os.link(root / file["hardLinkTo"], path)
+        else:
+            path.write_bytes(os.urandom(5000))
+            os.utime(path, (file["modified"], file["modified"]))
+    return table
+
+
+def check_modified(binary):
+    """Pro: JSON reports newest modification times, and --older-than keeps older files."""
+    with tempfile.TemporaryDirectory(prefix="space16x-modified-") as directory:
+        root = Path(directory).resolve()
+        table = build_modified_fixture(root)
+        report = json.loads(run(binary, "scan", root, "--depth", "3", "--json").stdout)
+        assert report["newestModified"] == table["newest"][""], report
+        rows = {str(Path(row["path"]).relative_to(root)): row for row in report["entries"]}
+        for path, newest in table["newest"].items():
+            if path:
+                assert rows[path].get("newestModified") == newest, (path, rows[path])
+        top = json.loads(run(binary, "scan", root, "--top", "1", "--json").stdout)
+        assert "newestModified" in top["topFiles"][0], top
+
+        # Any cutoff between the fixture's 2022 and 2023 files keeps the same entries.
+        days = (int(time.time()) - 1_675_000_000) // 86_400
+        old = json.loads(run(binary, "scan", root, "--depth", "3", "--older-than", days, "--json").stdout)
+        kept = [str(Path(row["path"]).relative_to(root)) for row in old["entries"]]
+        assert sorted(kept) == sorted(table["olderThan"]["kept"]), kept
+        assert old["olderThanDays"] == days and old["allocatedBytes"] < report["allocatedBytes"], old
+        text = run(binary, "scan", root, "--older-than", days)
+        assert "fresh.bin" not in text.stdout and "docs" in text.stdout, text.stdout
+        assert f"more than {days} days ago" in text.stderr, text.stderr
+        for invalid in (("--older-than",), ("--older-than", "-3"), ("--older-than", "1", "--export", "-")):
+            assert run(binary, "scan", root, *invalid, status=1).stderr
+
+
 def check_deep_tree(binary, root):
     # Each traversal level keeps a descriptor open. Start only the child at launchd's soft limit.
     deepest = root.joinpath(*(["d"] * 300))
@@ -360,6 +412,7 @@ def main():
     check_volumes(binary)
     if edition(binary) == "pro":
         check_diff(binary)
+        check_modified(binary)
     print("CLI acceptance checks passed.")
 
 

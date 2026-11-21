@@ -85,7 +85,8 @@ extension ScanEntry {
         return ScanEntry(
             name: name, container: container, isDirectory: isDirectory, isHardLinkAlias: isHardLinkAlias,
             isCloudOnly: isCloudOnly, isPending: isPending,
-            logicalBytes: logical, allocatedBytes: allocated, itemCount: items, children: kept
+            logicalBytes: logical, allocatedBytes: allocated, itemCount: items, children: kept,
+            newestModified: ScanEntry.newest(of: kept)
         )
     }
 }

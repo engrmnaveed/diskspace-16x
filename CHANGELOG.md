@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- See when files last changed in Space 16X Pro. The CLI explorer adds a **Modified** column with each item's newest modification date, a folder's being the newest of any file inside, and JSON reports add `newestModified` in Unix seconds. `space16x scan --older-than DAYS` counts only files last modified more than DAYS days ago, so sizes, rankings and top files show where old data sits. In the Mac app, with **Settings → Pro features** on, the folder list and Largest Files add a sortable **Modified** column. Pro reads the times with the same metadata calls as sizes, keeps them in a side table beside the scan tree, and Basic's memory and output are unchanged.
+
 ## 0.6.0
 
 - Save a scan and browse it later or on another computer. `space16x scan --export FILE` saves the whole scan in ncdu's JSON format, and `--export -` writes it to standard output. `space16x --import FILE` or `--import -` opens it in the explorer, read-only, so `ssh -C server space16x scan / --export - | space16x --import -` scans a server and browses the result locally. ncdu and gdu open these exports, and Space 16X opens theirs. Without a terminal, `--import` prints the one-level report.
