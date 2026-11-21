@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — M4 is in progress, one PR per item below. M4.1 to M4.5 (export and import, `volumes`, the editions, `diff` and Compare) are done. Next: M4.6, the promo refresh (`docs/promo.md`) showing the new visible features, the manual QA rows, and both editions' archive sizes in `docs/qa.md`. Then M4.7, release v0.6.0, and pause for the owner's review. Pro per-node data goes in side tables keyed by the arena's `NodeId` (§4). Full LTO with one codegen unit (M4.1) brought a local Linux x86-64 archive to about 575 KB with export and import, against the 600 KB Basic budget.
+**Resume here** — M4 is in progress, one PR per item below. M4.1 to M4.6 are done. Next: M4.7, release v0.6.0 (a `release/v0.6.0` PR as in commit `94048f5`, then the tag, then check that Publish release ships both editions' archives), and pause for the owner's review. Pro per-node data goes in side tables keyed by the arena's `NodeId` (§4). Full LTO with one codegen unit (M4.1) brought a local Linux x86-64 archive to about 575 KB with export and import, against the 600 KB Basic budget.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -41,7 +41,7 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 - [x] M4.3 Basic volumes: `space16x volumes [--all] [--json]` (size, used, free and inodes from `statvfs`, or `statfs` on macOS) in `cli/src/volumes.rs`, and a volume list on the Mac start screen that scans the volume you click
 - [x] M4.4 Edition scaffolding: the `pro` Cargo feature, Basic hints for Pro subcommands, `(pro)` in `--version` and `"edition": "pro"`, `space16x-pro-<target>` archives from `package-cli.sh --pro`, `install.sh --pro` (one-liners re-pinned), both editions linted, tested and checked in the existing CI jobs (job names unchanged), Mac **Settings → Pro features** and a `SpacePro` target, docs
 - [x] M4.5 Pro: `space16x diff OLD NEW|PATH [--depth N | --top N] [--apparent] [--json]` in `cli/src/pro/diff.rs` (a folder NEW is scanned with OLD's excludes), and Mac **Compare** (`SpacePro/ScanComparison.swift`): a sortable Change column, the folder's change and removed items, shown when **Settings → Pro features** is on
-- [ ] M4.6 Promo refresh, manual QA rows, archive sizes for both editions in `docs/qa.md`
+- [x] M4.6 Promo refresh (an import piped from `ssh` and Pro's Compare, 29 s), manual QA rows, benchmarks and both editions' archive sizes in `docs/qa.md`
 - [ ] M4.7 Release v0.6.0
 
 ### Later milestones

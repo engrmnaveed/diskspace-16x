@@ -1,5 +1,25 @@
 # Space 16X verification
 
+## 0.6.0
+
+Milestone 4 (Carry, compare, editions) on the Apple M5 Pro MacBook Pro with macOS 27.2.1, APFS and Rust 1.100.0.
+
+- The Rust CLI passed 73 unit tests in the Basic edition and 77 with `--features pro`. New tests cover ncdu export and import (a round trip with states, issues, excludes and non-UTF-8 names; ncdu and gdu files with hard links, exclusions, special files, read errors, escapes and unknown keys; malformed files), the explorer's read-only imported mode, `volumes` (rounding, the table, JSON and the root volume), edition routing, and `diff` (depth listings, top files, signed totals). The Swift and Rust importers read the same files in `fixtures/scan-exports/` and agree on every entry's sizes, item counts and flags, every issue, and the excluded count.
+- `scripts/check-cli.py` covers `--export` to a file and to standard output, `--import` from a file and a pipe, partial exports, `volumes`, the Basic hint for Pro commands, and with the Pro archive, `diff`. On the Linux CI runners, ncdu 1.19 and gdu open our export, and we open theirs with the same totals as our own scan. `scripts/check-tui.py` drives an imported scan from a file and from a pipe in a pseudo-terminal. `scripts/check-install.py` switches between the Basic and Pro archives.
+- All 42 Swift tests passed. They include the shared export fixtures, a round trip of a real scan, volume summaries, and Pro's comparison below different roots.
+- Offscreen renders of the shipping views checked the start screen with the volume list and **Open a Saved Scan…**, an opened scan with the read-only label, **Settings → Pro features**, and Compare with its Change column ranked by growth.
+- 1,000,000 files exported in a 50 MB file. Scanning and exporting took 1.23 s, and importing took 0.23 s with a 33 MB peak, because the reader streams.
+- Local release archives (macOS `tar` and `gzip`), Basic and Pro: `aarch64-apple-darwin` 504,101 and 527,196 bytes, and `x86_64-unknown-linux-musl` 588,977 and 616,395. 0.5.0's published `aarch64-apple-darwin` archive was 532,615 bytes. Building with full LTO and one codegen unit took about 28 KB off each archive before the new features, so Basic stays under the 600 KB budget with export, import and `volumes`, and with no new dependencies. Pro has no size budget and no dependencies of its own yet.
+
+Rust release CLI, `scripts/benchmark.py`, the same day:
+
+| Fixture | 0.5.0 | 0.6.0 Basic |
+| --- | --- | --- |
+| 100,000 files | 0.0415, 0.0393, 0.0392 s; 18.7–18.8 MB | 0.0428, 0.0404, 0.0404 s; 18.5–18.6 MB |
+| 1,000,000 files | 1.148, 1.147, 1.145 s; 120.2–120.3 MB | 1.146, 1.138, 1.134 s; 120.0–120.2 MB |
+
+Scans are as fast as in 0.5.0 and use the same memory.
+
 ## 0.5.0
 
 Milestone 3 (Speed) on the Apple M5 Pro MacBook Pro with macOS 27.2.1, APFS and Rust 1.100.0.

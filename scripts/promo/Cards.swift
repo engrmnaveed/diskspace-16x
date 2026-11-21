@@ -62,6 +62,11 @@ struct Cards {
                   detail: "Print your top five files.", progress: 2) { canvas in
             terminal(on: canvas, top: 646)
         }
+        try short("carry", section: "CLI  /  macOS + LINUX", title: ["Scan a server.", "Browse it here."],
+                  detail: "Pipe a saved scan into the explorer.", progress: 2) { canvas in
+            pipeline(on: canvas, top: 646)
+            explorerPanel("import", on: canvas, x: 74, top: 868, width: 916, limit: 11)
+        }
         try short("map", section: "DESKTOP  /  macOS", title: ["Spot the", "biggest folder."],
                   detail: "Bigger blocks use more disk space.", progress: 3) { canvas in
             appPanel("treemap", on: canvas, top: 646)
@@ -70,9 +75,9 @@ struct Cards {
                   detail: "Switch to the donut chart.", progress: 4) { canvas in
             appPanel("donut", on: canvas, top: 646)
         }
-        try short("sort", section: "DESKTOP  /  macOS", title: ["Sort by size,", "items, or name."],
-                  detail: "Click a column to re-sort.", progress: 5) { canvas in
-            appPanel("list", on: canvas, top: 646)
+        try short("compare", section: "DESKTOP  /  PRO", title: ["See what grew", "since Monday."],
+                  detail: "Compare with a saved scan.", progress: 5) { canvas in
+            appPanel("compare", on: canvas, top: 646)
         }
         try short("end", section: "DISK SPACE ANALYZER", title: ["Find the", "space hogs."],
                   detail: "Free and open source.", progress: 6) { canvas in
@@ -159,6 +164,14 @@ struct Cards {
         canvas.text("$ space16x", x: 102, y: top + 111,
                     size: 49, weight: .semibold, ink: mint, mono: true)
         canvas.panel(CGRect(x: 404, y: top + 121, width: 24, height: 42), fill: mint, radius: 2)
+    }
+
+    private func pipeline(on canvas: PromoCanvas, top: CGFloat) {
+        terminalWindow(CGRect(x: 74, y: top, width: 916, height: 196), on: canvas)
+        canvas.text("$ ssh server space16x scan /srv \\", x: 102, y: top + 88,
+                    size: 33, weight: .semibold, ink: mint, mono: true)
+        canvas.text("    --export - | space16x --import -", x: 102, y: top + 136,
+                    size: 33, weight: .semibold, ink: mint, mono: true)
     }
 
     private func explorerPanel(

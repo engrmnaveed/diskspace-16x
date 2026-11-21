@@ -9,6 +9,7 @@
 - Compare scans in Space 16X Pro. `space16x diff OLD NEW|PATH` compares a saved scan with another one, or with a folder scanned now using the saved scan's exclude patterns, and lists what grew or shrank one level down. `--depth N` goes deeper, `--top N` lists the files that changed most, including added and removed ones, and `--json` writes schema 3. In the Mac app, with **Settings → Pro features** on, **Compare…** above the folder list (or **Scan → Compare with Saved Scan…**, ⇧⌘K) adds a **Change** column, sortable by change, with the folder's total change and the items removed since then.
 - Build the CLI with full link-time optimization and one codegen unit, which keeps the release archives smaller than 0.5.0's with export and import added. Scan speed is unchanged.
 - Fix a trailing slash after the scan root in the total line of text reports, which 0.5.0 added.
+- Refresh the promo Short to show a server's scan piped into the CLI explorer and the Mac app's Compare.
 
 ## 0.5.0
 
