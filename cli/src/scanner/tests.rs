@@ -6,6 +6,16 @@ use std::time::Duration;
 
 static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
 
+/// Threads for most tests, so they exercise the parallel walk.
+const THREADS: usize = 4;
+
+fn options(excludes: &Excludes) -> Options<'_> {
+    Options {
+        excludes,
+        threads: THREADS,
+    }
+}
+
 struct Fixture(PathBuf);
 
 impl Fixture {
@@ -30,7 +40,7 @@ impl Fixture {
     fn report(&self) -> io::Result<Report> {
         scan(
             self.path(),
-            &Excludes::default(),
+            options(&Excludes::default()),
             false,
             &AtomicBool::new(false),
             |_| {},
@@ -126,7 +136,7 @@ fn skips_excluded_entries_without_reading_them() -> io::Result<()> {
 
     let report = scan(
         fixture.path(),
-        &excludes,
+        options(&excludes),
         false,
         &AtomicBool::new(false),
         |_| {},
@@ -179,7 +189,7 @@ fn ordinary_directory_with_startup_volume_layout_counts_both_trees() -> io::Resu
 
     let report = scan(
         fixture.path(),
-        &Excludes::default(),
+        options(&Excludes::default()),
         true,
         &AtomicBool::new(false),
         |_| {},
@@ -202,12 +212,19 @@ fn rejects_non_directory_roots_and_root_symlinks_with_trailing_slash() -> io::Re
     let cancelled = AtomicBool::new(false);
     let link = fixture.join("link/");
     for root in [fixture.join("file"), fixture.join("link"), link] {
-        let error = scan(&root, &Excludes::default(), false, &cancelled, |_| {}).unwrap_err();
+        let error = scan(
+            &root,
+            options(&Excludes::default()),
+            false,
+            &cancelled,
+            |_| {},
+        )
+        .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
     let report = scan(
         &fixture.join("local/./"),
-        &Excludes::default(),
+        options(&Excludes::default()),
         false,
         &cancelled,
         |_| {},
@@ -231,7 +248,7 @@ fn reports_unreadable_descendants_and_fails_for_an_unreadable_root() -> io::Resu
     let report = fixture.report();
     let failed = scan(
         &private,
-        &Excludes::default(),
+        options(&Excludes::default()),
         false,
         &AtomicBool::new(false),
         |_| {},
@@ -288,9 +305,13 @@ fn previews_leave_deep_and_hard_link_bytes_unassigned_until_dfs() -> io::Result<
     let mut snapshots = Vec::new();
     let mut progress = Vec::new();
 
+    // One thread walks in a fixed order, so the update after A/deeper is predictable.
     let final_report = scan(
         fixture.path(),
-        &Excludes::default(),
+        Options {
+            excludes: &Excludes::default(),
+            threads: 1,
+        },
         true,
         &AtomicBool::new(false),
         |event| {
@@ -365,7 +386,7 @@ fn cancellation_preserves_the_emitted_preview_without_a_final_snapshot() -> io::
     let mut snapshots = Vec::new();
     let result = scan(
         fixture.path(),
-        &Excludes::default(),
+        options(&Excludes::default()),
         true,
         &cancelled,
         |event| {
@@ -417,7 +438,13 @@ fn classifies_access_refusals_as_protected() {
 }
 
 fn rescan_folder(root: &Path, folder: &Path, excludes: &Excludes) -> io::Result<Report> {
-    rescan(root, folder, excludes, &AtomicBool::new(false), |_| {})
+    rescan(
+        root,
+        folder,
+        options(excludes),
+        &AtomicBool::new(false),
+        |_| {},
+    )
 }
 
 fn assert_same_tree(left: Entry<'_>, right: Entry<'_>) {
@@ -475,7 +502,7 @@ fn rescanning_keeps_exclude_patterns_relative_to_the_scan_root() -> io::Result<(
     let excludes = Excludes::new(["/app/build"]).expect("valid pattern");
     let full = scan(
         fixture.path(),
-        &excludes,
+        options(&excludes),
         false,
         &AtomicBool::new(false),
         |_| {},
@@ -553,5 +580,186 @@ fn replacing_needs_a_folder_in_the_report() -> io::Result<()> {
             .replacing(elsewhere(fixture.join("file.bin")))
             .is_none()
     );
+    Ok(())
+}
+
+/// A tree whose folders are read by different threads, with hard links between them,
+/// an unreadable folder, a symlink and an excluded file.
+fn busy_fixture() -> io::Result<Fixture> {
+    let fixture = Fixture::new()?;
+    for group in 0..6 {
+        for folder in 0..12 {
+            let path = fixture.join(format!("g{group}/f{folder:02}/inner"));
+            fs::create_dir_all(&path)?;
+            for file in 0..5 {
+                let bytes = vec![group as u8; 1 + 977 * (folder * 5 + file)];
+                fs::write(path.join(format!("{file}.bin")), bytes)?;
+            }
+            fs::write(path.join("skip.log"), [9; 50])?;
+        }
+    }
+    // Each file below has links in several groups. The first path in depth-first order
+    // owns it: g0 for the first, g1 for the second, and the top-level file for the last.
+    fs::write(fixture.join("g5/f11/inner/shared.bin"), [7; 20_000])?;
+    fs::hard_link(
+        fixture.join("g5/f11/inner/shared.bin"),
+        fixture.join("g0/f03/inner/z.bin"),
+    )?;
+    fs::hard_link(
+        fixture.join("g5/f11/inner/shared.bin"),
+        fixture.join("g3/f00/link.bin"),
+    )?;
+    fs::write(fixture.join("g4/f01/inner/second.bin"), [8; 30_000])?;
+    fs::hard_link(
+        fixture.join("g4/f01/inner/second.bin"),
+        fixture.join("g1/f07/inner/a.bin"),
+    )?;
+    fs::write(fixture.join("top.bin"), [6; 10_000])?;
+    fs::hard_link(
+        fixture.join("top.bin"),
+        fixture.join("g2/f05/inner/late.bin"),
+    )?;
+    symlink(fixture.join("g0"), fixture.join("g1/loop"))?;
+    Ok(fixture)
+}
+
+#[test]
+fn parallel_walks_match_a_single_thread_on_every_run() -> io::Result<()> {
+    let fixture = busy_fixture()?;
+    let excludes = Excludes::new(["*.log"]).map_err(io::Error::other)?;
+    let scan_with = |threads| {
+        scan(
+            fixture.path(),
+            Options {
+                excludes: &excludes,
+                threads,
+            },
+            false,
+            &AtomicBool::new(false),
+            |_| {},
+        )
+    };
+    let expected = scan_with(1)?;
+    assert_eq!(expected.excluded_count, 72);
+    let owner = |report: &Report, path: &str| {
+        let id = report.tree.find(&fixture.join(path)).unwrap();
+        report.tree.entry(id).state()
+    };
+    for (path, state) in [
+        ("g0/f03/inner/z.bin", EntryState::Local),
+        ("g3/f00/link.bin", EntryState::HardLinkAlias),
+        ("g5/f11/inner/shared.bin", EntryState::HardLinkAlias),
+        ("g1/f07/inner/a.bin", EntryState::Local),
+        ("g4/f01/inner/second.bin", EntryState::HardLinkAlias),
+        ("g2/f05/inner/late.bin", EntryState::Local),
+        ("top.bin", EntryState::HardLinkAlias),
+    ] {
+        assert_eq!(owner(&expected, path), state, "{path}");
+    }
+    for threads in [2, 3, 8] {
+        for _ in 0..4 {
+            let report = scan_with(threads)?;
+            assert_same_tree(report.root(), expected.root());
+            assert_eq!(report.excluded_count, expected.excluded_count);
+            let issues = |report: &Report| {
+                report
+                    .issues
+                    .iter()
+                    .map(|issue| (issue.path.clone(), issue.message.clone()))
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(issues(&report), issues(&expected));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn parallel_walks_report_unreadable_folders_in_path_order() -> io::Result<()> {
+    // SAFETY: geteuid takes no arguments and cannot modify process state.
+    if unsafe { libc::geteuid() } == 0 {
+        return Ok(());
+    }
+    let fixture = busy_fixture()?;
+    let locked = [fixture.join("g4/f09"), fixture.join("g1/f02/inner")];
+    for path in &locked {
+        fs::set_permissions(path, fs::Permissions::from_mode(0o0))?;
+    }
+    let reports: Vec<_> = [1, 8]
+        .into_iter()
+        .map(|threads| {
+            scan(
+                fixture.path(),
+                Options {
+                    excludes: &Excludes::default(),
+                    threads,
+                },
+                false,
+                &AtomicBool::new(false),
+                |_| {},
+            )
+        })
+        .collect();
+    for path in &locked {
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+    }
+    let reports = reports.into_iter().collect::<io::Result<Vec<_>>>()?;
+    for report in &reports {
+        let paths: Vec<_> = report
+            .issues
+            .iter()
+            .map(|issue| issue.path.clone())
+            .collect();
+        assert_eq!(paths, [locked[1].clone(), locked[0].clone()]);
+        assert_eq!(report.root().state(), EntryState::Protected);
+    }
+    assert_same_tree(reports[0].root(), reports[1].root());
+    Ok(())
+}
+
+#[test]
+fn parallel_previews_show_two_levels_first_and_stop_when_cancelled() -> io::Result<()> {
+    let fixture = busy_fixture()?;
+    let cancelled = AtomicBool::new(false);
+    let mut snapshots = Vec::new();
+    let result = scan(
+        fixture.path(),
+        options(&Excludes::default()),
+        true,
+        &cancelled,
+        |event| {
+            if let Event::Snapshot(report) = event {
+                snapshots.push(report);
+                cancelled.store(true, Ordering::Relaxed);
+            }
+        },
+    );
+    assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Interrupted);
+    assert_eq!(snapshots.len(), 1);
+    let initial = &snapshots[0];
+    assert!(initial.is_preview);
+    assert_eq!(initial.root().state(), EntryState::Pending);
+    let group = child(initial.root(), "g3");
+    assert_eq!(group.children().count(), 12);
+    assert!(
+        group
+            .children()
+            .all(|folder| folder.state() == EntryState::Pending)
+    );
+    // top.bin has a link in a pending folder that comes first, so it waits too.
+    assert_eq!(
+        child(initial.root(), "top.bin").state(),
+        EntryState::Pending
+    );
+
+    let complete = scan(
+        fixture.path(),
+        options(&Excludes::default()),
+        true,
+        &AtomicBool::new(false),
+        |_| {},
+    )?;
+    assert!(!complete.is_preview);
+    assert_eq!(complete.root().state(), EntryState::Local);
     Ok(())
 }

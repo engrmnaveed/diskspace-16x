@@ -26,7 +26,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub fn run(path: &Path, excludes: Excludes, plain: bool, read_only: bool) -> io::Result<()> {
+pub fn run(
+    path: &Path,
+    excludes: Excludes,
+    threads: usize,
+    plain: bool,
+    read_only: bool,
+) -> io::Result<()> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -36,7 +42,7 @@ pub fn run(path: &Path, excludes: Excludes, plain: bool, read_only: bool) -> io:
 
     let _mode = TerminalMode::enter()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-    let mut worker = ScanWorker::start(path.to_path_buf(), None, excludes.clone())?;
+    let mut worker = ScanWorker::start(path.to_path_buf(), None, excludes.clone(), threads)?;
     let ranking = RankWorker::start()?;
     let mut explorer = Explorer::new(path);
     explorer.read_only = read_only;
@@ -95,7 +101,7 @@ pub fn run(path: &Path, excludes: Excludes, plain: bool, read_only: bool) -> io:
                         explorer.finish_trash(results);
                     }
                     Action::Rescan { root, folder } => {
-                        worker = ScanWorker::start(folder, Some(root), excludes.clone())?;
+                        worker = ScanWorker::start(folder, Some(root), excludes.clone(), threads)?;
                     }
                     Action::Quit => return explorer.quit(),
                 }
@@ -184,7 +190,12 @@ struct ScanWorker {
 impl ScanWorker {
     /// Scans `path`, or rescans that folder of an earlier scan of `root` without
     /// previews.
-    fn start(path: PathBuf, root: Option<PathBuf>, excludes: Excludes) -> io::Result<Self> {
+    fn start(
+        path: PathBuf,
+        root: Option<PathBuf>,
+        excludes: Excludes,
+        threads: usize,
+    ) -> io::Result<Self> {
         let cancelled = Arc::new(AtomicBool::new(false));
         let update = Arc::new(Mutex::new(ScanUpdate::default()));
         let worker_cancelled = Arc::clone(&cancelled);
@@ -209,11 +220,13 @@ impl ScanWorker {
                     drop(pending);
                     drop(superseded);
                 };
+                let options = scanner::Options {
+                    excludes: &excludes,
+                    threads,
+                };
                 let result = match &root {
-                    Some(root) => {
-                        scanner::rescan(root, &path, &excludes, &worker_cancelled, notify)
-                    }
-                    None => scanner::scan(&path, &excludes, true, &worker_cancelled, notify),
+                    Some(root) => scanner::rescan(root, &path, options, &worker_cancelled, notify),
+                    None => scanner::scan(&path, options, true, &worker_cancelled, notify),
                 };
                 let mut pending = worker_update
                     .lock()
