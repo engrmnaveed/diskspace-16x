@@ -7,6 +7,8 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage(ExcludeSettings.key) private var text = ""
     @AppStorage(ProFeatures.defaultsKey) private var proFeatures = false
+    @AppStorage(LowSpaceAlert.monitorKey) private var showsFreeSpace = false
+    @AppStorage(LowSpaceAlert.thresholdKey) private var thresholdGB = LowSpaceAlert.defaultThresholdGB
 
     private var validation: String? {
         do {
@@ -42,10 +44,19 @@ struct SettingsView: View {
 
             Section {
                 Toggle("Turn on Pro features", isOn: $proFeatures)
+                if proFeatures {
+                    Toggle("Show free space in the menu bar", isOn: $showsFreeSpace)
+                    Picker("Notify when free space drops below", selection: $thresholdGB) {
+                        ForEach(LowSpaceAlert.thresholdChoices, id: \.self) { gigabytes in
+                            Text(gigabytes == 0 ? "Never" : "\(gigabytes) GB").tag(gigabytes)
+                        }
+                    }
+                    .disabled(!showsFreeSpace)
+                }
             } header: {
                 Text("Pro features")
             } footer: {
-                Text("Space 16X Pro is free too. It adds **Compare**, which shows what grew or shrank since a saved scan. Pro features stay out of the way until you turn them on.")
+                Text("Space 16X Pro is free too. It adds **Compare** and a scan history, a **Modified** column, **Types**, **Cleanup** and **Duplicates**, **Explain Disk Space**, and a menu-bar free-space monitor that checks once a minute while it's shown. Pro features stay out of the way until you turn them on.")
                     .font(.callout)
             }
         }
