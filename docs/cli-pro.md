@@ -94,6 +94,29 @@ Owners come from the user database. The Linux release builds are static and read
 
 JSON reports put `owners` in place of `depth` and `entries`. Each owner has `owner` (the user name, or `null` without one), `uid`, `allocatedBytes`, `apparentBytes` and `itemCount`.
 
+## Exclusive size
+
+```text
+space16x scan [PATH] --exclusive [--depth N | --top N] [--json] ...
+```
+
+`--exclusive` adds each entry's **exclusive size**: the space that moving it to the Trash and emptying it frees at least. Allocated sizes count every file's blocks, but some of those blocks may stay in use after you delete the file:
+
+- **Clones.** On APFS, a copy made with Finder or `cp -c` shares its blocks with the original until either changes. Btrfs, XFS and bcachefs reflinks do the same. Only a file's private blocks count.
+- **Hard links.** A file with other hard links keeps its blocks until every link is gone, so it counts nothing.
+
+```text
+      Size   Exclusive  Path
+  39.31 GB    36.43 GB  /Users/me/Library/Caches
+  20.78 GB    20.61 GB  /Users/me/Library/Application Support
+  12.99 GB    12.99 GB  /Users/me/Library/Containers
+  73.08 GB    70.03 GB  /Users/me/Library  [total]
+```
+
+A folder's exclusive size is the sum of its files', so it's a lower bound: deleting a folder that holds a file and its clone, or every link of a file, frees more. After the scan, `--exclusive` reads one more piece of metadata for each counted file, on the scan's threads: `ATTR_CMNEXT_PRIVATESIZE` on macOS, and on Linux the link count and, on filesystems with reflinks, the extent map (`FIEMAP`). That makes the scan slower, about 2 seconds more for 270,000 files on a Mac. It reads no file contents. Files whose metadata can't be read count as unshared. Snapshots can keep deleted files' blocks too, which [`explain`](#explain-my-disk) shows.
+
+JSON reports add `exclusiveBytes` to the report, each entry and each top file. Exclusive sizes are allocated bytes, so `--exclusive` takes no `--apparent`, and it takes no `--types`, `--by-owner` or `--cleanup`.
+
 ## Cleanup suggestions
 
 ```text

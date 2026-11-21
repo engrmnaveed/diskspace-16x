@@ -45,7 +45,9 @@ def check(binary, root):
         ):
             hint = run(binary, *command, status=1)
             assert "Space 16X Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
-        for option in (("--older-than", "30"), ("--types", "5"), ("--by-owner",), ("--cleanup",)):
+        for option in (
+            ("--older-than", "30"), ("--types", "5"), ("--by-owner",), ("--cleanup",), ("--exclusive",),
+        ):
             hint = run(binary, "scan", root, *option, status=1)
             assert "Space 16X Pro" in hint.stderr and not hint.stdout, hint.stderr
         assert "install.sh --pro" in run(binary, "--help").stdout
@@ -371,6 +373,36 @@ def check_cleanup(binary):
             assert run(binary, "scan", root, *invalid, status=1).stderr
 
 
+def check_exclusive(binary):
+    """Pro: --exclusive leaves out hard-linked files and blocks shared with clones."""
+    with tempfile.TemporaryDirectory(prefix="space16x-exclusive-") as directory:
+        root = Path(directory).resolve()
+        (root / "own").mkdir()
+        (root / "linked").mkdir()
+        (root / "own" / "solo.bin").write_bytes(os.urandom(300_000))
+        (root / "linked" / "first.bin").write_bytes(os.urandom(200_000))
+        os.link(root / "linked" / "first.bin", root / "own" / "second.bin")
+        report = json.loads(run(binary, "scan", root, "--exclusive", "--json").stdout)
+        rows = {Path(row["path"]).name: row for row in report["entries"]}
+        own = allocated_bytes(root / "own" / "solo.bin")
+        assert rows["linked"]["exclusiveBytes"] == 0, rows
+        assert rows["own"]["exclusiveBytes"] == own == report["exclusiveBytes"], report
+        top = json.loads(run(binary, "scan", root, "--exclusive", "--top", "1", "--json").stdout)
+        assert top["topFiles"][0]["exclusiveBytes"] == own, top
+        text = run(binary, "scan", root, "--exclusive")
+        assert text.stdout.splitlines()[0].split() == ["Size", "Exclusive", "Path"], text.stdout
+        assert "hard links" in text.stderr, text.stderr
+        if sys.platform == "darwin" and subprocess.run(
+            ["cp", "-c", root / "own" / "solo.bin", root / "own" / "clone.bin"], capture_output=True
+        ).returncode == 0:
+            cloned = json.loads(run(binary, "scan", root, "--exclusive", "--json").stdout)
+            rows = {Path(row["path"]).name: row for row in cloned["entries"]}
+            # The original and its clone share every block, so neither frees them alone.
+            assert rows["own"]["exclusiveBytes"] == 0 < rows["own"]["allocatedBytes"], rows
+        for invalid in (("--exclusive", "--apparent"), ("--exclusive", "--by-owner"), ("--exclusive", "--exclusive")):
+            assert run(binary, "scan", root, *invalid, status=1).stderr
+
+
 def check_explain(binary):
     """Pro: explain shows the volume of a folder and the space a scan can't see."""
     with tempfile.TemporaryDirectory(prefix="space16x-explain-") as directory:
@@ -562,6 +594,7 @@ def main():
         check_history(binary)
         check_explain(binary)
         check_cleanup(binary)
+        check_exclusive(binary)
     print("CLI acceptance checks passed.")
 
 

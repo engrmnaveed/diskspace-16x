@@ -7,6 +7,7 @@
 
 mod cleanup;
 mod diff;
+mod exclusive;
 mod explain;
 mod history;
 mod modified;
@@ -54,6 +55,8 @@ pub struct ScanOptions {
     by_owner: bool,
     /// List cleanup suggestions instead of entries.
     cleanup: bool,
+    /// Add each entry's exclusive bytes, which removing it frees at least.
+    exclusive: bool,
 }
 
 impl ScanOptions {
@@ -88,12 +91,26 @@ impl ScanOptions {
                 self.cleanup = true;
                 Ok(())
             }
+            "--exclusive" if !self.exclusive => {
+                self.exclusive = true;
+                Ok(())
+            }
             _ => Err(format!("Use {flag} once.")),
         }
     }
 
     /// Checks the options against the rest of the scan command.
-    pub fn check(&self, selection: Option<Selection>) -> Result<(), String> {
+    pub fn check(
+        &self,
+        selection: Option<Selection>,
+        metric: Option<Metric>,
+    ) -> Result<(), String> {
+        if self.exclusive && (self.types.is_some() || self.by_owner || self.cleanup) {
+            return Err("--exclusive adds a column to entries or --top, so it takes no --types, --by-owner or --cleanup.".into());
+        }
+        if self.exclusive && metric.is_some() {
+            return Err("--exclusive measures allocated bytes, so it takes no --apparent.".into());
+        }
         let reports = [
             selection.is_some(),
             self.types.is_some(),
@@ -111,11 +128,33 @@ impl ScanOptions {
     pub fn write_report(
         &self,
         report: &scanner::Report,
+        selection: Selection,
         metric: Metric,
         excludes: &[String],
         json: bool,
+        threads: usize,
     ) -> io::Result<bool> {
         let stdout = io::stdout().lock();
+        if self.exclusive {
+            let measured = exclusive::Exclusive::measure(&report.tree, threads);
+            if json {
+                let result = exclusive::JsonExclusive::new(report, selection, &measured);
+                report::write_json_report(
+                    stdout,
+                    report,
+                    metric,
+                    excludes,
+                    self.older_than,
+                    result,
+                )?;
+            } else {
+                exclusive::write_plain(stdout, report, selection, &measured)?;
+                eprintln!(
+                    "space16x: exclusive sizes leave out blocks shared with clones and files with other hard links, which emptying the Trash wouldn't free"
+                );
+            }
+            return Ok(true);
+        }
         if self.cleanup {
             if json {
                 let result = cleanup::JsonCleanup::new(report, metric);

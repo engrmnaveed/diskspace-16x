@@ -36,7 +36,11 @@ struct ResultsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 let bytes = workspace.pendingTrash.reduce(UInt64(0)) { $0 + $1.allocatedBytes }
-                Text("\(ScanFormat.size(bytes)) of allocated space. Space is freed when you empty the Trash.")
+                if let exclusive = workspace.pendingExclusiveBytes, exclusive < bytes {
+                    Text("\(ScanFormat.size(bytes)) of allocated space. Emptying the Trash frees at least \(ScanFormat.size(exclusive)), because clones or other hard links share the rest.")
+                } else {
+                    Text("\(ScanFormat.size(bytes)) of allocated space. Space is freed when you empty the Trash.")
+                }
             }
             .onChange(of: proFeatures, initial: true) { _, enabled in
                 if !enabled { workspace.stopProFeatures() }

@@ -189,8 +189,14 @@ final class ScanWorkspace {
 
     /// Items waiting for the user to confirm Move to Trash. A nonempty list shows the alert.
     var pendingTrash: [ScanEntry] = []
+    /// Pro: the bytes that emptying the Trash frees at least for `pendingTrash`, without
+    /// blocks shared with clones or files with other hard links, when measured in time.
+    private(set) var pendingExclusiveBytes: UInt64?
+    private(set) var isMeasuringTrash = false
     private(set) var isTrashing = false
-    var canMoveToTrash: Bool { canBrowse && !isScanning && !isTrashing && !selectedPaths.isEmpty && !isImported }
+    var canMoveToTrash: Bool {
+        canBrowse && !isScanning && !isTrashing && !isMeasuringTrash && !selectedPaths.isEmpty && !isImported
+    }
 
     var mode: BrowseMode = .folders {
         didSet {
@@ -741,7 +747,21 @@ final class ScanWorkspace {
                 return
             }
         }
-        pendingTrash = entries
+        guard ProFeatures.isEnabled else {
+            pendingExclusiveBytes = nil
+            pendingTrash = entries
+            return
+        }
+        // Pro reads how much of the items is shared before asking, for up to two seconds.
+        isMeasuringTrash = true
+        Task {
+            let measured = await Task.detached(priority: .userInitiated) {
+                ExclusiveSize.measure(entries)
+            }.value
+            isMeasuringTrash = false
+            pendingExclusiveBytes = measured
+            pendingTrash = entries
+        }
     }
 
     /// Moves the confirmed items to the Trash, then removes them from the results in place.

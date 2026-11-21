@@ -41,6 +41,14 @@ impl Metric {
     }
 }
 
+/// The entries a report lists: through a depth, or the largest files.
+pub(crate) fn selected_entries(tree: &Tree, selection: Selection, metric: Metric) -> Vec<NodeId> {
+    match selection {
+        Selection::Depth(depth) => directory_entries(tree, depth, metric),
+        Selection::Top(limit) => largest_files(tree.root(), limit, metric),
+    }
+}
+
 pub(crate) fn write_plain(
     out: impl Write,
     report: &Report,
@@ -49,11 +57,7 @@ pub(crate) fn write_plain(
 ) -> io::Result<()> {
     let mut out = io::BufWriter::new(out);
     let tree = &report.tree;
-    let entries = match selection {
-        Selection::Depth(depth) => directory_entries(tree, depth, metric),
-        Selection::Top(limit) => largest_files(tree.root(), limit, metric),
-    };
-    for id in entries {
+    for id in selected_entries(tree, selection, metric) {
         write_entry(&mut out, tree.entry(id), metric, "")?;
     }
     let total = if report.issues.is_empty() {

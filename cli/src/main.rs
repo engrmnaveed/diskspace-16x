@@ -82,6 +82,10 @@ This is Space 16X Pro. It adds:
              entries, with their file counts.
   scan --by-owner
              List the space and items each user owns instead of entries.
+  scan --exclusive [--depth N | --top N]
+             Add each entry's exclusive size: the space that moving it to the Trash
+             and emptying it frees at least, without blocks shared with APFS clones or
+             reflinks and files with other hard links. It reads more metadata.
   scan --cleanup
              List folders that tools recreate, such as node_modules, Cargo's target,
              Xcode's DerivedData and caches, instead of entries. u in the explorer
@@ -107,7 +111,13 @@ the file types in the open folder, and u lists cleanup suggestions.
 const PRO_COMMANDS: &[&str] = &["diff", "history", "explain"];
 
 /// Options only Space 16X Pro's scan takes. Basic builds answer them with an install hint.
-const PRO_SCAN_OPTIONS: &[&str] = &["--older-than", "--types", "--by-owner", "--cleanup"];
+const PRO_SCAN_OPTIONS: &[&str] = &[
+    "--older-than",
+    "--types",
+    "--by-owner",
+    "--cleanup",
+    "--exclusive",
+];
 
 #[cfg(feature = "pro")]
 use pro::ScanOptions as ProScanOptions;
@@ -400,9 +410,14 @@ fn run_scan(options: ScanOptions) -> io::Result<u8> {
     #[cfg(feature = "pro")]
     let (scan, written) = {
         let scan = options.pro.narrow(scan);
-        let written = options
-            .pro
-            .write_report(&scan, options.metric, sources, options.json)?;
+        let written = options.pro.write_report(
+            &scan,
+            options.selection,
+            options.metric,
+            sources,
+            options.json,
+            threads,
+        )?;
         (scan, written)
     };
     #[cfg(not(feature = "pro"))]
@@ -686,7 +701,7 @@ fn parse_scan(mut arguments: impl Iterator<Item = OsString>) -> Result<Command, 
         );
     }
     #[cfg(feature = "pro")]
-    pro.check(selection)?;
+    pro.check(selection, metric)?;
     Ok(Command::Scan(ScanOptions {
         path: path.unwrap_or_else(|| PathBuf::from(".")),
         selection: selection.unwrap_or(Selection::Depth(1)),
@@ -923,6 +938,10 @@ mod tests {
                 args(&["scan", "--cleanup"]),
                 Ok(Command::ProOnly("--cleanup"))
             );
+            assert_eq!(
+                args(&["scan", "--exclusive"]),
+                Ok(Command::ProOnly("--exclusive"))
+            );
         }
         #[cfg(feature = "pro")]
         {
@@ -938,9 +957,13 @@ mod tests {
             assert!(args(&["scan", "--types", "10", "--older-than", "9", "--json"]).is_ok());
             assert!(args(&["scan", "/srv", "--by-owner", "--apparent"]).is_ok());
             assert!(args(&["scan", "~", "--cleanup", "--json", "--older-than", "30"]).is_ok());
+            assert!(args(&["scan", "--exclusive", "--top", "5", "--json"]).is_ok());
             for invalid in [
                 &["scan", "--by-owner", "--by-owner"][..],
                 &["scan", "--cleanup", "--cleanup"],
+                &["scan", "--exclusive", "--apparent"],
+                &["scan", "--exclusive", "--types", "3"],
+                &["scan", "--cleanup", "--exclusive"],
                 &["scan", "--cleanup", "--top", "3"],
                 &["scan", "--cleanup", "--by-owner"],
                 &["scan", "--by-owner", "--types", "2"],
