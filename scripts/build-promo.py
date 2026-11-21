@@ -75,9 +75,14 @@ def capture(binary, work):
         work / "SpaceCore.swiftmodule", "-emit-library", "-static", "-o", work / "libSpaceCore.a",
         *core_sources,
     ], check=True)
+    subprocess.run([
+        *compiler, "-module-name", "SpacePro", "-I", work, "-emit-module", "-emit-module-path",
+        work / "SpacePro.swiftmodule", "-emit-library", "-static", "-o", work / "libSpacePro.a",
+        *sorted((ROOT / "Sources" / "SpacePro").glob("*.swift")),
+    ], check=True)
     executable = work / "capture"
     subprocess.run([
-        *compiler, "-I", work, "-L", work, "-lSpaceCore", "-o", executable,
+        *compiler, "-I", work, "-L", work, "-lSpaceCore", "-lSpacePro", "-o", executable,
         *sorted(PROMO.glob("*.swift")), *(path for path in views if path.name != "Space16XApp.swift"),
     ], check=True)
     subprocess.run([

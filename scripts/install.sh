@@ -4,12 +4,13 @@ set -eu
 
 usage() {
     cat <<'USAGE'
-Usage: install.sh [--repo OWNER/REPO] [--version VERSION] [--bin-dir DIR] [--shell-path]
+Usage: install.sh [--pro] [--repo OWNER/REPO] [--version VERSION] [--bin-dir DIR] [--shell-path]
        install.sh --uninstall [--shell-path]
 
 Download the CLI for this OS and architecture, verify its SHA-256 checksum,
 and install it without sudo. The defaults are the latest release of
 engrmnaveed/diskspace-16x and $HOME/.local/share/space16x/bin.
+--pro installs Space 16X Pro, which replaces Basic. Run without it to switch back.
 --shell-path prints the updated PATH for the calling shell.
 USAGE
 }
@@ -24,6 +25,7 @@ version=
 bin_dir=
 action=install
 print_path=false
+edition=
 while [ "$#" -gt 0 ]; do
     case "$1" in
         -h|--help)
@@ -31,6 +33,7 @@ while [ "$#" -gt 0 ]; do
             exit 0
             ;;
         --uninstall) action=uninstall; shift ;;
+        --pro) edition=pro-; shift ;;
         --shell-path) print_path=true; shift ;;
         --repo|--version|--bin-dir)
             [ "$#" -ge 2 ] && [ -n "$2" ] || fail "$1 requires a value."
@@ -323,7 +326,7 @@ download() {
     esac
 }
 
-asset=space16x-$target.tar.gz
+asset=space16x-$edition$target.tar.gz
 base=https://github.com/$repo/releases/$release
 download "$base/$asset.sha256" "$stage/$asset.sha256" ||
     fail "Could not download $asset.sha256 from $base. Check that this release publishes the requested target."
@@ -410,5 +413,9 @@ ENV
         *) configure_profile sh "$HOME/.profile" ;;
     esac
 fi
-printf 'Installed %s\n' "$destination" >&2
+if [ -n "$edition" ]; then
+    printf 'Installed Space 16X Pro at %s\n' "$destination" >&2
+else
+    printf 'Installed %s\n' "$destination" >&2
+fi
 if "$print_path"; then printf '%s\n' "$new_path"; fi

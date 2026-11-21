@@ -329,8 +329,12 @@ pub(crate) fn write_json(
     out.flush()
 }
 
-/// The build's edition. The Pro edition arrives with milestone M4.
-pub(crate) const EDITION: &str = "basic";
+/// The build's edition, which reports and `--version` show.
+pub(crate) const EDITION: &str = if cfg!(feature = "pro") {
+    "pro"
+} else {
+    "basic"
+};
 
 /// Entries through `depth` levels below the root, each folder's contents ranked.
 fn directory_entries(tree: &Tree, depth: usize, metric: Metric) -> Vec<NodeId> {

@@ -97,31 +97,40 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends binutils musl-tools ncdu gdu
-      - name: Check formatting, lint, and tests
+      - name: Check formatting, lint, and tests for both editions
         working-directory: cli
         run: |
           rustup show
           cargo fmt --all --check
           cargo clippy --locked --all-targets -- -D warnings
           cargo test --locked
-      - name: Build and verify CLI release archive
+          cargo clippy --locked --all-targets --features pro -- -D warnings
+          cargo test --locked --features pro
+      - name: Build and verify the Basic and Pro release archives
         env:
           CLI_TARGET: ${{ matrix.target }}
         run: |
           (cd cli && rustup target add "$CLI_TARGET")
-          archive="$(scripts/package-cli.sh "$CLI_TARGET")"
-          (
-            cd dist
-            if [[ "$RUNNER_OS" == macOS ]]; then
-              shasum -a 256 -c "$(basename "$archive").sha256"
+          for edition in basic pro; do
+            if [[ "$edition" == pro ]]; then
+              archive="$(scripts/package-cli.sh --pro "$CLI_TARGET")"
             else
-              sha256sum -c "$(basename "$archive").sha256"
+              archive="$(scripts/package-cli.sh "$CLI_TARGET")"
             fi
-          )
-          mkdir -p .build/cli-qa
-          tar -xzf "$archive" -C .build/cli-qa
-          python3 scripts/check-cli.py .build/cli-qa/space16x
-          python3 scripts/check-tui.py .build/cli-qa/space16x
+            (
+              cd dist
+              if [[ "$RUNNER_OS" == macOS ]]; then
+                shasum -a 256 -c "$(basename "$archive").sha256"
+              else
+                sha256sum -c "$(basename "$archive").sha256"
+              fi
+            )
+            echo "$(basename "$archive"): $(wc -c < "$archive") bytes"
+            mkdir -p ".build/cli-qa-$edition"
+            tar -xzf "$archive" -C ".build/cli-qa-$edition"
+            python3 scripts/check-cli.py ".build/cli-qa-$edition/space16x"
+            python3 scripts/check-tui.py ".build/cli-qa-$edition/space16x"
+          done
       - name: Test installer platform routing and failure paths
         if: matrix.runner == 'ubuntu-24.04'
         run: python3 scripts/check-install.py
@@ -132,6 +141,8 @@ jobs:
           path: |
             dist/space16x-${{ matrix.target }}.tar.gz
             dist/space16x-${{ matrix.target }}.tar.gz.sha256
+            dist/space16x-pro-${{ matrix.target }}.tar.gz
+            dist/space16x-pro-${{ matrix.target }}.tar.gz.sha256
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: inputs.upload_cli && matrix.runner == 'ubuntu-24.04'

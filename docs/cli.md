@@ -9,6 +9,8 @@ space16x --version
 space16x --help
 ```
 
+Space 16X has two free editions built from the same source. **Basic** is the default and everything on this page except [Pro commands](#pro-commands). **Pro** adds those commands. Both install the same `space16x` command, so installing one replaces the other. `space16x --version` prints `space16x X.Y.Z`, or `space16x X.Y.Z (pro)` in Pro, and JSON reports set `edition` to match. In Basic, a Pro command prints a one-line hint to install Pro and exits with code `1`. See [Install Space 16X Pro](install.md#install-space-16x-pro).
+
 **PATH** defaults to the current directory. The scan root must be a readable directory. Quote paths containing spaces. Use `--` to pass a path that begins with a dash.
 
 ## Explore a folder
@@ -158,6 +160,10 @@ The scanner reads filesystem metadata, skips symbolic links and mounts on other 
 
 On macOS, a startup-disk scan counts firmlinked directories such as `/Users` at their visible paths. It skips the corresponding directories under `/System/Volumes/Data` when their visible paths are in scope. Data-only directories remain in the report, and a direct scan of `/System/Volumes/Data` includes the firmlinked directories there.
 
+## Pro commands
+
+Space 16X Pro adds `space16x diff`, which compares two scans.
+
 ## Scan exit codes
 
 | Code | Meaning |
@@ -175,7 +181,7 @@ Paths the operating system refuses to open are protected paths. These include fo
 | Field | Meaning |
 | --- | --- |
 | `schemaVersion` | The integer `3`. |
-| `edition` | `basic` for this build. |
+| `edition` | `basic` or `pro`, the edition of the build that wrote the report. |
 | `scope` | Absolute path to the scan root. |
 | `rankedBy` | `allocated`, or `apparent` with `--apparent`. Entries and top files are ordered by this size. |
 | `allocatedBytes` | Counted regular-file allocation in bytes. |

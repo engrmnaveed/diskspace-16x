@@ -27,9 +27,20 @@ def allocated_bytes(path):
     return 512 * path.stat().st_blocks
 
 
-def check(binary, root):
+def edition(binary):
+    """`pro` or `basic`, from the version line, which must match scripts/release-version."""
     version = Path(__file__).with_name("release-version").read_text(encoding="utf-8").strip()
-    assert run(binary, "--version").stdout.strip() == f"space16x {version}"
+    reported = run(binary, "--version").stdout.strip()
+    assert reported in (f"space16x {version}", f"space16x {version} (pro)"), reported
+    return "pro" if reported.endswith(" (pro)") else "basic"
+
+
+def check(binary, root):
+    if edition(binary) == "basic":
+        # Basic answers Pro subcommands with an install hint.
+        hint = run(binary, "diff", "old.json", "new.json", status=1)
+        assert "Space 16X Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
+        assert "install.sh --pro" in run(binary, "--help").stdout
 
     data = root / "Nested folder"
     data.mkdir()
@@ -53,7 +64,7 @@ def check(binary, root):
     apparent_total = sum(path.stat().st_size for path in (first, second, sparse))
     top = json.loads(run(binary, "scan", root, "--json", "--top", 2).stdout)
     assert top["schemaVersion"] == 3
-    assert top["edition"] == "basic" and top["rankedBy"] == "allocated"
+    assert top["edition"] == edition(binary) and top["rankedBy"] == "allocated"
     assert top["scope"] == str(root)
     assert top["topLimit"] == 2
     assert top["allocatedBytes"] == total_bytes
@@ -268,7 +279,7 @@ def check_volumes(binary):
     assert text[0].split() == ["Size", "Used", "Free", "Use%", "Inodes", "Type", "Mounted", "on"], text
     assert any(line.endswith(" /") for line in text[1:]), text
     report = json.loads(run(binary, "volumes", "--json").stdout)
-    assert report["schemaVersion"] == 3 and report["edition"] == "basic", report
+    assert report["schemaVersion"] == 3 and report["edition"] == edition(binary), report
     root = next(volume for volume in report["volumes"] if volume["path"] == "/")
     assert root["totalBytes"] > 0 and root["usedBytes"] <= root["totalBytes"], root
     assert root["availableBytes"] <= root["totalBytes"] and root["type"], root

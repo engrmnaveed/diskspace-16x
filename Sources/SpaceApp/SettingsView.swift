@@ -1,9 +1,12 @@
 import SpaceCore
+import SpacePro
 import SwiftUI
 
-/// Settings → Exclude: patterns the next scan skips without reading them.
+/// Settings: exclude patterns the next scan skips without reading them, and the switch
+/// for Pro features.
 struct SettingsView: View {
     @AppStorage(ExcludeSettings.key) private var text = ""
+    @AppStorage(ProFeatures.defaultsKey) private var proFeatures = false
 
     private var validation: String? {
         do {
@@ -35,6 +38,15 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 .font(.callout)
+            }
+
+            Section {
+                Toggle("Turn on Pro features", isOn: $proFeatures)
+            } header: {
+                Text("Pro features")
+            } footer: {
+                Text("Space 16X Pro is free too. It adds **Compare**, which shows what grew or shrank since a saved scan. Pro features stay out of the way until you turn them on.")
+                    .font(.callout)
             }
         }
         .formStyle(.grouped)
