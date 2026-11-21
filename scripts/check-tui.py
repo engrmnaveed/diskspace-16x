@@ -138,6 +138,29 @@ def check_trash(binary):
             terminal.finish(0)
 
 
+def check_rescan(binary):
+    """Rescan the open folder after it changes on disk, and the whole scope from the top."""
+    with tempfile.TemporaryDirectory(prefix="space16x-rescan-") as directory:
+        scope = Path(directory).resolve()
+        grow = scope / "grow"
+        grow.mkdir()
+        (grow / "seed.bin").write_bytes(b"s" * 100)
+        (scope / "steady.bin").write_bytes(b"t" * 100)
+        with Terminal([binary, scope]) as terminal:
+            terminal.expect(b"Scan complete")
+            terminal.expect(b"grow")
+            terminal.press(b"\r", b"seed.bin")
+            (grow / "added.bin").write_bytes(os.urandom(200_000))
+            terminal.press(b"r", "Rescanned “grow”: ".encode())
+            terminal.expect(b"added.bin")
+            terminal.press(b"\x7f", b"steady.bin")
+            (scope / "later.bin").write_bytes(os.urandom(50_000))
+            terminal.press(b"r", "Rescanned “".encode())
+            terminal.expect(b"later.bin")
+            terminal.send(b"q")
+            terminal.finish(0)
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit(f"Usage: {sys.argv[0]} PATH-TO-SPACE16X")
@@ -150,7 +173,8 @@ def main():
         check(binary, fixture)
         check_sort_size_and_color(binary, fixture)
     check_trash(binary)
-    print("Terminal navigation, sorting, color, Trash, resize, and restoration checks passed.")
+    check_rescan(binary)
+    print("Terminal navigation, sorting, color, Trash, rescan, resize, and restoration checks passed.")
 
 
 if __name__ == "__main__":

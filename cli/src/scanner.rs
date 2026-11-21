@@ -350,9 +350,7 @@ impl<F: FnMut(Event)> Walker<'_, F> {
 
         let mut issues = Vec::new();
         let mut excluded = 0_u64;
-        let scope_length = self
-            .exclude_root_length
-            .unwrap_or_else(|| scope.as_os_str().len());
+        let scope_length = self.exclude_root_length.unwrap_or(scope.as_os_str().len());
         let mut links = HashSet::new();
         let mut ancestors = HashSet::from([identity]);
         #[cfg(target_os = "macos")]

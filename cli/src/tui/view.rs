@@ -94,10 +94,15 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer, tick: usi
     let status = match &explorer.status {
         Status::Scanning => {
             let spinner = ["◐", "◓", "◑", "◒"][tick];
-            let activity = if let Some(progress) = &explorer.progress {
-                format!("{spinner} Scanning  ·  {} visited", progress.visited)
+            let verb = if explorer.is_rescanning() {
+                "Rescanning"
             } else {
-                format!("{spinner} Scanning")
+                "Scanning"
+            };
+            let activity = if let Some(progress) = &explorer.progress {
+                format!("{spinner} {verb}  ·  {} visited", progress.visited)
+            } else {
+                format!("{spinner} {verb}")
             };
             (activity, ACCENT)
         }
@@ -634,6 +639,8 @@ fn draw_footer(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
     }
     let text = if explorer.panel.is_some() {
         " Esc back   ↑↓ scroll   q quit"
+    } else if !explorer.is_active() && !explorer.read_only && area.width >= 108 {
+        " ↑↓ move  ↵ open  ← back  / filter  f largest  s sort  a size  ␣ mark  d trash  r rescan  e issues  ? help"
     } else if !explorer.is_active() && !explorer.read_only && area.width >= 98 {
         " ↑↓ move  ↵ open  ← back  / filter  f largest  s sort  a size  ␣ mark  d trash  e issues  ? help"
     } else if explorer.is_active() && area.width >= 90 {
@@ -711,6 +718,7 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         ("a", "Switch between allocated and apparent sizes"),
         trash[0],
         trash[1],
+        ("r", "Rescan the open folder, or all in largest"),
         ("e / i", "Show skipped paths and errors"),
         ("c / x", "Cancel the scan and keep its preview"),
         ("Esc", "Go back or clear the filter"),
