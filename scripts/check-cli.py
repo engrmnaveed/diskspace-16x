@@ -249,7 +249,8 @@ def check_ncdu_and_gdu(binary, root):
                 print(f"{tool} isn't installed, so its interoperability check was skipped.")
                 continue
             run(path, *write)
-            assert run(binary, "--import", theirs).stdout == expected, tool
+            imported = run(binary, "--import", theirs).stdout
+            assert imported == expected, f"{tool}:\n{imported}\n{expected}\n{theirs.read_text()}"
             output = run(path, *read).stdout
             assert "Nested folder" in output, output
             if tool == "ncdu":
