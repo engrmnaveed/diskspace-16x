@@ -7,6 +7,7 @@
 
 mod cleanup;
 mod diff;
+mod duplicates;
 mod exclusive;
 mod explain;
 mod history;
@@ -32,6 +33,7 @@ pub enum Command {
     Diff(DiffOptions),
     History(history::HistoryCommand),
     Explain { path: PathBuf, json: bool },
+    Duplicates(duplicates::DuplicatesOptions),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -237,8 +239,54 @@ pub fn parse(
         "diff" => parse_diff(arguments),
         "history" => parse_history(arguments),
         "explain" => parse_explain(arguments),
+        "duplicates" => parse_duplicates(arguments),
         _ => Err(format!("Unknown Pro command {name:?}.")),
     }
+}
+
+/// Parses `duplicates [PATH] [--min-size SIZE] [--json] [--threads N] [EXCLUDES]`.
+fn parse_duplicates(
+    mut arguments: impl Iterator<Item = OsString>,
+) -> Result<crate::Command, String> {
+    let mut path = None;
+    let mut min_size = None;
+    let mut json = false;
+    let mut excludes = crate::ExcludeOptions::default();
+    let mut threads = None;
+    let mut literal = false;
+    let mut first = true;
+    while let Some(argument) = arguments.next() {
+        if literal || !crate::is_option(&argument) {
+            crate::set_path(&mut path, crate::checked_path(argument)?)?;
+            first = false;
+            continue;
+        }
+        match argument.to_str() {
+            Some("-h" | "--help") if first => return Ok(crate::Command::Help),
+            Some("--") => literal = true,
+            Some("--json") if !json => json = true,
+            Some("--min-size") if min_size.is_none() => {
+                let size = arguments
+                    .next()
+                    .and_then(|value| duplicates::parse_size(value.to_str()?))
+                    .ok_or("--min-size requires a size such as 1000000, 500K or 1M.")?;
+                min_size = Some(size);
+            }
+            Some(flag @ ("--exclude" | "--exclude-from")) => excludes.take(flag, &mut arguments)?,
+            Some("--threads") => crate::take_threads(&mut threads, &mut arguments)?,
+            _ => return Err(format!("Unknown or repeated option {argument:?}.")),
+        }
+        first = false;
+    }
+    Ok(crate::Command::Pro(Command::Duplicates(
+        duplicates::DuplicatesOptions {
+            path: path.unwrap_or_else(|| PathBuf::from(".")),
+            min_size: min_size.unwrap_or(duplicates::DEFAULT_MIN_SIZE),
+            json,
+            excludes,
+            threads,
+        },
+    )))
 }
 
 /// Parses `explain [PATH] [--json]`.
@@ -396,6 +444,7 @@ pub fn run(command: Command) -> io::Result<u8> {
         Command::Diff(options) => run_diff(options),
         Command::History(command) => history::run(command),
         Command::Explain { path, json } => explain::run(&path, json),
+        Command::Duplicates(options) => duplicates::run(options),
     }
 }
 
@@ -508,6 +557,41 @@ mod tests {
             &["list", "--exclude", "x"],
         ] {
             assert!(history(invalid).is_err(), "{invalid:?}");
+        }
+    }
+
+    #[test]
+    fn parses_duplicates() {
+        let duplicates = |values: &[&str]| parse("duplicates", values.iter().map(OsString::from));
+        let Ok(crate::Command::Pro(Command::Duplicates(options))) = duplicates(&[]) else {
+            panic!("duplicates takes no arguments");
+        };
+        assert_eq!(options.path, Path::new("."));
+        assert_eq!(options.min_size, duplicates::DEFAULT_MIN_SIZE);
+        let Ok(crate::Command::Pro(Command::Duplicates(options))) = duplicates(&[
+            "~/Pictures",
+            "--min-size",
+            "10M",
+            "--json",
+            "--exclude",
+            "*.tmp",
+            "--threads",
+            "2",
+        ]) else {
+            panic!("duplicates takes its options");
+        };
+        assert_eq!(options.min_size, 10_000_000);
+        assert!(options.json && options.threads == Some(2));
+        assert_eq!(options.excludes.patterns, ["*.tmp"]);
+        assert_eq!(duplicates(&["--help"]), Ok(crate::Command::Help));
+        for invalid in [
+            &["a", "b"][..],
+            &["--min-size"],
+            &["--min-size", "big"],
+            &["--json", "--json"],
+            &["--min-size", "1", "--min-size", "2"],
+        ] {
+            assert!(duplicates(invalid).is_err(), "{invalid:?}");
         }
     }
 

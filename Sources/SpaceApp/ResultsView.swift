@@ -124,6 +124,12 @@ struct ResultsView: View {
             if scope.isPending { return "\(count) found so far" + suffix }
             return count + suffix
         }
+        if workspace.mode == .duplicates {
+            guard let groups = workspace.duplicateGroups else { return "Files of 1 MB or more with the same contents" }
+            let extra = groups.reduce(UInt64(0)) { $0 + $1.extraBytes }
+            let count = groups.count == 1 ? "1 group" : "\(groups.count) groups"
+            return "\(count) · \(ScanFormat.size(extra)) in extra copies"
+        }
         if workspace.mode == .cleanup {
             if workspace.report?.isPreview == true { return "Suggestions appear when the scan finishes" }
             let total = workspace.rows.reduce(UInt64(0)) { $0 + $1.bytes(for: workspace.sizeMetric) }
@@ -425,7 +431,9 @@ struct ResultsView: View {
         .quickLookPreview($workspace.quickLookURL)
         .accessibilityLabel(workspace.mode == .folders ? "Folder contents" : workspace.mode.rawValue)
         .overlay {
-            if workspace.isLoadingRows && workspace.rows.isEmpty {
+            if workspace.mode == .duplicates && workspace.rows.isEmpty {
+                duplicatesPlaceholder
+            } else if workspace.isLoadingRows && workspace.rows.isEmpty {
                 ProgressView("Ranking items…")
                     .controlSize(.small)
                     .padding(16)
@@ -444,6 +452,41 @@ struct ResultsView: View {
         }
     }
 
+    /// Pro: Duplicates reads files only after the user clicks Find Duplicates.
+    @ViewBuilder
+    private var duplicatesPlaceholder: some View {
+        if workspace.isFindingDuplicates {
+            ProgressView("Comparing files…")
+                .controlSize(.small)
+                .padding(16)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        } else {
+            VStack(spacing: 10) {
+                Image(systemName: BrowseMode.duplicates.symbol)
+                    .font(.title)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+                if workspace.duplicateGroups == nil {
+                    Text("Find files with the same contents")
+                        .font(.headline)
+                    Text("Space 16X reads files of 1 MB or more that share a length with another file and compares their contents. Nothing is read until you start.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 380)
+                    Button("Find Duplicates", action: workspace.findDuplicates)
+                        .controlSize(.large)
+                        .disabled(workspace.isScanning || workspace.report?.isPreview != false)
+                } else {
+                    Text("No duplicate files of 1 MB or more")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(24)
+        }
+    }
+
     private func emptyMessage(for scope: ScanEntry) -> String {
         if scope.isCloudOnly { return "Contents are available in the cloud" }
         if workspace.protectedPaths.contains(scope.path) { return "macOS doesn't allow apps to read this folder" }
@@ -455,6 +498,7 @@ struct ResultsView: View {
         case .folders: return "No scanned items here"
         case .largestFiles: return "No files to rank"
         case .cleanup: return "No node_modules, build output or caches of 1 MB or more"
+        case .duplicates: return "No duplicate files of 1 MB or more"
         }
     }
 
@@ -495,7 +539,8 @@ struct ResultsView: View {
                 Text(entry.name)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if workspace.mode == .cleanup, let label = workspace.cleanupLabels[entry.path] {
+                if workspace.mode == .cleanup || workspace.mode == .duplicates,
+                   let label = workspace.rowLabels[entry.path] {
                     Text([label, relativeParent(of: entry, to: scope)].compactMap { $0 }.joined(separator: " · "))
                         .font(.caption2)
                         .foregroundStyle(.secondary)

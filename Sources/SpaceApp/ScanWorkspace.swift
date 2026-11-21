@@ -9,18 +9,21 @@ enum BrowseMode: String, CaseIterable {
     case largestFiles = "Largest Files"
     /// Pro: folders that tools recreate, for Move to Trash.
     case cleanup = "Cleanup"
+    /// Pro: files with the same contents, once the user asks to compare them.
+    case duplicates = "Duplicates"
 
     var symbol: String {
         switch self {
         case .folders: "folder"
         case .largestFiles: "list.number"
         case .cleanup: "sparkles"
+        case .duplicates: "doc.on.doc"
         }
     }
 
-    /// The modes the sidebar offers. Cleanup needs **Settings → Pro features**.
+    /// The modes the sidebar offers. Cleanup and Duplicates need **Settings → Pro features**.
     static func available(pro: Bool) -> [BrowseMode] {
-        pro ? allCases : allCases.filter { $0 != .cleanup }
+        pro ? allCases : [.folders, .largestFiles]
     }
 }
 
@@ -122,8 +125,11 @@ final class ScanWorkspace {
     var folderPresentation: FolderPresentation = .list
     /// Up to 32 entries of the current folder, largest first, for the treemap and donut.
     private(set) var chartRows: [ScanEntry] = []
-    /// Pro: what each cleanup suggestion in `rows` holds, by path.
-    private(set) var cleanupLabels: [String: String] = [:]
+    /// Pro: a note for each row of Cleanup or Duplicates, by path.
+    private(set) var rowLabels: [String: String] = [:]
+    /// Pro: files with the same contents, or nil until the user asks to find them.
+    private(set) var duplicateGroups: [DuplicateGroup]?
+    private(set) var isFindingDuplicates = false
 
     var sizeMetric: SizeMetric = SizeMetric(rawValue: UserDefaults.standard.string(forKey: "sizeMetric") ?? "")
         ?? .allocated
@@ -415,7 +421,7 @@ final class ScanWorkspace {
     /// Leaves Pro's sort orders when **Settings → Pro features** turns off.
     func stopProFeatures() {
         stopComparing()
-        if mode == .cleanup {
+        if mode == .cleanup || mode == .duplicates {
             mode = .folders
         }
         if folderPresentation == .types {
@@ -796,7 +802,15 @@ final class ScanWorkspace {
         isTrashing = false
         let moved = results.filter { $0.failure == nil }.map(\.entry)
         if !moved.isEmpty, let report {
-            acceptReport(report.removing(Set(moved.map(\.path))))
+            let trashed = Set(moved.map(\.path))
+            // Duplicate groups keep the copies that are still there.
+            let remaining = duplicateGroups?.compactMap { group -> DuplicateGroup? in
+                let files = group.files.filter { file in
+                    !trashed.contains { file.path == $0 || file.path.hasPrefix($0 + "/") }
+                }
+                return files.count > 1 ? DuplicateGroup(length: group.length, files: files) : nil
+            }
+            acceptReport(report.removing(trashed), duplicates: remaining)
         }
         let freed = moved.reduce(UInt64(0)) { $0 + $1.allocatedBytes }
         let what = moved.count == 1 ? "“\(moved[0].name)”" : ScanFormat.items(moved.count)
@@ -879,7 +893,35 @@ final class ScanWorkspace {
         case file(name: String, excludes: [String])
     }
 
-    private func acceptReport(_ result: ScanReport, from source: ReportSource? = nil) {
+    /// Pro: compares the files in the finished scan that share a length, by reading them,
+    /// and lists the groups with the same contents. Only this reads file contents.
+    func findDuplicates() {
+        guard ProFeatures.isEnabled, let report, !report.isPreview, !isScanning, !isFindingDuplicates else { return }
+        mode = .duplicates
+        isFindingDuplicates = true
+        Task {
+            let found = await Task.detached(priority: .userInitiated) {
+                DuplicateFinder.find(in: report)
+            }.value
+            isFindingDuplicates = false
+            // A newer scan replaced the results meanwhile.
+            guard self.report?.root.path == report.root.path, !isScanning else { return }
+            duplicateGroups = found.groups
+            if !found.unreadable.isEmpty {
+                notice = Notice(
+                    title: "Some files couldn't be compared",
+                    message: "\(ScanFormat.items(found.unreadable.count)) couldn't be read, so they aren't in the groups.",
+                    isError: true
+                )
+            }
+            loadRows(keepingRows: true)
+        }
+    }
+
+    private func acceptReport(
+        _ result: ScanReport, from source: ReportSource? = nil, duplicates: [DuplicateGroup]? = nil
+    ) {
+        duplicateGroups = duplicates
         switch source {
         case let .scan(excludes):
             importedFile = nil
@@ -936,6 +978,7 @@ final class ScanWorkspace {
         let mode = mode
         let metric = sizeMetric
         let comparison = mode == .folders ? comparison : nil
+        let duplicates = duplicateGroups
         let names = scope.dropFirst().map(\.name)
         let requested = sortOrder.first ?? .largestFirst
         let sort = requested.byChange && comparison == nil ? .largestFirst : requested
@@ -954,6 +997,13 @@ final class ScanWorkspace {
                     let found = report.isPreview ? [] : CleanupSuggestions.find(in: report, metric: metric)
                     ranked = found.map(\.entry)
                     for suggestion in found { labels[suggestion.entry.path] = suggestion.rule.label }
+                case .duplicates:
+                    ranked = duplicates?.flatMap(\.files) ?? []
+                    for group in duplicates ?? [] {
+                        for (index, file) in group.files.enumerated() {
+                            labels[file.path] = "Copy \(index + 1) of \(group.files.count)"
+                        }
+                    }
                 }
                 let changes = comparison?.changes(in: folder, at: names, metric: metric)
                 let rows: [ScanEntry]
@@ -981,7 +1031,7 @@ final class ScanWorkspace {
             rows = result.rows
             chartRows = result.chart
             folderChanges = result.changes
-            cleanupLabels = result.labels
+            rowLabels = result.labels
             let rowPaths = Set(rows.map(\.path))
             if !selectedPaths.isSubset(of: rowPaths) { selectedPaths.formIntersection(rowPaths) }
             selectedEntry = selection.flatMap(entry(withPath:))

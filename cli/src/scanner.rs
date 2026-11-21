@@ -78,7 +78,7 @@ pub enum IssueKind {
 }
 
 impl IssueKind {
-    fn of(error: &io::Error) -> Self {
+    pub(crate) fn of(error: &io::Error) -> Self {
         match error.raw_os_error() {
             Some(libc::EACCES) => Self::PermissionDenied,
             Some(libc::EPERM) => Self::NotPermitted,

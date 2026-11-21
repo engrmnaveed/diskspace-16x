@@ -99,6 +99,10 @@ This is Space 16X Pro. It adds:
                         [--json] [--threads N]
              Compare PATH now with its newest kept scan, or the newest one at least
              DAYS days old.
+  space16x duplicates [PATH] [--min-size SIZE] [--json] [--threads N] [EXCLUDES]
+             List files with the same contents, of SIZE or more (default: 1M),
+             grouped, with the space the extra copies use. Only this command reads
+             file contents: it compares files of the same length.
   space16x explain [PATH] [--json]
              Show the space on PATH's volume that a scan can't see: on macOS, the
              APFS container's volumes, purgeable space and local snapshots, and on
@@ -108,7 +112,7 @@ the file types in the open folder, and u lists cleanup suggestions.
 ";
 
 /// Subcommands only Space 16X Pro has. Basic builds answer them with an install hint.
-const PRO_COMMANDS: &[&str] = &["diff", "history", "explain"];
+const PRO_COMMANDS: &[&str] = &["diff", "history", "explain", "duplicates"];
 
 /// Options only Space 16X Pro's scan takes. Basic builds answer them with an install hint.
 const PRO_SCAN_OPTIONS: &[&str] = &[
@@ -922,6 +926,7 @@ mod tests {
                 Ok(Command::ProOnly("diff"))
             );
             assert_eq!(args(&["explain"]), Ok(Command::ProOnly("explain")));
+            assert_eq!(args(&["duplicates"]), Ok(Command::ProOnly("duplicates")));
             assert_eq!(
                 args(&["scan", "--older-than", "30"]),
                 Ok(Command::ProOnly("--older-than"))
