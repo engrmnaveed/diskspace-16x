@@ -15,7 +15,9 @@ struct WorkspaceView: View {
                 if let notice = workspace.notice {
                     noticeBar(notice)
                 }
-                if workspace.canBrowse {
+                if let file = workspace.openingFile {
+                    opening(file)
+                } else if workspace.canBrowse {
                     if workspace.isScanning { backgroundScanProgress }
                     ResultsView(workspace: workspace)
                 } else if workspace.isScanning {
@@ -149,6 +151,13 @@ struct WorkspaceView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(report.root.path)
+                if let file = workspace.importedFile {
+                    Label("Saved scan, read-only", systemImage: "doc.text")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                        .help("Opened from \(file). Scan the folder again to rescan it or move items to the Trash.")
+                }
             }
             .padding(.horizontal, 7)
 
@@ -196,6 +205,11 @@ struct WorkspaceView: View {
             .controlSize(.large)
             .disabled(!workspace.canChooseFolder)
             .help("Open the folder picker (⌘O)")
+
+            Button("Open a Saved Scan…", action: workspace.openScan)
+                .buttonStyle(.link)
+                .disabled(!workspace.canChooseFolder)
+                .help("Browse a scan exported by Space 16X, the CLI, ncdu, or gdu (⇧⌘O)")
         }
         .padding(36)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -207,6 +221,21 @@ struct WorkspaceView: View {
                 endRadius: 310
             )
         }
+    }
+
+    private func opening(_ file: String) -> some View {
+        VStack(spacing: 17) {
+            SpaceMark(size: 54)
+            Text("Opening “\(file)”…")
+                .font(.title2.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            ProgressView()
+                .progressViewStyle(.linear)
+                .frame(maxWidth: 260)
+                .accessibilityLabel("Opening the saved scan")
+        }
+        .padding(36)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var scanInProgress: some View {

@@ -33,6 +33,14 @@ struct Space16XApp: App {
                 Button("Choose Folder…", action: workspace.chooseFolder)
                     .keyboardShortcut("o")
                     .disabled(!workspace.canChooseFolder)
+                Button("Open Scan…", action: workspace.openScan)
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
+                    .disabled(!workspace.canChooseFolder)
+            }
+            CommandGroup(replacing: .saveItem) {
+                Button("Export Scan…", action: workspace.exportScan)
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
+                    .disabled(!workspace.canExport)
             }
             CommandMenu("Scan") {
                 Button("Scan Again", action: workspace.rescan)
@@ -84,7 +92,7 @@ struct Space16XApp: App {
                     .disabled(!workspace.canQuickLook)
                 Button("Reveal in Finder", action: workspace.revealSelected)
                     .keyboardShortcut("r", modifiers: [.command, .shift])
-                    .disabled(workspace.selectedEntry == nil || !workspace.canBrowse)
+                    .disabled(workspace.selectedEntry == nil || !workspace.canReveal)
                 Button("Copy Path", action: workspace.copySelectedPath)
                     .keyboardShortcut("c", modifiers: [.command, .option])
                     .disabled(workspace.selectedEntry == nil || !workspace.canBrowse)
