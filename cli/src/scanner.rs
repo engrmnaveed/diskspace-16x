@@ -118,6 +118,67 @@ pub struct Report {
     pub is_preview: bool,
 }
 
+impl Report {
+    /// This report with the folder `subtree` scanned again, as from [`rescan`]. Totals,
+    /// item counts, and states of every folder above it are recomputed, and issues at or
+    /// below it are replaced. The excluded count keeps the earlier scan's figure. Returns
+    /// None when the folder isn't in this report.
+    pub fn replacing(&self, subtree: Report) -> Option<Report> {
+        let folder = subtree.root.path.clone();
+        if folder == self.root.path {
+            return Some(Report {
+                excluded_count: self.excluded_count.max(subtree.excluded_count),
+                ..subtree
+            });
+        }
+        let mut issues: Vec<Issue> = self
+            .issues
+            .iter()
+            .filter(|issue| !issue.path.starts_with(&folder))
+            .cloned()
+            .collect();
+        issues.extend(subtree.issues);
+        let root = replaced(&self.root, subtree.root, &issues)?;
+        Some(Report {
+            root,
+            issues,
+            excluded_count: self.excluded_count,
+            is_preview: self.is_preview,
+        })
+    }
+}
+
+/// `node` with the descendant at `replacement.path` swapped for `replacement`.
+fn replaced(node: &Arc<Entry>, replacement: Arc<Entry>, issues: &[Issue]) -> Option<Arc<Entry>> {
+    let index = node
+        .children
+        .iter()
+        .position(|child| replacement.path.starts_with(&child.path))?;
+    let child = if node.children[index].path == replacement.path {
+        if node.children[index].kind != EntryKind::Directory {
+            return None;
+        }
+        replacement
+    } else {
+        replaced(&node.children[index], replacement, issues)?
+    };
+    let mut children = node.children.clone();
+    children[index] = child;
+    // A folder's own state comes from problems reading the folder itself or a child
+    // that has no entry. Problems inside a child are already in that child's state.
+    let own = issues
+        .iter()
+        .filter(|issue| {
+            issue.path == node.path
+                || (issue.path.parent() == Some(node.path.as_path())
+                    && !children.iter().any(|child| child.path == issue.path))
+        })
+        .fold(EntryState::Local, |state, issue| {
+            state.degrade(issue.kind.entry_state())
+        });
+    Some(directory_entry(node.path.clone(), own, children).0)
+}
+
 #[derive(Clone, Debug)]
 pub enum Event {
     Progress { visited: u64, path: PathBuf },
@@ -142,6 +203,7 @@ pub fn scan(
             metadata: MetadataAccess::new(cancelled),
             cancelled,
             excludes,
+            exclude_root_length: None,
             visited: 0,
             last_progress: None,
         };
@@ -166,6 +228,46 @@ pub fn scan(
             check_cancelled(cancelled)?;
             Ok(report)
         }
+    })
+}
+
+/// Scan one folder of an earlier scan of `root` again, without previews. Exclude
+/// patterns stay relative to `root`. Merge the result with [`Report::replacing`].
+///
+/// Hard links are counted once within the folder. A file that also has a link outside
+/// it may be counted on both sides until a full rescan.
+pub fn rescan(
+    root: &Path,
+    folder: &Path,
+    excludes: &Excludes,
+    cancelled: &AtomicBool,
+    notify: impl FnMut(Event),
+) -> io::Result<Report> {
+    fs::raise_open_file_limit();
+    with_local_metadata(|| {
+        check_cancelled(cancelled)?;
+        let root = scan_scope(root)?;
+        let scope = scan_scope(folder)?;
+        if !scope.starts_with(&root) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "The folder isn't inside the scanned folder.",
+            ));
+        }
+        let mut walker = Walker {
+            notify,
+            metadata: MetadataAccess::new(cancelled),
+            cancelled,
+            excludes,
+            exclude_root_length: Some(root.as_os_str().len()),
+            visited: 0,
+            last_progress: None,
+        };
+        walker.progress(&scope, true);
+        let report = walker.walk(&scope, None, &mut None)?;
+        walker.progress(&scope, true);
+        check_cancelled(cancelled)?;
+        Ok(report)
     })
 }
 
@@ -194,6 +296,9 @@ struct Walker<'a, F> {
     metadata: MetadataAccess<'a>,
     cancelled: &'a AtomicBool,
     excludes: &'a Excludes,
+    /// Length of the path exclude patterns are relative to. A folder rescan keeps the
+    /// original scan root, so anchored patterns such as `/build` still apply there.
+    exclude_root_length: Option<usize>,
     visited: u64,
     last_progress: Option<Instant>,
 }
@@ -245,7 +350,9 @@ impl<F: FnMut(Event)> Walker<'_, F> {
 
         let mut issues = Vec::new();
         let mut excluded = 0_u64;
-        let scope_length = scope.as_os_str().len();
+        let scope_length = self
+            .exclude_root_length
+            .unwrap_or_else(|| scope.as_os_str().len());
         let mut links = HashSet::new();
         let mut ancestors = HashSet::from([identity]);
         #[cfg(target_os = "macos")]

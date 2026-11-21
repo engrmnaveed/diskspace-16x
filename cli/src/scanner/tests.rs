@@ -396,3 +396,147 @@ fn classifies_access_refusals_as_protected() {
     assert!(IssueKind::NotPermitted.is_protected());
     assert!(!IssueKind::Error.is_protected());
 }
+
+fn rescan_folder(root: &Path, folder: &Path, excludes: &Excludes) -> io::Result<Report> {
+    rescan(root, folder, excludes, &AtomicBool::new(false), |_| {})
+}
+
+fn assert_same_tree(left: &Entry, right: &Entry) {
+    assert_eq!(left.path, right.path);
+    assert_eq!(
+        left.allocated_bytes, right.allocated_bytes,
+        "{:?}",
+        left.path
+    );
+    assert_eq!(left.apparent_bytes, right.apparent_bytes, "{:?}", left.path);
+    assert_eq!(left.item_count, right.item_count, "{:?}", left.path);
+    assert_eq!(left.state, right.state, "{:?}", left.path);
+    let mut left_children: Vec<_> = left.children.iter().collect();
+    let mut right_children: Vec<_> = right.children.iter().collect();
+    left_children.sort_by(|a, b| a.path.cmp(&b.path));
+    right_children.sort_by(|a, b| a.path.cmp(&b.path));
+    assert_eq!(left_children.len(), right_children.len(), "{:?}", left.path);
+    for (left, right) in left_children.into_iter().zip(right_children) {
+        assert_same_tree(left, right);
+    }
+}
+
+#[test]
+fn rescanning_a_folder_matches_a_full_scan() -> io::Result<()> {
+    let fixture = Fixture::new()?;
+    fs::create_dir_all(fixture.join("outer/inner"))?;
+    fs::write(fixture.join("outer/inner/old.bin"), [1; 9_000])?;
+    fs::write(fixture.join("outer/keep.bin"), [2; 3_000])?;
+    fs::write(fixture.join("top.bin"), [3; 5_000])?;
+    let before = fixture.report()?;
+
+    fs::remove_file(fixture.join("outer/inner/old.bin"))?;
+    fs::create_dir(fixture.join("outer/inner/new"))?;
+    fs::write(fixture.join("outer/inner/new/a.bin"), [4; 20_000])?;
+    fs::write(fixture.join("outer/inner/b.bin"), [5; 700])?;
+    let inner = fixture.join("outer/inner");
+    let subtree = rescan_folder(fixture.path(), &inner, &Excludes::default())?;
+    let merged = before
+        .replacing(subtree)
+        .expect("the folder is in the report");
+
+    assert_same_tree(&merged.root, &fixture.report()?.root);
+    assert!(merged.issues.is_empty());
+    // The whole scope can be rescanned too.
+    let whole = rescan_folder(fixture.path(), fixture.path(), &Excludes::default())?;
+    assert_same_tree(&before.replacing(whole).unwrap().root, &merged.root);
+    Ok(())
+}
+
+#[test]
+fn rescanning_keeps_exclude_patterns_relative_to_the_scan_root() -> io::Result<()> {
+    let fixture = Fixture::new()?;
+    fs::create_dir_all(fixture.join("app/build"))?;
+    fs::create_dir_all(fixture.join("app/src/build"))?;
+    fs::write(fixture.join("app/build/out.bin"), [1; 8_000])?;
+    fs::write(fixture.join("app/src/build/keep.bin"), [2; 4_000])?;
+    let excludes = Excludes::new(["/app/build"]).expect("valid pattern");
+    let full = scan(
+        fixture.path(),
+        &excludes,
+        false,
+        &AtomicBool::new(false),
+        |_| {},
+    )?;
+
+    let app = fixture.join("app");
+    let subtree = rescan_folder(fixture.path(), &app, &excludes)?;
+    assert_eq!(subtree.excluded_count, 1);
+    let merged = full.replacing(subtree).unwrap();
+    assert_same_tree(&merged.root, &full.root);
+    assert_eq!(merged.excluded_count, 1);
+    assert!(rescan_folder(&app, fixture.path(), &excludes).is_err());
+    Ok(())
+}
+
+#[test]
+fn rescanning_recomputes_states_above_the_folder() -> io::Result<()> {
+    // SAFETY: geteuid takes no arguments and cannot modify process state.
+    if unsafe { libc::geteuid() } == 0 {
+        return Ok(());
+    }
+    let fixture = Fixture::new()?;
+    let private = fixture.join("sub/private");
+    let other = fixture.join("other");
+    fs::create_dir_all(&private)?;
+    fs::create_dir(&other)?;
+    fs::write(private.join("hidden"), [7; 6_000])?;
+    fs::set_permissions(&private, fs::Permissions::from_mode(0o0))?;
+    fs::set_permissions(&other, fs::Permissions::from_mode(0o0))?;
+    let before = fixture.report();
+    fs::set_permissions(&private, fs::Permissions::from_mode(0o700))?;
+    let subtree = rescan_folder(fixture.path(), &fixture.join("sub"), &Excludes::default());
+    fs::set_permissions(&other, fs::Permissions::from_mode(0o700))?;
+
+    let before = before?;
+    assert_eq!(before.issues.len(), 2);
+    assert_eq!(child(&before.root, "sub").state, EntryState::Protected);
+    let merged = before.replacing(subtree?).unwrap();
+    let sub = child(&merged.root, "sub");
+    assert_eq!(sub.state, EntryState::Local);
+    assert_eq!(
+        sub.allocated_bytes,
+        fs::metadata(private.join("hidden"))?.blocks() * 512
+    );
+    assert_eq!(sub.item_count, 2);
+    // The unreadable sibling still keeps the scope protected.
+    assert_eq!(merged.root.state, EntryState::Protected);
+    assert_eq!(merged.issues.len(), 1);
+    assert_eq!(merged.issues[0].path, other);
+    Ok(())
+}
+
+#[test]
+fn replacing_needs_a_folder_in_the_report() -> io::Result<()> {
+    let fixture = Fixture::new()?;
+    fs::create_dir(fixture.join("folder"))?;
+    fs::write(fixture.join("file.bin"), [1; 100])?;
+    let report = fixture.report()?;
+    let folder = rescan_folder(
+        fixture.path(),
+        &fixture.join("folder"),
+        &Excludes::default(),
+    )?;
+    let missing = Report {
+        root: Arc::new(Entry {
+            path: fixture.join("gone/folder"),
+            ..Entry::clone(&folder.root)
+        }),
+        ..folder.clone()
+    };
+    assert!(report.replacing(missing).is_none());
+    let file = Report {
+        root: Arc::new(Entry {
+            path: fixture.join("file.bin"),
+            ..Entry::clone(&folder.root)
+        }),
+        ..folder
+    };
+    assert!(report.replacing(file).is_none());
+    Ok(())
+}
