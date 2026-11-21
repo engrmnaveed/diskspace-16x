@@ -15,12 +15,16 @@ struct DatalessPolicyError: LocalizedError {
 }
 
 /// Known macOS provider directories can block during metadata calls even for
-/// resident items. Bound the wait and the number of outstanding system calls.
-final class MetadataAccess {
+/// resident items. Bound the wait and the number of outstanding system calls. A scan's
+/// directory tasks share one instance.
+final class MetadataAccess: @unchecked Sendable {
     private let isCancelled: @Sendable () -> Bool
 
     #if canImport(Darwin)
     private static let workerSlots = DispatchSemaphore(value: 2)
+    /// Provider calls take turns, so a busy pool doesn't fail calls that never ran.
+    private static let turn = NSLock()
+    private let lock = NSLock()
     private var timedOut: Set<String> = []
     #endif
 
@@ -44,7 +48,11 @@ final class MetadataAccess {
         #if canImport(Darwin)
         if isProvider {
             try checkCancellation()
-            guard !timedOut.contains(path), Self.workerSlots.wait(timeout: .now()) == .success else {
+            Self.turn.lock()
+            defer { Self.turn.unlock() }
+            try checkCancellation()
+            guard !lock.withLock({ timedOut.contains(path) }),
+                  Self.workerSlots.wait(timeout: .now()) == .success else {
                 throw MetadataUnavailable()
             }
             let attempt = MetadataAttempt<T>()
@@ -71,7 +79,7 @@ final class MetadataAccess {
                     return try attempt.result()
                 }
             } while DispatchTime.now() < deadline
-            timedOut.insert(path)
+            _ = lock.withLock { timedOut.insert(path) }
             throw MetadataUnavailable()
         }
         #endif

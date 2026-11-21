@@ -275,7 +275,7 @@ final class ScanWorkspace {
         )
         let worker = Task.detached(priority: .userInitiated) {
             defer { continuation.finish() }
-            return try DiskScanner.rescan(
+            return try await DiskScanner.rescan(
                 folder: path,
                 in: root,
                 excludes: excludes,
@@ -378,7 +378,7 @@ final class ScanWorkspace {
                 snapshotContinuation.finish()
                 if didAccess { url.stopAccessingSecurityScopedResource() }
             }
-            return try DiskScanner.scan(
+            return try await DiskScanner.scan(
                 path: path,
                 excludes: excludes,
                 progress: { continuation.yield($0) },
