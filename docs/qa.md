@@ -9,6 +9,7 @@ Milestone 4 (Carry, compare, editions) on the Apple M5 Pro MacBook Pro with macO
 - All 42 Swift tests passed. They include the shared export fixtures, a round trip of a real scan, volume summaries, and Pro's comparison below different roots.
 - Offscreen renders of the shipping views checked the start screen with the volume list and **Open a Saved Scan…**, an opened scan with the read-only label, **Settings → Pro features**, and Compare with its Change column ranked by growth.
 - 1,000,000 files exported in a 50 MB file. Scanning and exporting took 1.23 s, and importing took 0.23 s with a 33 MB peak, because the reader streams.
+- Published release archives, Basic and Pro, against 0.5.0's Basic archives: `aarch64-apple-darwin` 510,178 and 533,482 bytes (532,615), `x86_64-apple-darwin` 548,309 and 576,179 (566,289), `aarch64-unknown-linux-musl` 555,092 and 577,788 (555,482), and `x86_64-unknown-linux-musl` 588,111 and 616,109 (588,488). Basic stays under the 600 KB budget on every target.
 - Local release archives (macOS `tar` and `gzip`), Basic and Pro: `aarch64-apple-darwin` 504,101 and 527,196 bytes, and `x86_64-unknown-linux-musl` 588,977 and 616,395. 0.5.0's published `aarch64-apple-darwin` archive was 532,615 bytes. Building with full LTO and one codegen unit took about 28 KB off each archive before the new features, so Basic stays under the 600 KB budget with export, import and `volumes`, and with no new dependencies. Pro has no size budget and no dependencies of its own yet.
 
 Rust release CLI, `scripts/benchmark.py`, the same day:
