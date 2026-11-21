@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0
 
 - See the space a scan can't show in Space 16X Pro. `space16x explain [PATH]` shows the size, used and free space of PATH's volume. On macOS it adds each volume of the APFS container with its own used space (the system volume, Preboot, VM, Recovery and your data), purgeable space that macOS frees when needed, and Time Machine local snapshots. On Linux it adds the blocks reserved for root and the deleted files that programs still hold open, with each program's name and process ID. `--json` writes the same figures. In the Mac app, with **Settings → Pro features** on, **Scan → Explain Disk Space** (⇧⌘X), or a volume's context menu on the start screen, shows them for the volume. It reads system figures and metadata only.
 - Find folders you can safely clear in Space 16X Pro. `space16x scan --cleanup` lists folders that tools recreate when they need them, such as `node_modules`, Cargo's `target`, Xcode's DerivedData and device support files, simulator caches, `Library/Caches`, `.cache` and the Gradle and npm caches, largest first, and `--json` writes them as `suggestions`. Press `u` in the CLI explorer for the same list, then Space and `d` to move folders to the Trash after you confirm. In the Mac app, with **Settings → Pro features** on, **Cleanup** in the sidebar (or **Browse → Cleanup Suggestions**, ⌘6) lists them for Move to Trash. Suggestions come from names in the finished scan, and nothing is removed without your confirmation.
