@@ -1,4 +1,5 @@
 import SpaceCore
+import QuickLook
 import SwiftUI
 
 struct ResultsView: View {
@@ -288,6 +289,12 @@ struct ResultsView: View {
             workspace.activate(entry)
             return .handled
         }
+        .onKeyPress(.space) {
+            guard workspace.canQuickLook || workspace.quickLookURL != nil else { return .ignored }
+            workspace.toggleQuickLook()
+            return .handled
+        }
+        .quickLookPreview($workspace.quickLookURL)
         .accessibilityLabel(workspace.mode == .folders ? "Folder contents" : "Largest files")
         .overlay {
             if workspace.isLoadingRows && workspace.rows.isEmpty {
@@ -514,6 +521,10 @@ struct ResultsView: View {
             Button("Rescan Folder") { workspace.rescanFolder(entry) }
                 .disabled(!workspace.canRescan)
             Divider()
+        }
+        Button("Quick Look") {
+            workspace.selection = entry.path
+            workspace.toggleQuickLook()
         }
         Button("Reveal in Finder") { workspace.reveal(entry) }
         Button("Copy Path") { workspace.copyPath(of: entry) }
