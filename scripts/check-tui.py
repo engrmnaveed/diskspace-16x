@@ -85,6 +85,9 @@ def check_sort_size_and_color(binary, fixture):
             # u lists cleanup suggestions in the whole scan, and u again leaves them.
             terminal.press(b"u", b"cleanup suggestions")
             terminal.press(b"u", b"nested-alpha")
+            # m draws the open folder as a treemap, and m again returns to the list.
+            terminal.press(b"m", "┌".encode())
+            terminal.press(b"m", b"Items")
 
         terminal.press(b"s", b"by items")
         terminal.press(b"a", b"apparent")

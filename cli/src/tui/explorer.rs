@@ -167,6 +167,9 @@ pub(super) struct Explorer {
     pub(super) panel_page: usize,
     /// Set by `--read-only` or `SPACE16X_READ_ONLY`: marking and trashing are off.
     pub(super) read_only: bool,
+    /// Pro: the folder view draws its contents as a treemap instead of a list.
+    #[cfg(feature = "pro")]
+    pub(super) treemap: bool,
     /// A saved scan from `--import`. Its files may be elsewhere, so it is read-only and
     /// can't be rescanned.
     pub(super) imported: bool,
@@ -204,6 +207,8 @@ impl Explorer {
             panel_items: 0,
             panel_page: 1,
             read_only: false,
+            #[cfg(feature = "pro")]
+            treemap: false,
             imported: false,
             marked: BTreeSet::new(),
             prompt: None,
@@ -498,6 +503,22 @@ impl Explorer {
         };
         self.query.clear();
         self.reset_ranking(None);
+    }
+
+    /// Pro: switches the folder view between the list and a treemap of its contents.
+    #[cfg(feature = "pro")]
+    fn toggle_treemap(&mut self) {
+        if self.report.is_none() {
+            return;
+        }
+        if self.mode != Mode::Folders {
+            self.mode = Mode::Folders;
+            self.query.clear();
+            self.reset_ranking(None);
+            self.treemap = true;
+        } else {
+            self.treemap = !self.treemap;
+        }
     }
 
     /// Pro: lists the folders in the scan that tools recreate, for Move to Trash.
@@ -939,6 +960,8 @@ impl Explorer {
             KeyCode::Char('t') => self.open_types(),
             #[cfg(feature = "pro")]
             KeyCode::Char('u') => self.toggle_cleanup(),
+            #[cfg(feature = "pro")]
+            KeyCode::Char('m') => self.toggle_treemap(),
             _ => {}
         }
         Action::Stay
@@ -1408,6 +1431,22 @@ mod tests {
         };
         assert_eq!(types.len(), 1);
         assert_eq!(types[0].allocated_bytes, 120);
+    }
+
+    #[cfg(feature = "pro")]
+    #[test]
+    fn toggles_the_treemap_of_the_open_folder() {
+        let mut explorer = trash_fixture();
+        key(&mut explorer, KeyCode::Char('m'));
+        assert!(explorer.treemap);
+        // Moving and opening work as in the list.
+        key(&mut explorer, KeyCode::Down);
+        assert_eq!(names(&explorer)[explorer.selected], "mid");
+        key(&mut explorer, KeyCode::Char('m'));
+        assert!(!explorer.treemap);
+        key(&mut explorer, KeyCode::Char('f'));
+        key(&mut explorer, KeyCode::Char('m'));
+        assert!(explorer.treemap && explorer.mode == Mode::Folders);
     }
 
     #[cfg(feature = "pro")]

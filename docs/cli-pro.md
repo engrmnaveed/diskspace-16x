@@ -94,6 +94,18 @@ Owners come from the user database. The Linux release builds are static and read
 
 JSON reports put `owners` in place of `depth` and `entries`. Each owner has `owner` (the user name, or `null` without one), `uid`, `allocatedBytes`, `apparentBytes` and `itemCount`.
 
+## HTML report
+
+```text
+space16x scan [PATH] --html FILE|- [--apparent] [--older-than DAYS] ...
+```
+
+`--html FILE` also writes the scan as one self-contained HTML page that you can open in any browser or send to someone: the totals, a treemap of the 30 largest items, the scan root's contents with their share, the 25 largest files, the largest file types and, when more than one user owns items, the owners. The page has no scripts and loads nothing from the network, and it follows the reader's light or dark appearance. It's written after the usual text or JSON report, which still goes to standard output, as with `--export FILE`. `--html -` writes only the page to standard output, so `ssh server space16x scan /srv --html - > srv.html` reports on a server, and it takes no other report options such as `--json`, `--depth` or `--types`. `--apparent` ranks the page by apparent size, and `--older-than` limits it to older files. Space 16X writes only the file you name. The page shows full paths, so review it before you share it.
+
+## Treemap in the explorer
+
+Press `m` in the explorer to draw the open folder's contents as a treemap, with each item's area in proportion to its size, and `m` again to return to the list. The arrow keys move the selection, which the treemap highlights, Enter opens a folder, and Space, `d` and the other keys work as in the list. Items too small for a box are left out of the drawing but stay in the list.
+
 ## Duplicates
 
 ```text
