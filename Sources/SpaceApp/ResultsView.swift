@@ -184,7 +184,8 @@ struct ResultsView: View {
                 message: (errors == 1
                     ? "Partial scan. One scan error affects these totals."
                     : "Partial scan. \(errors.formatted()) scan errors affect these totals.")
-                    + (protected > 0 ? " \(ScanFormat.protectedItems(protected)) weren't counted." : "")
+                    + (protected == 1 ? " One protected item wasn't counted." : "")
+                    + (protected > 1 ? " \(ScanFormat.protectedItems(protected)) weren't counted." : "")
             )
         } else if protected > 0 {
             noticeBar(
@@ -489,7 +490,7 @@ struct ResultsView: View {
                 Label("Reveal in Finder", systemImage: "arrow.up.forward.app")
             }
             .help("Reveal the selected item in Finder (⇧⌘R)")
-            .disabled(workspace.selectedEntry == nil)
+            .disabled(workspace.selectedEntry == nil || !workspace.canReveal)
             Button(action: workspace.copySelectedPath) {
                 Label("Copy Path", systemImage: "doc.on.doc")
             }
@@ -526,10 +527,12 @@ struct ResultsView: View {
             workspace.selection = entry.path
             workspace.toggleQuickLook()
         }
+        .disabled(workspace.isImported)
         Button("Reveal in Finder") { workspace.reveal(entry) }
+            .disabled(workspace.isImported)
         Button("Copy Path") { workspace.copyPath(of: entry) }
         Divider()
         Button("Move to Trash…") { workspace.requestTrash([entry]) }
-            .disabled(workspace.isScanning)
+            .disabled(workspace.isScanning || workspace.isImported)
     }
 }

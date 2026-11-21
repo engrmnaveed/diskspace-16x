@@ -113,6 +113,7 @@ struct DiskTreemapView: View {
                             Button("Open Folder") { workspace.browse(entry) }
                         }
                         Button("Reveal in Finder") { workspace.reveal(entry) }
+                            .disabled(workspace.isImported)
                         Button("Copy Path") { workspace.copyPath(of: entry) }
                     }
                 case let .other(bytes):

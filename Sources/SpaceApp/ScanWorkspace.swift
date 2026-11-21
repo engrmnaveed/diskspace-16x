@@ -1,6 +1,7 @@
 import AppKit
 import Observation
 import SpaceCore
+import UniformTypeIdentifiers
 
 enum BrowseMode: String, CaseIterable {
     case folders = "Folders"
@@ -78,6 +79,13 @@ final class ScanWorkspace {
     private(set) var isCancelling = false
     /// The folder **Rescan Folder** is scanning again, if any.
     private(set) var rescanningFolder: String?
+    /// The saved scan being opened, if any.
+    private(set) var openingFile: String?
+    /// The file the results came from, when they were opened rather than scanned. Its
+    /// items may be elsewhere or may have changed, so the results are read-only.
+    private(set) var importedFile: String?
+    /// The exclude patterns the results were scanned with, for Export Scan.
+    private(set) var reportExcludes: [String] = []
     private var isPresentingPicker = false
     private(set) var notice: Notice?
     private(set) var selectedEntry: ScanEntry?
@@ -127,7 +135,7 @@ final class ScanWorkspace {
 
     /// The item Quick Look shows. Quick Look reads the file only while it is open.
     var quickLookURL: URL?
-    var canQuickLook: Bool { canBrowse && selectedEntry != nil }
+    var canQuickLook: Bool { canBrowse && selectedEntry != nil && !isImported }
 
     /// Opens Quick Look for the selected item, or closes it. Cloud-only items stay closed,
     /// because previewing them would download them.
@@ -151,7 +159,7 @@ final class ScanWorkspace {
     /// Items waiting for the user to confirm Move to Trash. A nonempty list shows the alert.
     var pendingTrash: [ScanEntry] = []
     private(set) var isTrashing = false
-    var canMoveToTrash: Bool { canBrowse && !isScanning && !isTrashing && !selectedPaths.isEmpty }
+    var canMoveToTrash: Bool { canBrowse && !isScanning && !isTrashing && !selectedPaths.isEmpty && !isImported }
 
     var mode: BrowseMode = .folders {
         didSet {
@@ -167,13 +175,16 @@ final class ScanWorkspace {
     var currentFolder: ScanEntry? { scope.last }
     var visibleScope: ScanEntry? { mode == .folders ? currentFolder : report?.root }
     var isScanning: Bool { scanPath != nil }
-    var canChooseFolder: Bool { !isScanning && !isPresentingPicker }
+    var canChooseFolder: Bool { !isScanning && !isPresentingPicker && openingFile == nil }
     var canBrowse: Bool { report != nil && (!isScanning || scanHasResults) }
-    var canRescan: Bool { report != nil && canChooseFolder }
+    var isImported: Bool { importedFile != nil }
+    var canRescan: Bool { report != nil && canChooseFolder && !isImported }
+    var canReveal: Bool { canBrowse && !isImported }
+    var canExport: Bool { canBrowse && canChooseFolder }
 
     /// Suggests Full Disk Access only when macOS privacy controls kept items out of this scan.
     var accessAdvice: AccessAdvice {
-        guard hasPrivacyRefusals else { return .none }
+        guard hasPrivacyRefusals, !isImported else { return .none }
         if !hasFullDiskAccess { return .grant }
         return scanHadFullDiskAccess ? .none : .rescan
     }
@@ -231,8 +242,96 @@ final class ScanWorkspace {
             )
             return false
         }
-        startScan(url)
+        if url.pathExtension.lowercased() == "json", !url.hasDirectoryPath {
+            openScan(at: url)
+        } else {
+            startScan(url)
+        }
         return true
+    }
+
+    /// Asks for a saved scan to open, read-only.
+    func openScan() {
+        guard canChooseFolder else { return }
+        let picker = NSOpenPanel()
+        picker.title = "Open a Saved Scan"
+        picker.message = "Choose a scan exported by Space 16X, the space16x CLI, ncdu, or gdu."
+        picker.prompt = "Open"
+        picker.allowedContentTypes = [.json]
+        picker.allowsMultipleSelection = false
+        isPresentingPicker = true
+        Task {
+            let result = await picker.begin()
+            isPresentingPicker = false
+            if result == .OK, let url = picker.url { openScan(at: url) }
+        }
+    }
+
+    /// Opens a scan saved in ncdu's JSON format, by Space 16X or another tool.
+    func openScan(at url: URL) {
+        guard canChooseFolder else { return }
+        let name = url.lastPathComponent
+        openingFile = name
+        notice = nil
+        let didAccess = url.startAccessingSecurityScopedResource()
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
+                return Result { try SavedScan(contentsOf: url) }
+            }.value
+            openingFile = nil
+            switch result {
+            case let .success(saved):
+                scanHasResults = false
+                showsDetails = false
+                acceptReport(saved.report, from: .file(name: name, excludes: saved.excludes))
+                notice = Notice(
+                    title: "Opened “\(name)”",
+                    message: "Saved scans are read-only. Scan the folder again to rescan it or move items to the Trash."
+                )
+            case let .failure(error):
+                notice = Notice(
+                    title: "Couldn’t open “\(name)”",
+                    message: error.localizedDescription,
+                    isError: true
+                )
+            }
+        }
+    }
+
+    /// Saves the results in ncdu's JSON format, which the CLI, ncdu, and gdu also open.
+    func exportScan() {
+        guard canExport, let report else { return }
+        let saved = SavedScan(report: report, excludes: reportExcludes)
+        let panel = NSSavePanel()
+        panel.title = "Export Scan"
+        panel.message = "Open it later with Open Scan…, space16x --import, ncdu -f, or gdu -f. It lists every path in the scan."
+        panel.prompt = "Export"
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "\(report.root.path == "/" ? "Startup Disk" : report.root.name) scan.json"
+        isPresentingPicker = true
+        Task {
+            let result = await panel.begin()
+            isPresentingPicker = false
+            guard result == .OK, let url = panel.url else { return }
+            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+            let outcome = await Task.detached(priority: .userInitiated) {
+                Result { try saved.exportData(version: version).write(to: url, options: .atomic) }
+            }.value
+            switch outcome {
+            case .success:
+                notice = Notice(
+                    title: "Exported “\(url.lastPathComponent)”",
+                    message: "Review saved scans for personal paths before you share them."
+                )
+            case let .failure(error):
+                notice = Notice(
+                    title: "Couldn’t export the scan",
+                    message: error.localizedDescription,
+                    isError: true
+                )
+            }
+        }
     }
 
     func rescan() {
@@ -354,6 +453,7 @@ final class ScanWorkspace {
     func startScan(_ url: URL) {
         guard canChooseFolder else { return }
         guard let excludes = excludeRules() else { return }
+        let patterns = ExcludeSettings.patterns
         let didAccess = url.startAccessingSecurityScopedResource()
         let path = url.path(percentEncoded: false)
         scanPath = path
@@ -398,7 +498,7 @@ final class ScanWorkspace {
             let snapshotTask = Task { [weak self] in
                 for await snapshot in snapshots {
                     guard !Task.isCancelled, let self, !self.isCancelling else { return }
-                    self.acceptReport(snapshot)
+                    self.acceptReport(snapshot, from: .scan(excludes: patterns))
                 }
             }
             defer {
@@ -417,7 +517,7 @@ final class ScanWorkspace {
                 }
                 try Task.checkCancellation()
                 snapshotTask.cancel()
-                self?.acceptReport(result)
+                self?.acceptReport(result, from: .scan(excludes: patterns))
             } catch {
                 snapshotTask.cancel()
                 let keptPreview = self?.scanHasResults == true
@@ -570,6 +670,7 @@ final class ScanWorkspace {
     }
 
     func reveal(_ entry: ScanEntry) {
+        guard !isImported else { return }
         NSWorkspace.shared.activateFileViewerSelecting([URL(filePath: entry.path)])
     }
 
@@ -578,7 +679,23 @@ final class ScanWorkspace {
         NSPasteboard.general.setString(entry.path, forType: .string)
     }
 
-    private func acceptReport(_ result: ScanReport) {
+    /// Where new results come from. Results that only change keep their source.
+    private enum ReportSource {
+        case scan(excludes: [String])
+        case file(name: String, excludes: [String])
+    }
+
+    private func acceptReport(_ result: ScanReport, from source: ReportSource? = nil) {
+        switch source {
+        case let .scan(excludes):
+            importedFile = nil
+            reportExcludes = excludes
+        case let .file(name, excludes):
+            importedFile = name
+            reportExcludes = excludes
+        case nil:
+            break
+        }
         let continuing = scanHasResults
         scanHasResults = true
         report = result

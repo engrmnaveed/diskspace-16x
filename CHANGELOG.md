@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Save a scan and browse it later or on another computer. `space16x scan --export FILE` saves the whole scan in ncdu's JSON format, and `--export -` writes it to standard output. `space16x --import FILE` or `--import -` opens it in the explorer, read-only, so `ssh -C server space16x scan / --export - | space16x --import -` scans a server and browses the result locally. ncdu and gdu open these exports, and Space 16X opens theirs. Without a terminal, `--import` prints the one-level report.
+- Save and open scans in the Mac app. **File → Export Scan…** (⇧⌘E) saves the results in the same ncdu JSON format as the CLI, and **File → Open Scan…** (⇧⌘O) or dropping a `.json` file opens a scan saved by the app, the CLI, ncdu, or gdu. Opened scans are read-only: Rescan, Quick Look, Reveal in Finder, and Move to Trash are off until you scan a folder again.
 - Build the CLI with full link-time optimization and one codegen unit, which keeps the release archives smaller than 0.5.0's with export and import added. Scan speed is unchanged.
 - Fix a trailing slash after the scan root in the total line of text reports, which 0.5.0 added.
 
