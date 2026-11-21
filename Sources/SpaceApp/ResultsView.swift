@@ -27,6 +27,7 @@ struct ResultsView: View {
                 case .list: resultsTable(scope: rankedScope)
                 case .treemap: DiskTreemapView(workspace: workspace, folder: rankedScope)
                 case .donut: DiskDonutView(workspace: workspace, folder: rankedScope)
+                case .types: FileTypesView(workspace: workspace, folder: rankedScope)
                 }
                 selectionBar
             }
@@ -251,13 +252,13 @@ struct ResultsView: View {
                 .font(.subheadline.weight(.semibold))
                 .accessibilityHidden(true)
             Picker("Folder view", selection: $workspace.folderPresentation) {
-                ForEach(FolderPresentation.allCases, id: \.self) { presentation in
+                ForEach(FolderPresentation.available(pro: proFeatures), id: \.self) { presentation in
                     Text(presentation.rawValue).tag(presentation)
                 }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 210)
+            .frame(width: proFeatures ? 280 : 210)
             Spacer(minLength: 0)
             if proFeatures {
                 compareControl

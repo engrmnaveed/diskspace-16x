@@ -709,6 +709,8 @@ fn draw_panel(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         Some(Panel::Help) => " Help ",
         Some(Panel::Issues) => " Scan issues ",
         Some(Panel::Details) => " File details ",
+        #[cfg(feature = "pro")]
+        Some(Panel::Types(_)) => " File types ",
         None => return,
     };
     let content = if area.width >= 24 && area.height >= 4 {
@@ -732,7 +734,64 @@ fn draw_panel(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         Some(Panel::Help) => draw_help(frame, content, explorer),
         Some(Panel::Issues) => draw_issues(frame, content, explorer),
         Some(Panel::Details) => draw_details(frame, content, explorer),
+        #[cfg(feature = "pro")]
+        Some(Panel::Types(_)) => draw_types(frame, content, explorer),
         None => {}
+    }
+}
+
+/// Pro: the open folder's file types with their size, file count and share.
+#[cfg(feature = "pro")]
+fn draw_types(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
+    let count = match &explorer.panel {
+        Some(Panel::Types(types)) => types.len(),
+        _ => return,
+    };
+    let rows = usize::from(area.height.saturating_sub(1));
+    explorer.set_panel_page(count, rows);
+    let total = explorer
+        .scope()
+        .map_or(0, |scope| explorer.metric.bytes(scope));
+    let Some(Panel::Types(types)) = &explorer.panel else {
+        return;
+    };
+    if types.is_empty() {
+        paint(
+            frame,
+            line_at(area, 0),
+            Line::styled("No files here.", MUTED),
+        );
+        return;
+    }
+    let heading = format!("{:>10} {:>10} {:>7}  Type", "Size", "Files", "Share");
+    paint(frame, line_at(area, 0), Line::styled(heading, ACCENT));
+    for (row, kind) in types
+        .iter()
+        .skip(explorer.panel_offset)
+        .take(rows)
+        .enumerate()
+    {
+        let bytes = match explorer.metric {
+            Metric::Allocated => kind.allocated_bytes,
+            Metric::Apparent => kind.apparent_bytes,
+        };
+        let share = if total == 0 {
+            0.0
+        } else {
+            (100.0 * bytes as f64 / total as f64).min(100.0)
+        };
+        paint(
+            frame,
+            line_at(area, row as u16 + 1),
+            Line::from(vec![
+                Span::raw(format!(
+                    "{:>10} {:>10} {share:>6.1}%  ",
+                    format_bytes(bytes),
+                    format_count(kind.file_count)
+                )),
+                Span::styled(kind.label(), ACCENT),
+            ]),
+        );
     }
 }
 
@@ -764,6 +823,8 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         ("f", "Toggle largest files for the scan"),
         ("s", "Sort folders by size, items, or name"),
         ("a", "Switch between allocated and apparent sizes"),
+        #[cfg(feature = "pro")]
+        ("t", "Show file types in the open folder"),
         trash[0],
         trash[1],
         ("r", "Rescan the open folder, or all in largest"),

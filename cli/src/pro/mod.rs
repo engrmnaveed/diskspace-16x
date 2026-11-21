@@ -7,8 +7,10 @@
 
 mod diff;
 mod modified;
+mod types;
 
 pub use modified::format_date;
+pub use types::{TypeTotal, breakdown as type_breakdown};
 
 use std::ffi::OsString;
 use std::io;
@@ -16,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 
-use crate::report::{Metric, Selection};
+use crate::report::{self, Metric, Selection};
 use crate::scanner;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -39,6 +41,8 @@ pub struct DiffOptions {
 pub struct ScanOptions {
     /// Count only files last modified more than this many days ago.
     older_than: Option<u32>,
+    /// List the N largest file types instead of entries.
+    types: Option<usize>,
 }
 
 impl ScanOptions {
@@ -57,8 +61,46 @@ impl ScanOptions {
                 self.older_than = Some(days);
                 Ok(())
             }
+            "--types" if self.types.is_none() => {
+                let limit = arguments
+                    .next()
+                    .and_then(|value| value.to_str()?.parse::<usize>().ok())
+                    .ok_or("--types requires a nonnegative integer.")?;
+                self.types = Some(limit);
+                Ok(())
+            }
             _ => Err(format!("Use {flag} once.")),
         }
+    }
+
+    /// Checks the options against the rest of the scan command.
+    pub fn check(&self, selection: Option<Selection>) -> Result<(), String> {
+        if self.types.is_some() && selection.is_some() {
+            return Err("Use one of --depth, --top and --types.".into());
+        }
+        Ok(())
+    }
+
+    /// Writes a Pro report, such as `--types`, to standard output. Returns false when the
+    /// options ask for the usual report.
+    pub fn write_report(
+        &self,
+        report: &scanner::Report,
+        metric: Metric,
+        excludes: &[String],
+        json: bool,
+    ) -> io::Result<bool> {
+        let Some(limit) = self.types else {
+            return Ok(false);
+        };
+        let stdout = io::stdout().lock();
+        if json {
+            let result = types::JsonTypes::new(report, limit, metric);
+            report::write_json_report(stdout, report, metric, excludes, self.older_than, result)?;
+        } else {
+            types::write_plain(stdout, report, limit, metric)?;
+        }
+        Ok(true)
     }
 
     pub fn older_than_days(&self) -> Option<u32> {

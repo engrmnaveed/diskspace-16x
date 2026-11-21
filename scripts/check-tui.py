@@ -78,6 +78,10 @@ def check_sort_size_and_color(binary, fixture):
             # Pro's Modified column shows each item's newest modification date.
             terminal.expect(b"Modified")
             assert re.search(rb"20\d\d-\d\d-\d\d", bytes(terminal.output)), "no modification date"
+            # t lists the open folder's file types.
+            terminal.press(b"t", b"File types")
+            terminal.expect(b".bin")
+            terminal.press(b"t", b"nested-alpha")
 
         terminal.press(b"s", b"by items")
         terminal.press(b"a", b"apparent")

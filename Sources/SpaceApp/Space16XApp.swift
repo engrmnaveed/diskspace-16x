@@ -89,6 +89,14 @@ struct Space16XApp: App {
                 }
                 .keyboardShortcut("4")
                 .disabled(!workspace.canBrowse)
+                if proFeatures {
+                    Button("File Types") {
+                        workspace.mode = .folders
+                        workspace.folderPresentation = .types
+                    }
+                    .keyboardShortcut("5")
+                    .disabled(!workspace.canBrowse)
+                }
                 Divider()
                 Button("Open Selected Folder", action: workspace.openSelectedFolder)
                     .keyboardShortcut(.downArrow, modifiers: .command)

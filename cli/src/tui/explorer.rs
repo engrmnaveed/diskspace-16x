@@ -60,6 +60,9 @@ pub(super) enum Panel {
     Help,
     Issues,
     Details,
+    /// Pro: the open folder's file types, largest first.
+    #[cfg(feature = "pro")]
+    Types(Vec<crate::pro::TypeTotal>),
 }
 
 pub(super) enum Action {
@@ -525,6 +528,15 @@ impl Explorer {
         self.set_page_rows(self.page_rows);
     }
 
+    /// Pro: lists the file types in the open folder, by the current size.
+    #[cfg(feature = "pro")]
+    fn open_types(&mut self) {
+        if let Some(scope) = self.scope() {
+            let types = crate::pro::type_breakdown(scope, self.metric);
+            self.open_panel(Panel::Types(types));
+        }
+    }
+
     fn open_panel(&mut self, panel: Panel) {
         self.panel = Some(panel);
         self.panel_items = 0;
@@ -545,6 +557,8 @@ impl Explorer {
             KeyCode::Char('e' | 'i') if matches!(self.panel, Some(Panel::Issues)) => {
                 self.panel = None
             }
+            #[cfg(feature = "pro")]
+            KeyCode::Char('t') if matches!(self.panel, Some(Panel::Types(_))) => self.panel = None,
             KeyCode::Up | KeyCode::Char('k') => {
                 self.panel_offset = self.panel_offset.saturating_sub(1)
             }
@@ -903,6 +917,8 @@ impl Explorer {
             KeyCode::Char('r') => return self.request_rescan(),
             KeyCode::Char('e' | 'i') => self.open_panel(Panel::Issues),
             KeyCode::Char('?') => self.open_panel(Panel::Help),
+            #[cfg(feature = "pro")]
+            KeyCode::Char('t') => self.open_types(),
             _ => {}
         }
         Action::Stay
@@ -1336,6 +1352,42 @@ mod tests {
         key(&mut explorer, KeyCode::Char('d'));
         assert!(explorer.prompt.is_none());
         assert!(notice(&explorer).0.contains("is protected"));
+    }
+
+    #[cfg(feature = "pro")]
+    #[test]
+    fn t_lists_the_open_folders_file_types() {
+        let mut explorer = Explorer::new(Path::new("/r"));
+        let root = folder(
+            "/r",
+            vec![
+                folder(
+                    "/r/clips",
+                    vec![file("/r/clips/a.mov", 90), file("/r/clips/b.MOV", 30)],
+                ),
+                file("/r/notes.txt", 5),
+            ],
+        );
+        show(&mut explorer, root);
+        key(&mut explorer, KeyCode::Char('t'));
+        let Some(Panel::Types(types)) = &explorer.panel else {
+            panic!("t opens the types panel");
+        };
+        let summary: Vec<_> = types
+            .iter()
+            .map(|kind| (kind.label(), kind.file_count))
+            .collect();
+        assert_eq!(summary, [(".mov".to_string(), 2), (".txt".to_string(), 1)]);
+        key(&mut explorer, KeyCode::Char('t'));
+        assert!(explorer.panel.is_none());
+
+        key(&mut explorer, KeyCode::Enter);
+        key(&mut explorer, KeyCode::Char('t'));
+        let Some(Panel::Types(types)) = &explorer.panel else {
+            panic!("t opens the types panel in a folder");
+        };
+        assert_eq!(types.len(), 1);
+        assert_eq!(types[0].allocated_bytes, 120);
     }
 
     #[test]
