@@ -7,6 +7,11 @@ description = "A terminal disk space explorer for macOS and Linux"
 license = "MIT"
 publish = false
 
+[features]
+# The Pro edition. Pro-only dependencies are optional and enabled here, as in
+# pro = ["dep:name"], so the Basic build never compiles them.
+pro = []
+
 [dependencies]
 crossterm = "0.29"
 libc = "0.2"

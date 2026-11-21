@@ -1,4 +1,6 @@
 mod ncdu;
+#[cfg(feature = "pro")]
+mod pro;
 mod report;
 mod scanner;
 mod trash;
@@ -56,13 +58,36 @@ Sizes are allocated bytes (disk usage) in decimal units (1 KB = 1,000 bytes), as
 Scan exit codes: 0 complete, 1 error, 2 partial.
 ";
 
+#[cfg(not(feature = "pro"))]
+const EDITION_HELP: &str = "
+This is Space 16X Basic. Space 16X Pro, also free, adds space16x diff to compare scans.
+Install it with install.sh --pro. See docs/install.md.
+";
+
+#[cfg(feature = "pro")]
+const EDITION_HELP: &str = "
+This is Space 16X Pro. It adds:
+  space16x diff  Compare two scans (arrives in this release)
+";
+
+/// Subcommands only Space 16X Pro has. Basic builds answer them with an install hint.
+const PRO_COMMANDS: &[&str] = &["diff"];
+
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
     Help,
     Version,
     Explore(ExploreOptions),
     Scan(ScanOptions),
-    Volumes { json: bool, all: bool },
+    Volumes {
+        json: bool,
+        all: bool,
+    },
+    #[cfg(feature = "pro")]
+    Pro(pro::Command),
+    /// A Pro subcommand run in a Basic build.
+    #[cfg(not(feature = "pro"))]
+    ProOnly(&'static str),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -174,8 +199,22 @@ fn main() -> ExitCode {
 
 fn run(command: Command) -> io::Result<u8> {
     match command {
-        Command::Help => io::stdout().write_all(HELP.as_bytes())?,
-        Command::Version => writeln!(io::stdout(), "space16x {}", env!("CARGO_PKG_VERSION"))?,
+        Command::Help => io::stdout().write_all([HELP, EDITION_HELP].concat().as_bytes())?,
+        Command::Version => writeln!(
+            io::stdout(),
+            "space16x {}{}",
+            env!("CARGO_PKG_VERSION"),
+            if cfg!(feature = "pro") { " (pro)" } else { "" }
+        )?,
+        #[cfg(feature = "pro")]
+        Command::Pro(command) => return pro::run(command),
+        #[cfg(not(feature = "pro"))]
+        Command::ProOnly(name) => {
+            eprintln!(
+                "space16x: {name} is in Space 16X Pro, a free edition. Install it with install.sh --pro: https://github.com/engrmnaveed/diskspace-16x/blob/main/docs/install.md#install-space-16x-pro"
+            );
+            return Ok(1);
+        }
         Command::Explore(options) => return explore(options),
         Command::Scan(options) => return run_scan(options),
         Command::Volumes { json, all } => {
@@ -409,6 +448,15 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Command, Strin
         Some("volumes") => {
             arguments.next();
             return parse_volumes(arguments);
+        }
+        Some(name) if PRO_COMMANDS.contains(&name) => {
+            let name = PRO_COMMANDS.iter().find(|command| **command == name);
+            let name = *name.expect("the command is listed");
+            arguments.next();
+            #[cfg(feature = "pro")]
+            return pro::parse(name, arguments).map(Command::Pro);
+            #[cfg(not(feature = "pro"))]
+            return Ok(Command::ProOnly(name));
         }
         _ => {}
     }
@@ -752,6 +800,25 @@ mod tests {
         ] {
             assert!(args(invalid).is_err(), "{invalid:?}");
         }
+    }
+
+    #[test]
+    fn routes_pro_commands_by_edition() {
+        #[cfg(not(feature = "pro"))]
+        assert_eq!(
+            args(&["diff", "old.json", "new.json"]),
+            Ok(Command::ProOnly("diff"))
+        );
+        #[cfg(feature = "pro")]
+        assert!(matches!(
+            args(&["diff", "old.json", "new.json"]),
+            Ok(Command::Pro(_))
+        ));
+        // A folder with a Pro command's name can still be explored.
+        assert!(matches!(
+            args(&["./diff"]),
+            Ok(Command::Explore(ExploreOptions { path, .. })) if path == Path::new("./diff")
+        ));
     }
 
     #[test]

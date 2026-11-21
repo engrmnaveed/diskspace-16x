@@ -10,11 +10,17 @@ case "$(uname -s):$(uname -m)" in
     Linux:x86_64|Linux:amd64) native=x86_64-unknown-linux-musl ;;
     *) echo "No prebuilt CLI target for this host. Use Cargo for a source build." >&2; exit 1 ;;
 esac
-target="${1:-$native}"
 usage() {
-    echo "Usage: $0 [TARGET]. Use the native target, or build x86_64-apple-darwin on an Apple silicon Mac with Rosetta." >&2
+    echo "Usage: $0 [--pro] [TARGET]. Use the native target, or build x86_64-apple-darwin on an Apple silicon Mac with Rosetta." >&2
     exit 1
 }
+# --pro builds the Pro edition into space16x-pro-TARGET.tar.gz.
+edition=
+if [ "${1:-}" = --pro ]; then
+    edition=pro
+    shift
+fi
+target="${1:-$native}"
 [ "$#" -le 1 ] || usage
 case "$native:$target" in
     "$native:$native"|aarch64-apple-darwin:x86_64-apple-darwin) ;;
@@ -22,11 +28,20 @@ case "$native:$target" in
 esac
 
 version="$(cat scripts/release-version)"
-asset="space16x-$target.tar.gz"
 target_dir="${CARGO_TARGET_DIR:-$project/.build/cli-release}"
 case "$target_dir" in /*) ;; *) target_dir="$project/$target_dir" ;; esac
+if [ "$edition" = pro ]; then
+    asset="space16x-pro-$target.tar.gz"
+    expected_version="space16x $version (pro)"
+    target_dir="$target_dir-pro"
+    set -- --features pro
+else
+    asset="space16x-$target.tar.gz"
+    expected_version="space16x $version"
+    set --
+fi
 case "$native" in *-apple-darwin) export MACOSX_DEPLOYMENT_TARGET=14.0 ;; esac
-(cd cli && cargo build --locked --release --target "$target" --target-dir "$target_dir" >&2)
+(cd cli && cargo build --locked --release --target "$target" --target-dir "$target_dir" "$@" >&2)
 
 mkdir -p dist
 stage="$(mktemp -d "$project/dist/.space16x-cli.XXXXXX")"
@@ -52,7 +67,7 @@ case "$native" in
         ;;
 esac
 
-if [ "$("$binary" --version)" != "space16x $version" ]; then
+if [ "$("$binary" --version)" != "$expected_version" ]; then
     echo "The CLI version does not match scripts/release-version." >&2
     exit 1
 fi

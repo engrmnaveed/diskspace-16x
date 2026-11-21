@@ -13,6 +13,7 @@ import tempfile
 
 INSTALLER = Path(__file__).resolve().with_name("install.sh")
 BINARY = b"#!/bin/sh\nprintf 'space16x 0.2.0\\n'\n"
+PRO_BINARY = b"#!/bin/sh\nprintf 'space16x 0.2.0 (pro)\\n'\n"
 MOCK_DOWNLOAD = """#!/bin/sh
 set -eu
 if [ "${1:-}" = --help ]; then
@@ -78,14 +79,7 @@ def setup(root, *, os_name, arch, target, transport, release="latest/download",
         executable(tools / "sw_vers", f"#!/bin/sh\necho {macos_version}\n")
 
     asset = f"space16x-{target}.tar.gz"
-    archive = downloads / asset
-    with tarfile.open(archive, "w:gz") as stream:
-        member = tarfile.TarInfo("space16x")
-        member.size = len(BINARY)
-        stream.addfile(member, io.BytesIO(BINARY))
-    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-    checksum = downloads / f"{asset}.sha256"
-    checksum.write_text(f"{digest}  {asset}\n", encoding="utf-8")
+    archive, checksum = release_archive(downloads, asset, BINARY)
     env = os.environ | {
         "PATH": str(tools),
         "HOME": str(root / "home"),
@@ -98,6 +92,47 @@ def setup(root, *, os_name, arch, target, transport, release="latest/download",
     if transport == "wget":
         env["TEST_REDIRECT_BASE"] = "https://release-assets.example.test"
     return env, archive, checksum
+
+
+def release_archive(downloads, asset, binary):
+    archive = downloads / asset
+    with tarfile.open(archive, "w:gz") as stream:
+        member = tarfile.TarInfo("space16x")
+        member.size = len(binary)
+        stream.addfile(member, io.BytesIO(binary))
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    checksum = downloads / f"{asset}.sha256"
+    checksum.write_text(f"{digest}  {asset}\n", encoding="utf-8")
+    return archive, checksum
+
+
+def check_editions(platform):
+    """--pro installs the Pro archive over Basic, and a plain install switches back."""
+    with tempfile.TemporaryDirectory(prefix="space16x-install-qa-") as directory:
+        root = Path(directory).resolve()
+        env, archive, _ = setup(root, **platform)
+        installed = root / "home/.local/share/space16x/bin/space16x"
+        result = run(root, env)
+        assert result.returncode == 0 and installed.read_bytes() == BINARY, result.stderr
+
+        pro_asset = f"space16x-pro-{platform['target']}.tar.gz"
+        pro_env = env | {"TEST_ASSET": pro_asset, "TEST_URL": env["TEST_URL"].replace(archive.name, pro_asset)}
+        result = run(root, pro_env, "--pro")
+        assert result.returncode == 1 and f"Could not download {pro_asset}" in result.stderr, result.stderr
+        assert installed.read_bytes() == BINARY
+
+        release_archive(archive.parent, pro_asset, PRO_BINARY)
+        result = run(root, pro_env, "--pro")
+        assert result.returncode == 0 and "Installed Space 16X Pro" in result.stderr, result.stderr
+        assert installed.read_bytes() == PRO_BINARY and os.access(installed, os.X_OK)
+        assert pro_asset in Path(env["TEST_ROUTE_LOG"]).read_text(encoding="utf-8")
+
+        result = run(root, env)
+        assert result.returncode == 0 and installed.read_bytes() == BINARY, result.stderr
+        result = run(root, pro_env, "--pro")
+        assert result.returncode == 0 and installed.read_bytes() == PRO_BINARY, result.stderr
+        result = run(root, env, "--uninstall")
+        assert result.returncode == 0 and not installed.exists(), result.stderr
 
 
 def run(root, env, *args):
@@ -171,6 +206,9 @@ def main():
             assert not (root / "home/.bashrc").exists()
             assert not (root / "home/.profile").exists()
             assert not (root / "home/.local/share/space16x").exists()
+
+    for platform in (platforms[0], platforms[3]):
+        check_editions(platform)
 
     with tempfile.TemporaryDirectory(prefix="space16x-install-qa-") as directory:
         root = Path(directory).resolve()

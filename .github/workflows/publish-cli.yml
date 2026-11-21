@@ -77,9 +77,11 @@ jobs:
           gh run download "$GITHUB_RUN_ID" --repo "$GH_REPO" --pattern 'space16x-cli-*' --dir "$downloads"
           for target in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
             folder="$downloads/space16x-cli-$target"
-            archive="space16x-$target.tar.gz"
-            (cd "$folder" && sha256sum -c "$archive.sha256")
-            cp "$folder/$archive" "$folder/$archive.sha256" "$release/"
+            # Basic and Pro archives, built and tested from the same tag.
+            for archive in "space16x-$target.tar.gz" "space16x-pro-$target.tar.gz"; do
+              (cd "$folder" && sha256sum -c "$archive.sha256")
+              cp "$folder/$archive" "$folder/$archive.sha256" "$release/"
+            done
           done
           # Publish the installer with the release so users run the reviewed, tagged script.
           cp "$downloads/space16x-cli-installer/install.sh" "$release/install.sh"
@@ -106,7 +108,7 @@ jobs:
           cd "$RELEASE_DIR"
           gh release create "$GITHUB_REF_NAME" --verify-tag \
             --title "Space 16X $GITHUB_REF_NAME" \
-            --notes "Space 16X CLI archives for macOS and Linux and the universal Mac app, with SHA-256 files and GitHub build-provenance attestations. The Mac app is ad hoc signed and not notarized. Install it with Homebrew from the engrmnaveed/tap tap, or download the ZIP. See docs/install.md for installation, verification, first-launch approval, and removal." \
+            --notes "Space 16X CLI archives for macOS and Linux in two free editions, Basic (space16x-TARGET) and Pro (space16x-pro-TARGET), and the universal Mac app, with SHA-256 files and GitHub build-provenance attestations. install.sh installs Basic, and install.sh --pro installs Pro. The Mac app is ad hoc signed and not notarized. Install it with Homebrew from the engrmnaveed/tap tap, or download the ZIP. See docs/install.md for installation, verification, first-launch approval, and removal." \
             space16x-*.tar.gz space16x-*.tar.gz.sha256 \
             space16x-*-macos-universal.zip space16x-*-macos-universal.zip.sha256 \
             space16x.rb install.sh install.sh.sha256
