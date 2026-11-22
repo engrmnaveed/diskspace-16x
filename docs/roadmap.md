@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — Roadmap complete: paused for owner review after v0.8.0. Milestones 1–6 shipped as v0.3.0–v0.8.0. M6 (Pro deep) added `space16x explain`, cleanup suggestions, clone-aware exclusive size, opt-in duplicates, the HTML report and the explorer's treemap, and in the Mac app the menu-bar free-space monitor, Build Footprint receipts and multiple windows. Don't start new work until the owner reviews it. The **Later** list below holds what M6 cut.
+**Resume here** — Milestone 7 (Complete and stable, v0.9.0) is next. The owner reviewed v0.8.0 on 2026-11-22 and approved M7: the v0.8.0 QA fixes and everything M6 left for later. The items below are the plan: start with M7.1. Nothing comes after M7. Cross-platform work waits for the owner's feasibility review (see **Future**). Basic's Linux x86-64 archive is 589,857 bytes against its 600 KB budget.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -64,13 +64,46 @@ Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) ·
 - [x] M6.9 Promo refresh (Pro's `scan --cleanup` in the CLI and the Mac app's Duplicates, 29 s, and a new README preview from the larger fixture), manual QA rows for every M6 feature, benchmarks and both editions' archive sizes in `docs/qa.md`, and the **Later** list
 - [x] M6.10 Release v0.8.0
 
-### Later
-Work cut from M6 for the owner to schedule after the review. M6 shipped simpler versions of these:
-- Exclusive size in the CLI explorer and as a Mac column. M6 shows it in `scan --exclusive` and the Mac's Move to Trash confirmation only, because reading private sizes during the walk makes it about 30% slower.
-- `duplicates` and `explain` views in the CLI explorer. M6 has the commands and the Mac views.
-- Per-snapshot sizes for APFS local snapshots, which need root or private APIs. M6 lists the snapshots and the purgeable total.
-- Reusable size budgets for Build Footprint receipts, as the PRD suggests for a later experiment.
-- Xcode archives and simulator devices in cleanup suggestions. They can't be recreated, so they'd need a separate "review" kind.
+### M7 (v0.9.0) Complete and stable [Basic + Pro]
+The owner's v0.8.0 QA found that every Pro feature works but is easy to miss, and that duplicates overstate what removing a clone frees. M7 fixes that and finishes what M6 cut.
+- [ ] M7.1 Fixes from the v0.8.0 QA:
+  - Duplicates become clone-aware in the CLI and the Mac app. A copy that shares its blocks with another copy in the group (an APFS clone, or a Btrfs/XFS reflink) is marked as a clone that frees nothing, and **Extra** counts only the bytes that removing the other copies would free. Reuse the exclusive-size measurement (`cli/src/pro/exclusive.rs`, `SpacePro/ExclusiveSize.swift`) and test both apps with the same case.
+  - Basic `volumes` hides mount points that aren't directories, such as files bind-mounted into a container (`/etc/hostname`), unless `--all` is given.
+  - Pro's `--help` lists the explorer's `m` treemap key.
+- [ ] M7.2 Make Pro easy to find [Basic]:
+  - **Mac:** while Pro features is off, show one quiet, dismissible line, for example on the start screen: "More views are free in Pro". It opens **Settings → Pro features**.
+  - **README:** a short **Editions** section with a Basic/Pro table and how to turn on each, in place of the long paragraph.
+  - **Release notes:** each GitHub release includes its version's `CHANGELOG.md` section above the standard text (`publish-cli.yml`).
+- [ ] M7.3 Exclusive size as a column [Pro]:
+  - **CLI explorer:** a key turns on an **Exclusive** column.
+  - **Mac:** a sortable **Exclusive** column, shown from the View menu.
+  - Both measure after the scan, in the background and only when asked, with progress. The walk stays as fast as before.
+- [ ] M7.4 Duplicates and Explain views in the CLI explorer [Pro]:
+  - Pick keys that don't clash with existing ones (`d` trashes and `x` cancels) and list them in `?` help.
+  - Duplicates reads file contents only after the user starts it in that view. Its groups support marking and the confirmed Move to Trash.
+  - Explain shows the open folder's volume.
+- [ ] M7.5 APFS snapshot detail [Pro], about a day at most:
+  - Look for a supported way to size each local snapshot, such as `tmutil`, `diskutil apfs` or a privilege the CLI may already run with. If one exists, show each snapshot's size in `explain` and the Mac sheet.
+  - Otherwise, show each snapshot's date and how macOS frees snapshots, and record here why per-snapshot sizes stay out.
+  - No private APIs and no deletion.
+- [ ] M7.6 Size budgets for Build Footprint [Pro]:
+  - **CLI:** `diff` and `history diff` take `--budget SIZE`, with a new, documented exit status when growth exceeds it (versioned in `docs/cli-pro.md`).
+  - **Mac:** the receipt sheet takes an optional budget, remembered per operation name, and the receipt says whether the operation stayed within it.
+- [ ] M7.7 "Review" cleanup suggestions [Pro]:
+  - Add Xcode Archives and simulator devices from the shared rule table, in both apps, as a separate **Review** kind: they can't be recreated.
+  - Review items stay out of the recreatable total and are never pre-marked.
+  - Move to Trash warns plainly before moving them.
+- [ ] M7.8 Mac parity [Pro]:
+  - An older-than filter, like `scan --older-than`: **View → Show Files Older Than…** with a few presets.
+  - **Export HTML Report…**, writing the same self-contained page as `scan --html`, with a shared structural test.
+  - Owners in Scan Details if that's simple. Otherwise, record why the Mac app leaves owners out.
+- [ ] M7.9 QA, benchmarks, archive sizes and a promo refresh:
+  - Exercise every Mac feature M7 touches at runtime, not only in offscreen renders. A temporary debug build that drives `ScanWorkspace` and logs, run with `-proFeatures YES` argument overrides, works well; don't commit it.
+  - Add manual QA rows, and list what still needs the owner's eyes.
+- [ ] M7.10 Release v0.9.0
+
+### Future
+- **Cross-platform (owner to plan).** After v0.9.0, the owner will review whether the Rust core can carry a desktop app beyond macOS. Don't start this work until the owner has reviewed feasibility and approved a plan.
 
 ## Working agreement
 
@@ -277,6 +310,7 @@ Effort: S is about 1 day, M is 2–4 days, L is 1–2 weeks. Each milestone is o
   - Opt-in duplicates.
   - HTML report and terminal treemap.
   - Mac menu-bar monitor and alerts, Build Footprint receipts, multiple windows.
+- **M7 (v0.9) Complete and stable (M).** Fixes from the owner's v0.8.0 QA (clone-aware duplicates, Pro discoverability, release notes from the changelog), then what M6 cut: an exclusive-size column, duplicates and explain in the explorer, snapshot detail, footprint budgets, "review" cleanup suggestions, and Mac parity for age filters and the HTML report. *Items in Progress.*
 
 ## 6. Milestone 1 (v0.3.0) in detail: Focus [Basic]
 
