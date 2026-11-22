@@ -138,6 +138,9 @@ pub(super) fn rank(request: RankRequest) -> Ranked {
             .into_iter()
             .map(|suggestion| suggestion.id)
             .collect(),
+        // The explorer fills the Duplicates view from its search.
+        #[cfg(feature = "pro")]
+        Mode::Duplicates => Vec::new(),
     };
     Ranked {
         key: request.key,

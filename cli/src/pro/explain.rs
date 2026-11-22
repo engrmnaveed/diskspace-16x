@@ -55,6 +55,30 @@ pub fn run(path: &Path, json: bool) -> io::Result<u8> {
     Ok(0)
 }
 
+/// The text report for PATH's volume, line by line, for the explorer's Explain panel.
+pub fn lines(path: &Path) -> Vec<String> {
+    let explanation = match explain(path) {
+        Ok(explanation) => explanation,
+        Err(error) => return vec![format!("Couldn't explain this volume: {error}")],
+    };
+    let mut text = Vec::new();
+    if let Err(error) = write_plain(&mut text, &explanation) {
+        return vec![format!("Couldn't explain this volume: {error}")];
+    }
+    let mut lines: Vec<String> = String::from_utf8_lossy(&text)
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    if explanation.hidden_processes > 0 {
+        lines.push(String::new());
+        lines.push(format!(
+            "The open files of {} other users' processes are hidden.",
+            explanation.hidden_processes
+        ));
+    }
+    lines
+}
+
 fn explain(path: &Path) -> io::Result<Explanation> {
     let path = std::fs::canonicalize(path)?;
     let volume = containing_volume(&path)?;

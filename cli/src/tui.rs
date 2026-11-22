@@ -89,9 +89,10 @@ pub fn run(source: Source, plain: bool, read_only: bool) -> io::Result<()> {
         }
         #[cfg(feature = "pro")]
         let measuring = {
-            let (running, finished) = explorer.poll_exclusive();
-            dirty |= finished;
-            running
+            let (measuring, finished) = explorer.poll_exclusive();
+            let (searching, changed) = explorer.poll_views();
+            dirty |= finished || changed;
+            measuring || searching
         };
         #[cfg(not(feature = "pro"))]
         let measuring = false;

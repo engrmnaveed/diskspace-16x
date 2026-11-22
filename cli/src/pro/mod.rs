@@ -18,7 +18,9 @@ pub mod treemap;
 mod types;
 
 pub use cleanup::{rule_for as cleanup_rule, suggestions as cleanup_suggestions};
+pub use duplicates::{DEFAULT_MIN_SIZE as DUPLICATES_MIN_SIZE, Search as DuplicateSearch};
 pub use exclusive::{Exclusive, Measurement as ExclusiveMeasurement};
+pub use explain::lines as explain_lines;
 pub use modified::format_date;
 pub use types::{TypeTotal, breakdown as type_breakdown};
 

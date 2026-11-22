@@ -11,14 +11,14 @@ use std::fs::File;
 use std::hash::{BuildHasher, Hasher, RandomState};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use serde::Serialize;
 
 use super::exclusive::Sharing;
 use crate::report::{self, JsonPath, Metric, format_bytes, terminal_path};
-use crate::scanner::{self, Entry, EntryKind, EntryState, Issue, IssueKind, NodeId, Report};
+use crate::scanner::{self, Entry, EntryKind, EntryState, Issue, IssueKind, NodeId, Report, Tree};
 use crate::{ExcludeOptions, scan_error};
 
 /// The bytes read first from each candidate.
@@ -54,8 +54,8 @@ impl Group {
     }
 
     /// The bytes that moving the copy at `index` alone to the Trash frees at least.
-    pub fn exclusive_bytes(&self, report: &Report, index: usize) -> u64 {
-        let allocated = report.tree.entry(self.files[index]).allocated_bytes();
+    pub fn exclusive_bytes(&self, tree: &Tree, index: usize) -> u64 {
+        let allocated = tree.entry(self.files[index]).allocated_bytes();
         allocated.saturating_sub(self.shared.get(index).copied().unwrap_or(0))
     }
 
@@ -63,10 +63,10 @@ impl Group {
     /// least. Each copy frees its exclusive bytes. The copy kept is the largest, or, when
     /// some copies share blocks, the clone that would free the most, since its blocks may
     /// be the ones the other clones share.
-    pub fn extra_bytes(&self, report: &Report) -> u64 {
+    pub fn extra_bytes(&self, tree: &Tree) -> u64 {
         let any_clone = (0..self.files.len()).any(|index| self.is_clone(index));
         let (total, kept) = (0..self.files.len()).fold((0_u64, 0_u64), |(total, kept), index| {
-            let bytes = self.exclusive_bytes(report, index);
+            let bytes = self.exclusive_bytes(tree, index);
             let keepable = !any_clone || self.is_clone(index);
             (
                 total.saturating_add(bytes),
@@ -108,7 +108,12 @@ pub fn run(options: DuplicatesOptions) -> io::Result<u8> {
         |_| {},
     )
     .map_err(|error| scan_error(&options.path, error))?;
-    let (groups, unread) = find(&report, options.min_size, threads);
+    let (groups, unread) = find(
+        &report.tree,
+        options.min_size,
+        threads,
+        &AtomicBool::new(false),
+    );
     report.issues.extend(unread);
     report.issues.sort_by(|a, b| a.path.cmp(&b.path));
     let stdout = io::stdout().lock();
@@ -130,11 +135,17 @@ pub fn run(options: DuplicatesOptions) -> io::Result<u8> {
     Ok(crate::status(&report))
 }
 
-/// Groups the counted files of at least `min_size` bytes in `report` by contents, most
-/// extra space first, and the files that couldn't be read.
-pub fn find(report: &Report, min_size: u64, threads: usize) -> (Vec<Group>, Vec<Issue>) {
+/// Groups the counted files of at least `min_size` bytes in `tree` by contents, most
+/// extra space first, and the files that couldn't be read. It stops early, with partial
+/// results, when `cancelled` is set.
+pub fn find(
+    tree: &Tree,
+    min_size: u64,
+    threads: usize,
+    cancelled: &AtomicBool,
+) -> (Vec<Group>, Vec<Issue>) {
     let mut by_length: HashMap<u64, Vec<NodeId>> = HashMap::new();
-    for entry in report.root().descendants() {
+    for entry in tree.root().descendants() {
         if entry.kind() == EntryKind::File
             && entry.state() == EntryState::Local
             && entry.apparent_bytes() >= min_size.max(1)
@@ -155,10 +166,11 @@ pub fn find(report: &Report, min_size: u64, threads: usize) -> (Vec<Group>, Vec<
     std::thread::scope(|scope| {
         for _ in 0..threads.clamp(1, candidates.len().max(1)) {
             scope.spawn(|| {
-                while let Some((length, files)) =
-                    candidates.get(next.fetch_add(1, Ordering::Relaxed))
+                while let Some((length, files)) = candidates
+                    .get(next.fetch_add(1, Ordering::Relaxed))
+                    .filter(|_| !cancelled.load(Ordering::Relaxed))
                 {
-                    let (groups, unread) = compare(report, *length, files, &keys);
+                    let (groups, unread) = compare(tree, *length, files, &keys, cancelled);
                     let mut found = found.lock().unwrap_or_else(|error| error.into_inner());
                     found.0.extend(groups);
                     found.1.extend(unread);
@@ -170,43 +182,138 @@ pub fn find(report: &Report, min_size: u64, threads: usize) -> (Vec<Group>, Vec<
         .into_inner()
         .unwrap_or_else(|error| error.into_inner());
     // One metadata call per copy finds the ones that share blocks.
-    let sharing = Sharing::of(report.tree.root_path());
+    let sharing = Sharing::of(tree.root_path());
     for group in &mut groups {
         group
             .files
-            .sort_by(|&left, &right| report.tree.cmp_paths(left, right));
+            .sort_by(|&left, &right| tree.cmp_paths(left, right));
         group.shared = group
             .files
             .iter()
             .map(|&id| {
-                let entry = report.tree.entry(id);
+                let entry = tree.entry(id);
                 sharing
                     .shared_bytes(&entry.path())
                     .min(entry.allocated_bytes())
             })
             .collect();
     }
+    rank(tree, &mut groups);
+    (groups, unread)
+}
+
+/// Orders groups by their extra space, most first, then by their first file's path.
+pub fn rank(tree: &Tree, groups: &mut [Group]) {
     groups.sort_by(|left, right| {
         right
-            .extra_bytes(report)
-            .cmp(&left.extra_bytes(report))
-            .then_with(|| report.tree.cmp_paths(left.files[0], right.files[0]))
+            .extra_bytes(tree)
+            .cmp(&left.extra_bytes(tree))
+            .then_with(|| tree.cmp_paths(left.files[0], right.files[0]))
     });
-    (groups, unread)
+}
+
+/// A duplicate search for the explorer's Duplicates view, running on its own threads. It
+/// reads files only because the user started it there. Dropping it stops the search.
+pub struct Search {
+    job: Arc<SearchJob>,
+}
+
+struct SearchJob {
+    cancelled: AtomicBool,
+    found: OnceLock<Found>,
+}
+
+/// A finished search: each group's length and copies, by path with their shared bytes, so
+/// the groups outlive the tree after Move to Trash, and the number of unreadable files.
+pub struct Found {
+    pub groups: Vec<(u64, Vec<(PathBuf, u64)>)>,
+    pub unread: usize,
+}
+
+impl Found {
+    /// The groups whose copies `tree` still holds, two or more each, most extra space first.
+    pub fn groups_in(&self, tree: &Tree) -> Vec<Group> {
+        let mut groups: Vec<Group> = self
+            .groups
+            .iter()
+            .filter_map(|(length, copies)| {
+                let (files, shared): (Vec<NodeId>, Vec<u64>) = copies
+                    .iter()
+                    .filter_map(|(path, shared)| Some((tree.find(path)?, *shared)))
+                    .unzip();
+                (files.len() > 1).then_some(Group {
+                    length: *length,
+                    files,
+                    shared,
+                })
+            })
+            .collect();
+        rank(tree, &mut groups);
+        groups
+    }
+}
+
+impl Search {
+    /// Starts comparing the files of at least `min_size` bytes in `tree`.
+    pub fn start(tree: &Arc<Tree>, min_size: u64, threads: usize) -> io::Result<Self> {
+        let job = Arc::new(SearchJob {
+            cancelled: AtomicBool::new(false),
+            found: OnceLock::new(),
+        });
+        let shared = Arc::clone(&job);
+        let searched = Arc::clone(tree);
+        std::thread::Builder::new()
+            .name("space16x-duplicates".into())
+            .spawn(move || {
+                let (groups, unread) = find(&searched, min_size, threads, &shared.cancelled);
+                if shared.cancelled.load(Ordering::Relaxed) {
+                    return;
+                }
+                let groups = groups
+                    .into_iter()
+                    .map(|group| {
+                        let copies = group
+                            .files
+                            .iter()
+                            .zip(&group.shared)
+                            .map(|(&id, &bytes)| (searched.path(id), bytes))
+                            .collect();
+                        (group.length, copies)
+                    })
+                    .collect();
+                let _ = shared.found.set(Found {
+                    groups,
+                    unread: unread.len(),
+                });
+            })?;
+        Ok(Self { job })
+    }
+
+    /// The finished search.
+    pub fn found(&self) -> Option<&Found> {
+        self.job.found.get()
+    }
+}
+
+impl Drop for Search {
+    fn drop(&mut self) {
+        self.job.cancelled.store(true, Ordering::Relaxed);
+    }
 }
 
 /// Splits same-length files into groups with the same contents, reading their first 64 KB
 /// and then, for files longer than that, the whole file.
 fn compare(
-    report: &Report,
+    tree: &Tree,
     length: u64,
     files: &[NodeId],
     keys: &RandomState,
+    cancelled: &AtomicBool,
 ) -> (Vec<Group>, Vec<Issue>) {
     let mut unread = Vec::new();
     let mut digest = |id: NodeId, limit: u64| -> Option<u64> {
-        let path = report.tree.path(id);
-        match hash_file(&path, limit, keys) {
+        let path = tree.path(id);
+        match hash_file(&path, limit, keys, cancelled) {
             Ok(hash) => Some(hash),
             Err(error) => {
                 unread.push(Issue {
@@ -254,12 +361,20 @@ fn split(files: &[NodeId], mut key: impl FnMut(NodeId) -> Option<u64>) -> Vec<Ve
 }
 
 /// SipHash of the first `limit` bytes of the file, and its length read.
-fn hash_file(path: &Path, limit: u64, keys: &RandomState) -> io::Result<u64> {
+fn hash_file(
+    path: &Path,
+    limit: u64,
+    keys: &RandomState,
+    cancelled: &AtomicBool,
+) -> io::Result<u64> {
     let mut file = File::open(path)?.take(limit);
     let mut hasher = keys.build_hasher();
     let mut buffer = vec![0; 256 * 1024];
     let mut read = 0_u64;
     loop {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(io::ErrorKind::Interrupted.into());
+        }
         let count = file.read(&mut buffer)?;
         if count == 0 {
             break;
@@ -281,7 +396,7 @@ pub fn write_plain(out: impl Write, report: &Report, groups: &[Group]) -> io::Re
     let mut extra = 0_u64;
     let mut files = 0;
     for group in groups {
-        extra = extra.saturating_add(group.extra_bytes(report));
+        extra = extra.saturating_add(group.extra_bytes(&report.tree));
         files += group.files.len();
         for (index, &id) in group.files.iter().enumerate() {
             let mut path = terminal_path(&report.tree.path(id));
@@ -292,7 +407,7 @@ pub fn write_plain(out: impl Write, report: &Report, groups: &[Group]) -> io::Re
                 writeln!(
                     out,
                     "{:>10}  {:>10}  {:>6}  {path}",
-                    format_bytes(group.extra_bytes(report)),
+                    format_bytes(group.extra_bytes(&report.tree)),
                     format_bytes(report.tree.entry(id).allocated_bytes()),
                     group.files.len()
                 )?;
@@ -342,7 +457,7 @@ impl JsonDuplicates {
             .iter()
             .map(|group| JsonGroup {
                 apparent_bytes: group.length,
-                extra_bytes: group.extra_bytes(report),
+                extra_bytes: group.extra_bytes(&report.tree),
                 files: group
                     .files
                     .iter()
@@ -352,7 +467,7 @@ impl JsonDuplicates {
                         JsonFile {
                             path: JsonPath::owned(&entry.path()),
                             allocated_bytes: entry.allocated_bytes(),
-                            exclusive_bytes: group.exclusive_bytes(report, index),
+                            exclusive_bytes: group.exclusive_bytes(&report.tree, index),
                             clone: group.is_clone(index),
                         }
                     })
@@ -421,7 +536,7 @@ mod tests {
             |_| {},
         )
         .unwrap();
-        let (groups, unread) = find(&report, 1_000, 3);
+        let (groups, unread) = find(&report.tree, 1_000, 3, &AtomicBool::new(false));
         std::fs::remove_dir_all(&root).unwrap();
         assert!(unread.is_empty());
         let names: Vec<Vec<String>> = groups
@@ -447,7 +562,7 @@ mod tests {
             [vec!["a.bin", "b/copy.bin", "b/z.bin"], vec!["b/s2", "s1"]]
         );
         assert_eq!(groups[0].length, 200_000);
-        let extra = groups[0].extra_bytes(&report);
+        let extra = groups[0].extra_bytes(&report.tree);
         assert!(extra >= 400_000, "{extra}");
 
         let mut plain = Vec::new();
@@ -470,14 +585,24 @@ mod tests {
         assert_eq!(json["groups"][0]["files"].as_array().unwrap().len(), 3);
         assert_eq!(
             json["duplicateBytes"],
-            groups[0].extra_bytes(&report) + groups[1].extra_bytes(&report)
+            groups[0].extra_bytes(&report.tree) + groups[1].extra_bytes(&report.tree)
         );
         assert_eq!(json["groups"][0]["files"][0]["clone"], false);
         assert_eq!(
             json["groups"][0]["files"][0]["exclusiveBytes"],
             json["groups"][0]["files"][0]["allocatedBytes"]
         );
-        assert!(find(&report, 300_000, 1).0.is_empty());
+        assert!(
+            find(&report.tree, 300_000, 1, &AtomicBool::new(false))
+                .0
+                .is_empty()
+        );
+        // A cancelled search reads nothing.
+        assert!(
+            find(&report.tree, 1_000, 2, &AtomicBool::new(true))
+                .0
+                .is_empty()
+        );
     }
 
     /// The Mac app's `testCountsOnlyWhatRemovingClonesFrees` builds the same folder: a.bin,
@@ -510,7 +635,7 @@ mod tests {
             |_| {},
         )
         .unwrap();
-        let (groups, _) = find(&report, 1_000, 2);
+        let (groups, _) = find(&report.tree, 1_000, 2, &AtomicBool::new(false));
         std::fs::remove_dir_all(&root).unwrap();
         if !cloned {
             return; // The temporary directory isn't on APFS.
@@ -520,12 +645,12 @@ mod tests {
         assert_eq!(group.files.len(), 3);
         let clones: Vec<bool> = (0..3).map(|index| group.is_clone(index)).collect();
         assert_eq!(clones, [true, false, true]);
-        assert_eq!(group.exclusive_bytes(&report, 0), 0);
+        assert_eq!(group.exclusive_bytes(&report.tree, 0), 0);
         // Removing b.bin frees its blocks. Removing a clone frees nothing while the other
         // clone keeps their blocks.
         let copy = report.tree.entry(group.files[1]).allocated_bytes();
         assert!(copy >= 300_000);
-        assert_eq!(group.extra_bytes(&report), copy);
+        assert_eq!(group.extra_bytes(&report.tree), copy);
         let mut plain = Vec::new();
         write_plain(&mut plain, &report, &groups).unwrap();
         let plain = String::from_utf8(plain).unwrap();

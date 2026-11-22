@@ -78,7 +78,7 @@ The owner's v0.8.0 QA found that every Pro feature works but is easy to miss, an
   - **CLI explorer:** a key turns on an **Exclusive** column.
   - **Mac:** a sortable **Exclusive** column, shown from the View menu.
   - Both measure after the scan, in the background and only when asked, with progress. The walk stays as fast as before.
-- [ ] M7.4 Duplicates and Explain views in the CLI explorer [Pro]:
+- [x] M7.4 Duplicates and Explain views in the CLI explorer [Pro]:
   - Pick keys that don't clash with existing ones (`d` trashes and `x` cancels) and list them in `?` help.
   - Duplicates reads file contents only after the user starts it in that view. Its groups support marking and the confirmed Move to Trash.
   - Explain shows the open folder's volume.

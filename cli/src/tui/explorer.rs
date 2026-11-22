@@ -22,6 +22,9 @@ pub(super) enum Mode {
     /// Pro: cleanup suggestions in the whole scan.
     #[cfg(feature = "pro")]
     Cleanup,
+    /// Pro: files with the same contents, once the user starts comparing them.
+    #[cfg(feature = "pro")]
+    Duplicates,
 }
 
 /// How folder contents are ordered. The largest-files view always ranks by size.
@@ -66,6 +69,9 @@ pub(super) enum Panel {
     /// Pro: the open folder's file types, largest first.
     #[cfg(feature = "pro")]
     Types(Vec<crate::pro::TypeTotal>),
+    /// Pro: the space on the open folder's volume that a scan can't see, line by line.
+    #[cfg(feature = "pro")]
+    Explain(Vec<String>),
 }
 
 pub(super) enum Action {
@@ -179,6 +185,21 @@ pub(super) struct Explorer {
     /// Pro: whether the finished measurement has been drawn.
     #[cfg(feature = "pro")]
     exclusive_drawn: bool,
+    /// Pro: the duplicate search the user started in the Duplicates view.
+    #[cfg(feature = "pro")]
+    duplicates: Option<crate::pro::DuplicateSearch>,
+    /// Pro: notes for the Duplicates view's rows, such as "3 copies, 2.0 MB extra".
+    #[cfg(feature = "pro")]
+    pub(super) duplicate_labels: std::collections::HashMap<NodeId, String>,
+    /// Pro: the Duplicates view's group count and extra space.
+    #[cfg(feature = "pro")]
+    pub(super) duplicate_summary: (usize, u64),
+    /// Pro: whether the finished search's unreadable files were reported.
+    #[cfg(feature = "pro")]
+    duplicates_reported: bool,
+    /// Pro: the Explain panel's lines, once the system answers.
+    #[cfg(feature = "pro")]
+    explain_job: Option<Arc<std::sync::OnceLock<Vec<String>>>>,
     /// The scan's thread count, which measuring exclusive sizes uses too.
     #[cfg_attr(not(feature = "pro"), allow(dead_code))]
     pub(super) threads: usize,
@@ -227,6 +248,16 @@ impl Explorer {
             exclusive: None,
             #[cfg(feature = "pro")]
             exclusive_drawn: false,
+            #[cfg(feature = "pro")]
+            duplicates: None,
+            #[cfg(feature = "pro")]
+            duplicate_labels: std::collections::HashMap::new(),
+            #[cfg(feature = "pro")]
+            duplicate_summary: (0, 0),
+            #[cfg(feature = "pro")]
+            duplicates_reported: false,
+            #[cfg(feature = "pro")]
+            explain_job: None,
             threads: 1,
             imported: false,
             marked: BTreeSet::new(),
@@ -273,6 +304,11 @@ impl Explorer {
         self.status = match result {
             Ok(report) => {
                 self.install(report);
+                // Files may have changed since an earlier search.
+                #[cfg(feature = "pro")]
+                {
+                    self.duplicates = None;
+                }
                 Status::Complete
             }
             Err(error)
@@ -315,6 +351,10 @@ impl Explorer {
     }
 
     pub(super) fn ranking_request(&mut self) -> Option<RankRequest> {
+        // Pro's Duplicates view fills its rows from the search instead.
+        if self.is_duplicates_view() {
+            return None;
+        }
         let tree = Arc::clone(&self.report.as_ref()?.tree);
         let scope = self.scope_id()?;
         let key = self.rank_key();
@@ -337,6 +377,9 @@ impl Explorer {
         let (Some(report), Some(scope)) = (&self.report, self.scope_id()) else {
             return false;
         };
+        if self.is_duplicates_view() {
+            return false;
+        }
         self.ranking.as_ref().is_none_or(|rank| {
             rank.key != self.rank_key()
                 || rank.folder != scope
@@ -366,6 +409,14 @@ impl Explorer {
             self.selection_target = None;
         }
         true
+    }
+
+    /// Whether Pro's Duplicates view is open.
+    pub(super) fn is_duplicates_view(&self) -> bool {
+        #[cfg(feature = "pro")]
+        return self.mode == Mode::Duplicates;
+        #[cfg(not(feature = "pro"))]
+        false
     }
 
     /// The tree the rows belong to.
@@ -554,6 +605,167 @@ impl Explorer {
         self.reset_ranking(None);
     }
 
+    /// Pro: opens or leaves the Duplicates view. It reads nothing until the user starts
+    /// a search there with Enter.
+    #[cfg(feature = "pro")]
+    fn toggle_duplicates(&mut self) {
+        if self.report.is_none() {
+            return;
+        }
+        self.mode = match self.mode {
+            Mode::Duplicates => Mode::Folders,
+            _ => Mode::Duplicates,
+        };
+        self.query.clear();
+        self.reset_ranking(None);
+    }
+
+    /// Pro: compares the finished scan's files of 1 MB or more by contents, in the
+    /// background. Only this reads file contents, and only because the user asked.
+    #[cfg(feature = "pro")]
+    fn start_duplicates(&mut self) {
+        let Some(report) = &self.report else { return };
+        if self.imported {
+            self.notice = Some(Notice::info(
+                "Duplicates need the files themselves. Scan the folder to find them.",
+            ));
+            return;
+        }
+        if report.is_preview || self.is_active() {
+            self.notice = Some(Notice::info(
+                "Duplicates can be found when the scan finishes.",
+            ));
+            return;
+        }
+        match crate::pro::DuplicateSearch::start(
+            &report.tree,
+            crate::pro::DUPLICATES_MIN_SIZE,
+            self.threads,
+        ) {
+            Ok(search) => {
+                self.duplicates = Some(search);
+                self.duplicates_reported = false;
+                self.reset_ranking(None);
+            }
+            Err(error) => {
+                self.notice = Some(Notice::warning(format!("Couldn't compare files: {error}")));
+            }
+        }
+    }
+
+    /// Pro: whether the user started a search, and whether it's still running.
+    #[cfg(feature = "pro")]
+    pub(super) fn duplicate_search(&self) -> Option<bool> {
+        self.duplicates
+            .as_ref()
+            .map(|search| search.found().is_none())
+    }
+
+    /// Pro: fills the Duplicates view's rows from a finished search, for the current
+    /// scan, and the Explain panel once the system answers. Returns whether a search is
+    /// running, so its progress needs drawing, and whether anything changed.
+    #[cfg(feature = "pro")]
+    pub(super) fn poll_views(&mut self) -> (bool, bool) {
+        let mut changed = false;
+        if let Some(lines) = self.explain_job.as_ref().and_then(|job| job.get()) {
+            if matches!(self.panel, Some(Panel::Explain(_))) {
+                self.panel = Some(Panel::Explain(lines.clone()));
+            }
+            self.explain_job = None;
+            changed = true;
+        }
+        let Some(search) = &self.duplicates else {
+            return (false, changed);
+        };
+        let Some(found) = search.found() else {
+            return (true, changed);
+        };
+        let (Some(report), Mode::Duplicates) = (&self.report, self.mode) else {
+            return (false, changed);
+        };
+        let tree = Arc::clone(&report.tree);
+        if self.ranking.as_ref().is_some_and(|ranking| {
+            ranking.key == self.rank_key() && Arc::ptr_eq(&ranking.tree, &tree)
+        }) {
+            return (false, changed);
+        }
+        let groups = found.groups_in(&tree);
+        let unread = found.unread;
+        let mut labels = std::collections::HashMap::new();
+        let mut items = Vec::new();
+        let mut extra = 0_u64;
+        for group in &groups {
+            let group_extra = group.extra_bytes(&tree);
+            extra = extra.saturating_add(group_extra);
+            for (index, &id) in group.files.iter().enumerate() {
+                let mut label = if index == 0 {
+                    format!(
+                        "{} copies, {} extra",
+                        group.files.len(),
+                        format_bytes(group_extra)
+                    )
+                } else {
+                    format!("copy {} of {}", index + 1, group.files.len())
+                };
+                if group.is_clone(index) {
+                    label.push_str(", clone");
+                }
+                labels.insert(id, label);
+                items.push(id);
+            }
+        }
+        let preferred = self
+            .selection_target
+            .take()
+            .or_else(|| self.current().map(Entry::path));
+        self.duplicate_labels = labels;
+        self.duplicate_summary = (groups.len(), extra);
+        self.ranking = Some(Ranked {
+            key: self.rank_key(),
+            tree,
+            folder: NodeId::ROOT,
+            items,
+        });
+        self.rebuild(preferred.as_deref());
+        if unread > 0 && !self.duplicates_reported {
+            self.duplicates_reported = true;
+            self.notice = Some(Notice::warning(format!(
+                "{unread} {} couldn't be read to compare.",
+                if unread == 1 { "file" } else { "files" }
+            )));
+        }
+        (false, true)
+    }
+
+    /// Pro: explains the open folder's volume in a panel, asking the system in the
+    /// background.
+    #[cfg(feature = "pro")]
+    fn open_explain(&mut self) {
+        let Some(scope) = self.scope() else { return };
+        let path = if self.mode == Mode::Folders {
+            scope.path()
+        } else {
+            scope.tree().root_path().to_path_buf()
+        };
+        let job = Arc::new(std::sync::OnceLock::new());
+        let answer = Arc::clone(&job);
+        let spawned = std::thread::Builder::new()
+            .name("space16x-explain".into())
+            .spawn(move || {
+                let _ = answer.set(crate::pro::explain_lines(&path));
+            });
+        if let Err(error) = spawned {
+            self.notice = Some(Notice::warning(format!(
+                "Couldn't explain this volume: {error}"
+            )));
+            return;
+        }
+        self.explain_job = Some(job);
+        self.open_panel(Panel::Explain(vec![
+            "Asking the system about this volume…".into(),
+        ]));
+    }
+
     /// Pro: turns the Exclusive column on or off. It measures the finished scan in the
     /// background, so the walk itself stays as fast as before.
     #[cfg(feature = "pro")]
@@ -726,6 +938,10 @@ impl Explorer {
             }
             #[cfg(feature = "pro")]
             KeyCode::Char('t') if matches!(self.panel, Some(Panel::Types(_))) => self.panel = None,
+            #[cfg(feature = "pro")]
+            KeyCode::Char('E') if matches!(self.panel, Some(Panel::Explain(_))) => {
+                self.panel = None
+            }
             KeyCode::Up | KeyCode::Char('k') => {
                 self.panel_offset = self.panel_offset.saturating_sub(1)
             }
@@ -921,6 +1137,10 @@ impl Explorer {
                 };
                 self.marked.retain(|path| updated.tree.find(path).is_some());
                 self.install(updated);
+                #[cfg(feature = "pro")]
+                {
+                    self.duplicates = None;
+                }
                 // Rescanning one folder doesn't finish a cancelled or failed scan.
                 self.status = if whole { Status::Complete } else { previous };
                 self.notice = Some(Notice::info(match before {
@@ -1073,6 +1293,15 @@ impl Explorer {
             KeyCode::PageDown => self.move_selection(self.page_rows as isize),
             KeyCode::Home => self.move_selection(-(self.selected as isize)),
             KeyCode::End => self.move_selection(self.rows.len() as isize),
+            // Pro: Enter starts comparing files in an empty Duplicates view.
+            #[cfg(feature = "pro")]
+            KeyCode::Enter
+                if self.mode == Mode::Duplicates
+                    && self.rows.is_empty()
+                    && self.duplicate_search() != Some(true) =>
+            {
+                self.start_duplicates()
+            }
             KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => self.activate(),
             KeyCode::Esc | KeyCode::Backspace | KeyCode::Left | KeyCode::Char('h') => self.back(),
             KeyCode::Char('/') => self.original_query = Some(self.query.clone()),
@@ -1092,6 +1321,10 @@ impl Explorer {
             KeyCode::Char('m') => self.toggle_treemap(),
             #[cfg(feature = "pro")]
             KeyCode::Char('X') => self.toggle_exclusive(),
+            #[cfg(feature = "pro")]
+            KeyCode::Char('D') => self.toggle_duplicates(),
+            #[cfg(feature = "pro")]
+            KeyCode::Char('E') => self.open_explain(),
             _ => {}
         }
         Action::Stay
@@ -1615,6 +1848,68 @@ mod tests {
         key(&mut explorer, KeyCode::Char('X'));
         assert!(!explorer.exclusive_column);
         assert!(notice(&explorer).0.contains("Scan the folder"));
+    }
+
+    #[cfg(feature = "pro")]
+    #[test]
+    fn d_lists_duplicates_after_enter_and_follows_the_trash() {
+        let root =
+            std::env::temp_dir().join(format!("space16x-tui-duplicates-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let same: Vec<u8> = (0..1_100_000_u32)
+            .map(|value| (value % 251) as u8)
+            .collect();
+        for name in ["a.bin", "b.bin", "c.bin"] {
+            std::fs::write(root.join(name), &same).unwrap();
+        }
+        std::fs::write(root.join("small.txt"), b"x").unwrap();
+        let report = crate::scanner::scan(
+            &root,
+            crate::scanner::Options {
+                excludes: &crate::scanner::Excludes::new(Vec::<String>::new()).unwrap(),
+                threads: 2,
+            },
+            false,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_| {},
+        )
+        .unwrap();
+        let mut explorer = Explorer::new(&root);
+        explorer.finish(Ok(report));
+        settle_ranking(&mut explorer);
+
+        // The view reads nothing until Enter starts the search.
+        key(&mut explorer, KeyCode::Char('D'));
+        assert!(explorer.mode == Mode::Duplicates && explorer.rows.is_empty());
+        assert_eq!(explorer.duplicate_search(), None);
+        assert!(explorer.ranking_request().is_none() && !explorer.is_ranking());
+        key(&mut explorer, KeyCode::Enter);
+        assert!(explorer.duplicate_search().is_some());
+        for _ in 0..400 {
+            if explorer.poll_views().1 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(names(&explorer), ["a.bin", "b.bin", "c.bin"]);
+        assert_eq!(explorer.duplicate_summary.0, 1);
+        let first = explorer.rows[0];
+        assert!(explorer.duplicate_labels[&first].starts_with("3 copies, "));
+
+        // Moving a copy to the Trash keeps the rest of the group.
+        key(&mut explorer, KeyCode::Down);
+        key(&mut explorer, KeyCode::Char('d'));
+        let items = confirm(&mut explorer);
+        explorer.finish_trash(moved(items));
+        assert!(explorer.poll_views().1);
+        assert_eq!(names(&explorer), ["a.bin", "c.bin"]);
+        let first = explorer.rows[0];
+        assert!(explorer.duplicate_labels[&first].starts_with("2 copies, "));
+        // Enter on a copy opens its folder.
+        key(&mut explorer, KeyCode::Enter);
+        assert!(explorer.mode == Mode::Folders);
     }
 
     #[cfg(feature = "pro")]

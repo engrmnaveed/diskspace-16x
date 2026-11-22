@@ -113,7 +113,8 @@ This is Space 16X Pro. It adds:
              Linux, space reserved for root and deleted files still held open.
 The explorer adds a Modified column with each item's newest modification date, t lists
 the file types in the open folder, u lists cleanup suggestions, m draws the open folder
-as a treemap, and X adds an Exclusive column, measured after the scan.
+as a treemap, X adds an Exclusive column, measured after the scan, D lists duplicate
+files once Enter starts comparing them, and E explains the open folder's volume.
 ";
 
 /// Subcommands only Space 16X Pro has. Basic builds answer them with an install hint.
