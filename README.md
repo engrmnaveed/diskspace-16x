@@ -10,6 +10,20 @@ Space 16X is a project by Muhammad Naveed Akram, developed under the [16X Brains
 
 ![Space 16X opens an interactive terminal explorer for drilling into folders and ranking files. The macOS app shows a treemap, donut chart, and Largest Files view.](Branding/Space16X-Demo.gif)
 
+## Editions
+
+Space 16X comes in two free, open-source editions built from this repository. **Basic** shows what is using your space and moves what you choose to the Trash, and stays light enough for remote servers. **Pro** adds deeper analysis.
+
+| | Basic | Pro adds |
+|---|---|---|
+| **Browse** | Folder list, treemap and donut on the Mac, the terminal explorer, largest files, filter, sort, apparent size, excludes | Modified dates, file types, owners on shared servers (CLI), a treemap in the terminal |
+| **Free space** | Move to Trash after you confirm, rescan a folder | Cleanup suggestions, duplicates found when you ask, exclusive size that leaves out clones and hard links, Explain Disk Space for what a scan can't see |
+| **Keep and compare** | Export and open scans in ncdu's format, `space16x volumes` | Scan history, Compare, Build Footprint receipts, an HTML report |
+| **Mac only** | | A menu-bar free-space monitor with low-space alerts, several windows |
+
+- **Mac app:** turn on **Settings → Pro features**. It's the same app, so nothing to install, and Pro stays out of the way while the switch is off.
+- **CLI:** add `--pro` to the [install command](#build-and-install). Pro installs the same `space16x` command over Basic, and installing without `--pro` switches back. `space16x --version` ends with `(pro)`, and the [Pro CLI reference](docs/cli-pro.md) lists its commands.
+
 ## Analyze a folder on macOS
 
 1. Choose a folder or local drive, or drop it into the Space 16X window. The start screen lists your volumes with their free space, and clicking one scans it.
@@ -17,7 +31,7 @@ Space 16X is a project by Muhammad Naveed Akram, developed under the [16X Brains
 3. Press Space to preview a selected item with Quick Look, reveal it in Finder, or copy its path. To free space, select items and press ⌘⌫. After you confirm, they move to the Trash and the results update in place. Space is freed when you empty the Trash. After you change files elsewhere, **Scan → Rescan Folder** (⌥⌘R) updates just the open folder.
 4. To keep a scan, choose **File → Export Scan…**. **File → Open Scan…** browses it later, read-only, along with scans saved by the CLI, ncdu, or gdu.
 
-The Mac app uses allocated size for totals, rankings, and chart shares. Choose **View → Size → Apparent Size** to use file lengths instead. The **Items** column counts the files and folders inside each folder. To skip folders such as `node_modules` or caches, list patterns under **Settings → Exclude from scans**. **Settings → Pro features** turns on the Pro edition's views. It is off by default. With it on, **Compare…** above the folder list opens a saved scan and adds a **Change** column that shows what grew or shrank, ranked when you click its header, **Save to History** keeps a scan to compare with later from the same menu, **Save Footprint Receipt…** records what an operation such as a build added since then, a **Modified** column shows when anything in each item last changed, **Types** next to List, Treemap and Donut lists the space each file extension uses, the Move to Trash confirmation says how much emptying the Trash frees at least when clones or hard links share space, **Cleanup** in the sidebar lists folders that tools recreate, such as `node_modules` and Xcode's DerivedData, for Move to Trash, **Duplicates** finds files with the same contents when you ask, an optional menu-bar item shows the startup disk's free space and warns when it runs low, **File → New Window** opens another window with its own scan, and **Scan → Explain Disk Space** shows the space a scan can't see, such as the other volumes of an APFS container, purgeable space and local snapshots. On a large scan, the first two levels are available while deeper folders are scanned. The progress strip shows the current path, and the list marks pending folders. A cancelled scan keeps the preview and labels its unfinished folders.
+The Mac app uses allocated size for totals, rankings, and chart shares. Choose **View → Size → Apparent Size** to use file lengths instead. The **Items** column counts the files and folders inside each folder. To skip folders such as `node_modules` or caches, list patterns under **Settings → Exclude from scans**. **Settings → Pro features** turns on the [Pro edition](#editions)'s views, such as **Compare…** above the folder list, **Cleanup** and **Duplicates** in the sidebar, and the menu-bar free-space monitor. It is off by default. On a large scan, the first two levels are available while deeper folders are scanned. The progress strip shows the current path, and the list marks pending folders. A cancelled scan keeps the preview and labels its unfinished folders.
 
 The treemap shows the largest items with a positive size. Remaining bytes are grouped as **Other Items**. Switch back to **List** to inspect each item.
 
@@ -74,7 +88,7 @@ space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercont
 space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
-Add `--pro` after `sh -s --` to install Space 16X Pro, a free edition with more analysis: `space16x diff` shows what grew or shrank since a saved scan, the explorer's **Modified** column shows when anything in a folder last changed, `scan --older-than DAYS` counts only files you haven't touched in that long, `scan --types N` (or `t` in the explorer) shows which file types use the most space, `space16x duplicates` finds files with the same contents, `scan --html FILE` writes a page to share, `m` in the explorer draws a treemap, `scan --by-owner` shows who fills a shared server, `scan --exclusive` shows what deleting would actually free with APFS clones and hard links, `scan --cleanup` (or `u` in the explorer) suggests folders that tools recreate, such as `node_modules` and build output, `space16x history` keeps scans so `history diff --since 7` shows what grew this week, and `space16x explain` shows the space a scan can't see, such as APFS volumes, purgeable space and snapshots on macOS or deleted files still held open on Linux. The [Pro CLI reference](docs/cli-pro.md) documents them. It replaces Basic, and installing without `--pro` switches back.
+Add `--pro` after `sh -s --` to install [Space 16X Pro](#editions), a free edition with more analysis, such as `space16x diff`, `space16x duplicates`, `scan --cleanup` and `space16x explain`. The [Pro CLI reference](docs/cli-pro.md) documents them. It replaces Basic, and installing without `--pro` switches back.
 
 To uninstall and clean up this shell's PATH, run the same installer with `--uninstall`.
 

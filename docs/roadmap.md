@@ -70,7 +70,7 @@ The owner's v0.8.0 QA found that every Pro feature works but is easy to miss, an
   - Duplicates become clone-aware in the CLI and the Mac app. A copy that shares its blocks with another copy in the group (an APFS clone, or a Btrfs/XFS reflink) is marked as a clone that frees nothing, and **Extra** counts only the bytes that removing the other copies would free. Reuse the exclusive-size measurement (`cli/src/pro/exclusive.rs`, `SpacePro/ExclusiveSize.swift`) and test both apps with the same case.
   - Basic `volumes` hides mount points that aren't directories, such as files bind-mounted into a container (`/etc/hostname`), unless `--all` is given.
   - Pro's `--help` lists the explorer's `m` treemap key.
-- [ ] M7.2 Make Pro easy to find [Basic]:
+- [x] M7.2 Make Pro easy to find [Basic]:
   - **Mac:** while Pro features is off, show one quiet, dismissible line, for example on the start screen: "More views are free in Pro". It opens **Settings → Pro features**.
   - **README:** a short **Editions** section with a Basic/Pro table and how to turn on each, in place of the long paragraph.
   - **Release notes:** each GitHub release includes its version's `CHANGELOG.md` section above the standard text (`publish-cli.yml`).
