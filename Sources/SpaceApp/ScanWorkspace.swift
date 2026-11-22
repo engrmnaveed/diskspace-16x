@@ -847,11 +847,8 @@ final class ScanWorkspace {
         if !moved.isEmpty, let report {
             let trashed = Set(moved.map(\.path))
             // Duplicate groups keep the copies that are still there.
-            let remaining = duplicateGroups?.compactMap { group -> DuplicateGroup? in
-                let files = group.files.filter { file in
-                    !trashed.contains { file.path == $0 || file.path.hasPrefix($0 + "/") }
-                }
-                return files.count > 1 ? DuplicateGroup(length: group.length, files: files) : nil
+            let remaining = duplicateGroups?.compactMap { group in
+                group.keeping { file in !trashed.contains { file.path == $0 || file.path.hasPrefix($0 + "/") } }
             }
             acceptReport(report.removing(trashed), duplicates: remaining)
         }
@@ -1046,7 +1043,13 @@ final class ScanWorkspace {
                     ranked = duplicates?.flatMap(\.files) ?? []
                     for group in duplicates ?? [] {
                         for (index, file) in group.files.enumerated() {
-                            labels[file.path] = "Copy \(index + 1) of \(group.files.count)"
+                            var label = "Copy \(index + 1) of \(group.files.count)"
+                            if group.isClone(at: index) {
+                                let frees = group.exclusiveBytes(at: index)
+                                let size = ByteCountFormatter.string(fromByteCount: Int64(clamping: frees), countStyle: .file)
+                                label += frees == 0 ? " · clone, frees nothing" : " · clone, frees \(size)"
+                            }
+                            labels[file.path] = label
                         }
                     }
                 }

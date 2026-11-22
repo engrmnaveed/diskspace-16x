@@ -78,20 +78,21 @@ impl Exclusive {
 
 /// How this filesystem can share a file's blocks.
 #[derive(Clone, Copy)]
-struct Sharing {
+pub struct Sharing {
     /// Btrfs, XFS and bcachefs share extents between reflinked files.
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     reflinks: bool,
 }
 
 impl Sharing {
+    /// How the filesystem holding `root` shares blocks.
     #[cfg(target_os = "macos")]
-    fn of(_root: &Path) -> Self {
+    pub fn of(_root: &Path) -> Self {
         Self { reflinks: false }
     }
 
     #[cfg(target_os = "linux")]
-    fn of(root: &Path) -> Self {
+    pub fn of(root: &Path) -> Self {
         use std::os::unix::ffi::OsStrExt;
         const BTRFS: u32 = 0x9123_683e;
         const XFS: u32 = 0x5846_5342;
@@ -113,7 +114,7 @@ impl Sharing {
     /// The bytes of the file at `path` that removing it wouldn't free: all of them when
     /// it has other hard links, else the blocks it shares with clones. Zero when unknown.
     #[cfg(target_os = "macos")]
-    fn shared_bytes(self, path: &Path) -> u64 {
+    pub fn shared_bytes(self, path: &Path) -> u64 {
         use std::os::unix::ffi::OsStrExt;
         let Ok(path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
             return 0;
@@ -162,7 +163,7 @@ impl Sharing {
     }
 
     #[cfg(target_os = "linux")]
-    fn shared_bytes(self, path: &Path) -> u64 {
+    pub fn shared_bytes(self, path: &Path) -> u64 {
         use std::os::unix::fs::MetadataExt;
         let Ok(metadata) = std::fs::symlink_metadata(path) else {
             return 0;
