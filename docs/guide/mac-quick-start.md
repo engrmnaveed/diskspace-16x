@@ -2,7 +2,7 @@
 
 Find what's using space on your Mac in about two minutes. You need macOS 14 (Sonoma) or later.
 
-Prefer to watch? The **Mac app walkthrough** video is coming soon. <!-- Replace "is coming soon" with: [is on YouTube](VIDEO-LINK) -->
+Prefer to watch? The **Mac app walkthrough** video [is on YouTube](https://youtu.be/34wE80c-4d0).
 
 ## 1. Install and open Space 16X
 
