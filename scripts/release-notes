@@ -1,0 +1,22 @@
+#!/bin/sh
+# Prints the GitHub release notes for VERSION: its CHANGELOG.md section, then the text
+# every release carries. Without a section, it warns and prints only the standard text.
+set -eu
+
+version=${1:?usage: scripts/release-notes VERSION}
+root=$(cd "$(dirname "$0")/.." && pwd)
+
+section=$(awk -v heading="## $version" '
+  $0 == heading { found = 1; next }
+  found && /^## / { exit }
+  found { print }
+' "$root/CHANGELOG.md" | sed '/./,$!d')
+
+if [ -n "$section" ]; then
+  printf '%s\n\n---\n\n' "$section"
+else
+  echo "scripts/release-notes: CHANGELOG.md has no section for $version" >&2
+fi
+cat <<'TEXT'
+Space 16X CLI archives for macOS and Linux in two free editions, Basic (space16x-TARGET) and Pro (space16x-pro-TARGET), and the universal Mac app, with SHA-256 files and GitHub build-provenance attestations. install.sh installs Basic, and install.sh --pro installs Pro. The Mac app is ad hoc signed and not notarized. Install it with Homebrew from the engrmnaveed/tap tap, or download the ZIP. See docs/install.md for installation, verification, first-launch approval, and removal.
+TEXT

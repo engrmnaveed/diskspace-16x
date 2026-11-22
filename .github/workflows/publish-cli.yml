@@ -105,10 +105,12 @@ jobs:
       - name: Publish the verified release assets
         shell: bash
         run: |
+          # The version's CHANGELOG.md section, then the text every release carries.
+          scripts/release-notes "$(cat scripts/release-version)" > "$RUNNER_TEMP/release-notes.md"
           cd "$RELEASE_DIR"
           gh release create "$GITHUB_REF_NAME" --verify-tag \
             --title "Space 16X $GITHUB_REF_NAME" \
-            --notes "Space 16X CLI archives for macOS and Linux in two free editions, Basic (space16x-TARGET) and Pro (space16x-pro-TARGET), and the universal Mac app, with SHA-256 files and GitHub build-provenance attestations. install.sh installs Basic, and install.sh --pro installs Pro. The Mac app is ad hoc signed and not notarized. Install it with Homebrew from the engrmnaveed/tap tap, or download the ZIP. See docs/install.md for installation, verification, first-launch approval, and removal." \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             space16x-*.tar.gz space16x-*.tar.gz.sha256 \
             space16x-*-macos-universal.zip space16x-*-macos-universal.zip.sha256 \
             space16x.rb install.sh install.sh.sha256

@@ -5,6 +5,8 @@
 - Count only the space that removing duplicates would free in Space 16X Pro. A copy that shares its blocks with another file, such as an APFS clone made by Finder or `cp -c`, a Btrfs or XFS reflink, or a file with another hard link, is marked **(clone)** in `space16x duplicates`, and **Extra** counts only what moving every copy but one to the Trash frees at least. A group of a file, a separate copy and a clone of the file now shows 2 MB extra for 2 MB files instead of 4 MB. JSON adds each file's `exclusiveBytes` and `clone`. The Mac app's **Duplicates** view labels clones the same way and counts the same total.
 - Leave single files that containers mount, such as `/etc/hostname` in Docker, out of `space16x volumes` unless you pass `--all`.
 - List the explorer's `m` treemap key in Space 16X Pro's `--help`.
+- Make Space 16X Pro easier to find. While **Settings → Pro features** is off, the Mac app's start screen ends with one quiet line, "More views and a menu-bar monitor are free in Pro.", whose link opens Settings and whose × hides it for good. The README has a short **Editions** section with what each edition does and how to turn on Pro in the app and the CLI.
+- Put each version's changelog section in its GitHub release notes, above the standard text about the assets. `scripts/release-notes VERSION` prints them.
 
 ## 0.8.0
 

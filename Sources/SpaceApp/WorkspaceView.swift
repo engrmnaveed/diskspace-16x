@@ -7,6 +7,7 @@ struct WorkspaceView: View {
     @Bindable var workspace: ScanWorkspace
     @ViewState private var isDropTargeted = false
     @AppStorage(ProFeatures.defaultsKey) private var proFeatures = false
+    @AppStorage(ProFeatures.hintDismissedKey) private var proHintDismissed = false
 
     var body: some View {
         NavigationSplitView {
@@ -230,6 +231,10 @@ struct WorkspaceView: View {
             if !workspace.volumes.isEmpty {
                 volumeList
             }
+
+            if !proFeatures && !proHintDismissed {
+                proHint
+            }
         }
         .padding(36)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -241,6 +246,34 @@ struct WorkspaceView: View {
                 endRadius: 310
             )
         }
+    }
+
+    /// One quiet line, while Pro features are off, that opens Settings, where the switch is.
+    private var proHint: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "sparkles")
+                .foregroundStyle(SpaceColor.accent)
+                .accessibilityHidden(true)
+            Text("More views and a menu-bar monitor are free in Pro.")
+            SettingsLink {
+                Text("Turn On in Settings…")
+            }
+            .buttonStyle(.link)
+            .help("Open Settings → Pro features")
+            Button {
+                proHintDismissed = true
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption2.weight(.semibold))
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.tertiary)
+            .help("Hide this hint")
+            .accessibilityLabel("Hide the Pro hint")
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .padding(.top, 4)
     }
 
     private var volumeList: some View {

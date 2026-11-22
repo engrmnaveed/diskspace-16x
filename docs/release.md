@@ -4,7 +4,7 @@
 
 Confirm the product name, runtime coverage for the release matrix, distribution channels, and company-site placement with the project owner. Record the scan benchmark on named hardware. Exercise the [macOS manual checks](manual-qa.md), including the macOS 14 deployment floor, before claiming support. Hosted CI is configured for Apple silicon and Intel on macOS 15, plus the CLI on Ubuntu 24.04 x86-64 and ARM64.
 
-Check that [scripts/release-version](../scripts/release-version), [cli/Cargo.toml](../cli/Cargo.toml), and the CLI's `--version` output agree. Update the [changelog](../CHANGELOG.md), the [installation guide](install.md) package examples, and the release notes as needed.
+Check that [scripts/release-version](../scripts/release-version), [cli/Cargo.toml](../cli/Cargo.toml), and the CLI's `--version` output agree. Update the [changelog](../CHANGELOG.md) and the [installation guide](install.md) package examples. The GitHub release notes are the version's changelog section followed by the standard text about the assets, which [scripts/release-notes](../scripts/release-notes) prints: run `scripts/release-notes X.Y.Z` to preview them.
 
 ## Build release artifacts in GitHub Actions
 

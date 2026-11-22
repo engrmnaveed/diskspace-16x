@@ -5,6 +5,8 @@ import Foundation
 public enum ProFeatures {
     /// The UserDefaults key behind **Settings → Pro features**. It is off by default.
     public static let defaultsKey = "proFeatures"
+    /// The UserDefaults key that remembers the user hid the start screen's hint about Pro.
+    public static let hintDismissedKey = "proHintDismissed"
 
     public static var isEnabled: Bool {
         UserDefaults.standard.bool(forKey: defaultsKey)
