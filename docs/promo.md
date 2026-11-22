@@ -71,7 +71,8 @@ It builds both CLI editions into `cli/target/guide-basic` and `cli/target/guide-
 | `docs/guide/images/*.gif` | Short loops beside the guide's sections, each well under 1 MB. Commit them. |
 | `dist/guide/space16x-mac-walkthrough.mp4`, `dist/guide/space16x-terminal-walkthrough.mp4` | Walkthroughs at 1920 × 1080, 30 fps, H.264/AAC, with captions and quiet synthesized music. Upload them to YouTube. |
 | `dist/guide/space16x-*-youtube.txt` | Each video's title, description, chapter timestamps and tags. |
+| `dist/guide/space16x-*-thumbnail.jpg` | Each video's 1280 × 720 YouTube thumbnail. |
 
 The pieces live in [`scripts/guide/`](../scripts/guide/): `fixture.py` makes the folder, `terminal.py` and `storyboard.py` capture the explorer and lay out every screenshot, GIF and video scene, `GuideCapture.swift` drives the app's views, and `GuideRender.swift` draws the windows, captions and terminal screens. When the UI changes, rerun the script and commit the new images. Change what a scene shows in `storyboard.py`. The script stops with a clear message when an expected screen doesn't appear or a YouTube chapter would last less than 10 seconds. These files are outside the promo workflow's paths, so changing them doesn't render a new Short.
 
-To publish a walkthrough, upload its MP4 in YouTube Studio with the title, description and chapters from its text file. Then replace "coming soon" in `docs/guide/README.md` and the matching quick start with the link. Each spot has an HTML comment that says what to write.
+To publish a walkthrough, upload its MP4 in YouTube Studio with the title, description and chapters from its text file, and its thumbnail. Then replace "coming soon" in `docs/guide/README.md` and the matching quick start with the link. Each spot has an HTML comment that says what to write.

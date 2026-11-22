@@ -538,6 +538,30 @@ def youtube_text(name, chapters, duration):
     return "\n".join(lines) + "\n"
 
 
+THUMBNAILS = {
+    "mac": (["What's using", "your disk?"], "Mac app walkthrough", ("window", "treemap")),
+    "terminal": (["Find big", "files fast"], "Terminal walkthrough", ("terminal", "t-folders")),
+}
+
+
+def thumbnail(name, folder):
+    """A 1280 × 720 YouTube thumbnail: a short question beside the real interface."""
+    lines, subtitle, (kind, source) = THUMBNAILS[name]
+    content = (dict(type="terminal", frame=source, rows=24) if kind == "terminal" else dict(type="window", source=source))
+    content.update(x=620, y=100, w=620, h=580)
+    layers = [
+        dict(type="icon", x=60, y=58, w=56),
+        dict(type="text", text="SPACE 16X", x=130, y=70, size=30, weight="bold", color=MINT, mono=True),
+        *(dict(type="text", text=line, x=56, y=190 + index * 86, size=72, weight="heavy", color=WHITE)
+          for index, line in enumerate(lines)),
+        dict(type="text", text=subtitle, x=60, y=380, size=32, weight="semibold", color=MUTED),
+        dict(type="text", text="FREE AND OPEN SOURCE", x=60, y=436, size=22, weight="semibold", color=MINT, mono=True),
+        content,
+    ]
+    return dict(kind="canvas", path=str(folder / f"{name}-thumbnail.png"), width=1280, height=720,
+                background="brand", layers=layers)
+
+
 def build(frames, work, videos):
     """The whole specification for GuideCapture, and what to encode afterwards."""
     outputs = shots(work / "shots")
@@ -548,6 +572,7 @@ def build(frames, work, videos):
         for video in (mac_video(), terminal_video()):
             video_outputs, steps, chapters = video_frames(video, work / "video")
             outputs += video_outputs
-            plans[video["name"]] = dict(steps=steps, chapters=chapters)
+            outputs.append(thumbnail(video["name"], work / "video"))
+            plans[video["name"]] = dict(steps=steps, chapters=chapters, thumbnail=outputs[-1]["path"])
     spec = dict(terminal=dict(columns=100, frames=frames), outputs=outputs)
     return spec, gif_sequences, plans

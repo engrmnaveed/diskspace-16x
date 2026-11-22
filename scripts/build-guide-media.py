@@ -217,6 +217,8 @@ def main():
                     storyboard.youtube_text(name, plan["chapters"], duration), encoding="utf-8",
                 )
                 print(f"{destination.resolve()}  {storyboard.timestamp(duration)}")
+                thumbnail = args.output / f"space16x-{name}-thumbnail.jpg"
+                subprocess.run([*FFMPEG, "-i", plan["thumbnail"], "-q:v", "2", thumbnail], check=True)
 
 
 if __name__ == "__main__":
