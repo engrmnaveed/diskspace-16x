@@ -39,6 +39,16 @@ struct WorkspaceCommands: Commands {
     private var workspace: ScanWorkspace { focused ?? Self.idle }
     private var hasWindow: Bool { focused != nil }
 
+    /// A preset of the age filter, such as “90 Days” or “1 Year”.
+    static func ageTitle(_ days: Int) -> String {
+        switch days {
+        case 182: "6 Months"
+        case 365: "1 Year"
+        case 730: "2 Years"
+        default: "\(days) Days"
+        }
+    }
+
     var body: some Commands {
         CommandGroup(before: .toolbar) {
             Picker("Size", selection: Binding(
@@ -55,6 +65,17 @@ struct WorkspaceCommands: Commands {
                     get: { workspace.showsExclusive },
                     set: { workspace.showsExclusive = $0 }
                 ))
+                .disabled(!hasWindow)
+                Picker("Show Files Older Than", selection: Binding(
+                    get: { workspace.olderThanDays ?? 0 },
+                    set: { workspace.olderThanDays = $0 == 0 ? nil : $0 }
+                )) {
+                    Text("Any Age").tag(0)
+                    Divider()
+                    ForEach(OlderThan.presets, id: \.self) { days in
+                        Text(Self.ageTitle(days)).tag(days)
+                    }
+                }
                 .disabled(!hasWindow)
             }
             Divider()
@@ -75,6 +96,10 @@ struct WorkspaceCommands: Commands {
             Button("Export Scan…", action: workspace.exportScan)
                 .keyboardShortcut("e", modifiers: [.command, .shift])
                 .disabled(!workspace.canExport)
+            if proFeatures {
+                Button("Export HTML Report…", action: workspace.exportHTMLReport)
+                    .disabled(!workspace.canExport)
+            }
         }
         CommandMenu("Scan") {
             Button("Scan Again", action: workspace.rescan)

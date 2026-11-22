@@ -127,6 +127,11 @@ struct ResultsView: View {
     private func scopeCaption(_ scope: ScanEntry) -> String {
         let excluded = workspace.report?.excludedCount ?? 0
         var suffix = excluded == 0 ? "" : " · \(ScanFormat.excluded(excluded))"
+        if workspace.isAgeFiltered, let days = workspace.olderThanDays {
+            suffix += " · files older than \(WorkspaceCommands.ageTitle(days).lowercased())"
+        } else if workspace.olderThanDays != nil, workspace.report?.isPreview == true {
+            suffix += " · the age filter applies when the scan finishes"
+        }
         if let progress = workspace.exclusiveProgress {
             suffix += " · Measuring exclusive sizes \(Int(progress * 100))%"
         } else if workspace.showsExclusive, workspace.importedFile != nil {
