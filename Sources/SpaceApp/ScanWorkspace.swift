@@ -1203,13 +1203,14 @@ final class ScanWorkspace {
                     ranked = duplicates?.flatMap(\.files) ?? []
                     for group in duplicates ?? [] {
                         for (index, file) in group.files.enumerated() {
-                            var label = "Copy \(index + 1) of \(group.files.count)"
+                            // A clone says what removing it frees, short enough for a narrow column.
                             if group.isClone(at: index) {
                                 let frees = group.exclusiveBytes(at: index)
                                 let size = ByteCountFormatter.string(fromByteCount: Int64(clamping: frees), countStyle: .file)
-                                label += frees == 0 ? " · clone, frees nothing" : " · clone, frees \(size)"
+                                labels[file.path] = frees == 0 ? "Clone, frees nothing" : "Clone, frees \(size)"
+                            } else {
+                                labels[file.path] = "Copy \(index + 1) of \(group.files.count)"
                             }
-                            labels[file.path] = label
                         }
                     }
                 }

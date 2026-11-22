@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Count only the space that removing duplicates would free in Space 16X Pro. A copy that shares its blocks with another file, such as an APFS clone made by Finder or `cp -c`, a Btrfs or XFS reflink, or a file with another hard link, is marked **(clone)** in `space16x duplicates`, and **Extra** counts only what moving every copy but one to the Trash frees at least. A group of a file, a separate copy and a clone of the file now shows 2 MB extra for 2 MB files instead of 4 MB. JSON adds each file's `exclusiveBytes` and `clone`. The Mac app's **Duplicates** view labels clones the same way and counts the same total.
+- Count only the space that removing duplicates would free in Space 16X Pro. A copy that shares its blocks with another file, such as an APFS clone made by Finder or `cp -c`, a Btrfs or XFS reflink, or a file with another hard link, is marked **(clone)** in `space16x duplicates`, and **Extra** counts only what moving every copy but one to the Trash frees at least. A group of a file, a separate copy and a clone of the file now shows 2 MB extra for 2 MB files instead of 4 MB. JSON adds each file's `exclusiveBytes` and `clone`. The Mac app's **Duplicates** view labels them **Clone, frees nothing** and counts the same total.
 - Leave single files that containers mount, such as `/etc/hostname` in Docker, out of `space16x volumes` unless you pass `--all`.
 - List the explorer's `m` treemap key in Space 16X Pro's `--help`.
 - Make Space 16X Pro easier to find. While **Settings → Pro features** is off, the Mac app's start screen ends with one quiet line, "More views and a menu-bar monitor are free in Pro.", whose link opens Settings and whose × hides it for good. The README has a short **Editions** section with what each edition does and how to turn on Pro in the app and the CLI.
@@ -14,6 +14,8 @@
 - List Xcode archives and simulator devices as cleanup suggestions to review in Space 16X Pro. `scan --cleanup`, the explorer's `u` view and the Mac app's Cleanup view list them separately, out of the recreatable total, because they can't be recreated. They're never marked for you, and Move to Trash warns plainly before moving them, or a folder that holds them. JSON adds `reviewBytes` and `review`, each with a `warning`.
 - Show only older files in Space 16X Pro on the Mac. **View → Show Files Older Than** counts only files last modified more than 30 or 90 days, 6 months, or 1 or 2 years ago, and the folders that hold them, as `scan --older-than` does. Move to Trash takes files, not folders, while the filter is on, since folders may hold newer files.
 - Export an HTML report from the Mac app in Space 16X Pro. **File → Export HTML Report…** saves the same self-contained page as `space16x scan --html`: the totals, a treemap, the scan root's contents, the largest files and file types, with no scripts.
+- Fix the Mac app's folder list overflowing behind a horizontal scroller, with the Share column cut off, after the Exclusive column or Compare's Change column was hidden.
+- Refresh the promo Short and the README preview to show Pro's review suggestions for an Xcode archive in the CLI and a clone that frees nothing in the Mac app's Duplicates.
 
 ## 0.8.0
 

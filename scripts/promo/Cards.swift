@@ -59,7 +59,7 @@ struct Cards {
             explorerPanel("trash", on: canvas, x: 74, top: 646, width: 916)
         }
         try short("report", section: "CLI  /  PRO", title: ["Clear what", "tools rebuild."],
-                  detail: "List build output and caches to trash.", progress: 2) { canvas in
+                  detail: "Trash build output. Review archives.", progress: 2) { canvas in
             terminal("$ space16x scan --cleanup", on: canvas, top: 646)
         }
         try short("carry", section: "CLI  /  macOS + LINUX", title: ["Scan a server.", "Browse it here."],
@@ -76,7 +76,7 @@ struct Cards {
             appPanel("donut", on: canvas, top: 646)
         }
         try short("duplicates", section: "DESKTOP  /  PRO", title: ["Find files you", "saved twice."],
-                  detail: "Compare same-size files on request.", progress: 5) { canvas in
+                  detail: "Clones that free nothing are marked.", progress: 5) { canvas in
             appPanel("duplicates", on: canvas, top: 646)
         }
         try short("end", section: "DISK SPACE ANALYZER", title: ["Find the", "space hogs."],

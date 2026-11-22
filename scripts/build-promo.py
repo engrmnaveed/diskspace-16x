@@ -37,9 +37,13 @@ FIXTURE = {
     "App/target/debug/app": 8,
     "Site/package.json": 0,
     "Site/node_modules/react/react.js": 6,
+    # An Xcode archive, which Pro lists to review because it can't be recreated.
+    "Backups/Library/Developer/Xcode/Archives/App.xcarchive/app": 3,
 }
 # A copy saved twice, which the Mac app's Duplicates scene finds.
 COPIES = {"Backups/teaser-final.mp4": "Exports/teaser.mp4"}
+# An APFS clone of the same file, which Duplicates marks as freeing nothing.
+CLONES = {"Backups/teaser-review.mp4": "Exports/teaser.mp4"}
 # Days since each file last changed, which Pro's Modified column shows.
 AGES = {
     "Exports/launch.mov": 0,
@@ -65,6 +69,8 @@ def create_fixture(root):
         os.utime(path, (modified, modified))
     for copy, original in COPIES.items():
         (root / copy).write_bytes((root / original).read_bytes())
+    for clone, original in CLONES.items():
+        subprocess.run(["cp", "-c", root / original, root / clone], check=True)
     # Many small files give the item-count sort something to show.
     folder = root / "Assets" / "icons"
     folder.mkdir()

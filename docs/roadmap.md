@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — Milestone 7 (Complete and stable, v0.9.0) is next. The owner reviewed v0.8.0 on 2026-11-22 and approved M7: the v0.8.0 QA fixes and everything M6 left for later. The items below are the plan: start with M7.1. Nothing comes after M7. Cross-platform work waits for the owner's feasibility review (see **Future**). Basic's Linux x86-64 archive is 589,857 bytes against its 600 KB budget.
+**Resume here** — M7.1–M7.9 have landed. Next is M7.10: release v0.9.0 (a `release/v0.9.0` PR, then the tag), then pause for the owner's review. Nothing comes after M7. Cross-platform work waits for the owner's feasibility review (see **Future**). Basic's Linux x86-64 archive was 590,550 bytes locally before the release, against its 600 KB budget.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -99,9 +99,10 @@ The owner's v0.8.0 QA found that every Pro feature works but is easy to miss, an
   - **Export HTML Report…**, writing the same self-contained page as `scan --html`, with a shared structural test.
   - Owners in Scan Details if that's simple. Otherwise, record why the Mac app leaves owners out.
   - **Outcome (2026-11-22):** **View → Show Files Older Than** (Any Age, 30 and 90 days, 6 months, 1 or 2 years) filters the results with `SpacePro/OlderThan.swift`, the CLI's rule. Saving, exporting a scan, rescanning and Move to Trash work from the unfiltered results, Move to Trash refuses folders while the filter is on (they may hold newer files), and Compare is off while it's on. **File → Export HTML Report…** writes `SpacePro/HTMLReport.swift`'s port of the CLI page, and `fixtures/html-report` checks both pages' structure. **Owners stay out of the Mac app:** it scans the signed-in user's folders, where nearly every file has one owner, so a breakdown would say little, and storing each entry's owner would grow `ScanEntry` past its 64 bytes. The CLI's `--by-owner` serves shared servers.
-- [ ] M7.9 QA, benchmarks, archive sizes and a promo refresh:
+- [x] M7.9 QA, benchmarks, archive sizes and a promo refresh:
   - Exercise every Mac feature M7 touches at runtime, not only in offscreen renders. A temporary debug build that drives `ScanWorkspace` and logs, run with `-proFeatures YES` argument overrides, works well; don't commit it.
   - Add manual QA rows, and list what still needs the owner's eyes.
+  - **Outcome (2026-11-22):** `docs/qa.md` records the runtime pass, which found and fixed two layout bugs. **Still for the owner's eyes:** clicking the start screen's **Turn On in Settings…** and its × (relaunch to see it stay hidden); typing in the receipt sheet (a remembered budget filling in, and **Save…** disabled for an unreadable budget); saving through the HTML report and receipt save panels (the harness checked the panels and the files' contents, not a click on **Save**); a real Time Machine local snapshot in Explain Disk Space; the View menu's **Show Files Older Than** submenu; the Move to Trash alert's look; and the console warning about a reentrant table delegate when the age filter is cleared or the Exclusive sort is reversed.
 - [ ] M7.10 Release v0.9.0
 
 ### Future

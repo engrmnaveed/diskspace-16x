@@ -6,8 +6,11 @@ import SwiftUI
 struct ResultsView: View {
     @Bindable var workspace: ScanWorkspace
     @AppStorage(ProFeatures.defaultsKey) private var proFeatures = false
-    /// Shows the Change column only while comparing. Conditional columns need macOS 14.4.
+    /// The user's column widths. Pro's columns are shown through `columnCustomization`,
+    /// since conditional columns need macOS 14.4.
     @ViewState private var columns = TableColumnCustomization<ScanEntry>()
+    /// The Pro columns `columns` was recorded with.
+    @ViewState private var columnsShown: [Bool] = []
 
     /// Pro's Compare adds a Change column to the folder list.
     private var showsChanges: Bool {
@@ -51,15 +54,33 @@ struct ResultsView: View {
             .onChange(of: proFeatures, initial: true) { _, enabled in
                 if !enabled { workspace.stopProFeatures() }
                 workspace.refreshSavedScans()
-                columns[visibility: "modified"] = enabled ? .visible : .hidden
-            }
-            .onChange(of: showsChanges, initial: true) { _, shown in
-                columns[visibility: "change"] = shown ? .visible : .hidden
-            }
-            .onChange(of: showsExclusive, initial: true) { _, shown in
-                columns[visibility: "exclusive"] = shown ? .visible : .hidden
             }
         }
+    }
+
+    /// Which of Pro's columns the table shows: Modified, Change and Exclusive.
+    private var proColumns: [Bool] { [proFeatures, showsChanges, showsExclusive] }
+
+    /// The column customization with Pro's columns shown or hidden for the current state,
+    /// so a rebuilt table lays out only the columns it shows. Column widths apply only to the
+    /// set of columns they were recorded with: a table stretches its columns to fill its
+    /// width, and reusing those widths after a column appeared or left made the columns
+    /// overflow behind a horizontal scroller.
+    private var columnCustomization: Binding<TableColumnCustomization<ScanEntry>> {
+        let shown = proColumns
+        return Binding(
+            get: {
+                var current = columnsShown == shown ? columns : TableColumnCustomization<ScanEntry>()
+                current[visibility: "modified"] = shown[0] ? .visible : .hidden
+                current[visibility: "change"] = shown[1] ? .visible : .hidden
+                current[visibility: "exclusive"] = shown[2] ? .visible : .hidden
+                return current
+            },
+            set: { customization in
+                columns = customization
+                if columnsShown != shown { columnsShown = shown }
+            }
+        )
     }
 
     private var trashTitle: String {
@@ -412,12 +433,12 @@ struct ResultsView: View {
     private func resultsTable(scope: ScanEntry) -> some View {
         Table(
             workspace.rows, selection: $workspace.selectedPaths, sortOrder: $workspace.sortOrder,
-            columnCustomization: $columns
+            columnCustomization: columnCustomization
         ) {
             TableColumn("Name", sortUsing: EntrySort(key: .name, order: .forward)) { entry in
                 nameCell(entry, scope: scope)
             }
-            .width(min: 190, ideal: 280)
+            .width(min: 190, ideal: 220)
 
             TableColumn(workspace.sizeMetric.title, sortUsing: EntrySort.largestFirst) { entry in
                 sizeCell(entry)
@@ -463,7 +484,7 @@ struct ResultsView: View {
         }
         .tableStyle(.inset(alternatesRowBackgrounds: false))
         // Rebuild the table when a Pro column appears or leaves, so its cells fill in.
-        .id([showsChanges, proFeatures, showsExclusive])
+        .id(proColumns)
         .contextMenu(forSelectionType: String.self) { identifiers in
             if identifiers.count > 1 {
                 Button("Move \(identifiers.count) Items to Trash…") {

@@ -255,6 +255,7 @@ struct WorkspaceView: View {
                 .foregroundStyle(SpaceColor.accent)
                 .accessibilityHidden(true)
             Text("More views and a menu-bar monitor are free in Pro.")
+                .foregroundStyle(.secondary)
             SettingsLink {
                 Text("Turn On in Settings…")
             }
@@ -272,7 +273,6 @@ struct WorkspaceView: View {
             .accessibilityLabel("Hide the Pro hint")
         }
         .font(.callout)
-        .foregroundStyle(.secondary)
         .padding(.top, 4)
     }
 

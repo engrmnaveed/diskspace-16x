@@ -1,5 +1,25 @@
 # Space 16X verification
 
+## 0.9.0
+
+Milestone 7 (Complete and stable) on the Apple M5 Pro MacBook Pro with macOS 27.2.1, APFS and Rust 1.100.0.
+
+- The Rust CLI passed 73 unit tests in the Basic edition and 114 with `--features pro`. New Pro tests cover clone-aware duplicates with a real `clonefile` clone (the owner's case: a file, a separate copy and a clone give one copy's size as extra), the explorer's Exclusive column measured in the background and its notice for imported scans, the Duplicates view from Enter through Move to Trash, the warning before trashing an Xcode archive or a folder that holds one, the shared `fixtures/cleanup` scan with its review list, `--budget` parsing, text and JSON, each snapshot's date in `explain`, the HTML page against the shared `fixtures/html-report` structure, and on Linux the rule that hides single files mounted into a container.
+- `scripts/check-cli.py` checks, with the Pro archive, duplicates' `clone` and `exclusiveBytes` (a hard-linked copy frees nothing), `--cleanup`'s `review` list with an Xcode archive, and `diff --budget` exiting with `3` over budget and `0` within it. `scripts/check-tui.py` checks Pro's `X` column, the `D` view with Enter, marking and the y/N prompt, and the `E` panel.
+- All 63 Swift tests passed (42 in SpaceCore and 21 in SpacePro). New ones cover clone-aware duplicate groups with the same folder as the Rust test, whole-scan exclusive sizes with progress, budget parsing and the receipt's budget line with the CLI's rule, the review list from the shared cleanup fixture and its warning, the older-than filter, and the HTML page against the shared structure.
+- **Mac runtime QA.** A temporary harness, not committed, drove `ScanWorkspace` in a release build of the app run with `-proFeatures NO` and `YES` argument overrides, logged to standard error, and rendered the real window and its sheets. It confirmed: the start screen's Pro hint with Pro off, and no Pro menu items; with Pro on, **View → Show Exclusive Size** and **Show Files Older Than** with its presets, and **File → Export HTML Report…**; the Exclusive column (a folder holding a file and its clone shows 2.0 MB of 6.0 MB) and its sorting both ways; Duplicates with the owner's case showing 2.0 MB in extra copies and both clones labeled **Clone, frees nothing**; Cleanup listing Archives as review, the Move to Trash alert starting with "Xcode archives can't be recreated." and none for `node_modules`; the age filter keeping only the old file and its folder, refusing to trash the folder, and turning Compare off; the HTML report and receipt save panels with their names and messages, and the receipt's **Over budget** line; the receipt sheet's budget field; and Explain Disk Space listing two snapshots oldest first with the note. It found and this release fixes two layout bugs: after the Exclusive column or Compare's Change column was hidden, the table kept stale widths and overflowed behind a horizontal scroller, cutting off Share, and the hint's link was gray instead of link blue.
+- AppKit logs "reentrant operation in its NSTableView delegate" once when the age filter is cleared and once when the Exclusive sort is reversed. Nothing on screen is wrong, and v0.8.0 logs nothing for comparable steps. It's left for a follow-up.
+- Local release archives (macOS `tar` and `gzip`), Basic and Pro: `aarch64-apple-darwin` 505,519 and 717,383 bytes (0.8.0: 505,118 and 693,055). Linux `x86_64-unknown-linux-musl` archives as `package-cli.sh` builds them: Basic 590,550 bytes against 590,246 before M7, and Pro 834,274 against 808,813. Basic grew by about 300 bytes for the bound-file rule, the explorer's trash prompt and Pro's key hooks, with no new dependencies, so its Linux x86-64 archive keeps about 9.4 KB under the 600 KB budget. Pro grew by about 25 KB with no new dependencies.
+
+Rust release CLI, the same day. The 100,000-file row is `scripts/benchmark.py`, the last of three runs. The 1,000,000-file row times the three builds on one fixture, alternating, after a warm-up run of each, with 0.8.0 Pro built from its tag.
+
+| Fixture | 0.8.0 Pro | 0.9.0 Basic | 0.9.0 Pro |
+| --- | --- | --- | --- |
+| 100,000 files | | 0.0394 s; 18.6 MB | 0.0400 s; 19.5 MB |
+| 1,000,000 files | 1.145, 1.134, 1.157, 1.168 s; 128.4–128.5 MB | 1.140, 1.144, 1.136, 1.158 s; 120.1–120.2 MB | 1.139, 1.141, 1.155, 1.154 s; 128.2–128.3 MB |
+
+Both editions scan as fast as 0.8.0 with the same memory. M7 doesn't change the scanner: exclusive sizes and duplicates do their extra reading after the scan, and only when asked.
+
 ## 0.8.0
 
 Milestone 6 (Pro deep) on the Apple M5 Pro MacBook Pro with macOS 27.2.1, APFS and Rust 1.100.0.
