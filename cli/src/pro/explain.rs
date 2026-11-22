@@ -218,20 +218,30 @@ pub fn write_plain(out: impl Write, explanation: &Explanation) -> io::Result<()>
         )?;
     }
     if cfg!(target_os = "macos") {
-        let snapshots = match explanation.snapshots.as_deref() {
-            None => "unknown: tmutil couldn't list them".to_owned(),
-            Some([]) => "none".to_owned(),
+        match explanation.snapshots.as_deref() {
+            None => writeln!(out, "Snapshots   unknown: tmutil couldn't list them")?,
+            Some([]) => writeln!(out, "Snapshots   none")?,
             Some(names) => {
-                let dates: Vec<String> = names.iter().filter_map(|n| snapshot_date(n)).collect();
-                let range = match (dates.iter().min(), dates.iter().max()) {
-                    (Some(first), Some(last)) if first != last => format!(", {first} to {last}"),
-                    (Some(only), _) => format!(", {only}"),
-                    _ => String::new(),
-                };
-                format!("{} local{range}, holding deleted files' space", names.len())
+                writeln!(
+                    out,
+                    "Snapshots   {} local, holding the space of files deleted since each was taken",
+                    names.len()
+                )?;
+                // Oldest first. macOS reports no size for each one.
+                let mut taken: Vec<String> = names
+                    .iter()
+                    .map(|name| snapshot_date(name).unwrap_or_else(|| terminal_text(name).into()))
+                    .collect();
+                taken.sort();
+                for when in taken {
+                    writeln!(out, "            {when}")?;
+                }
+                writeln!(
+                    out,
+                    "            macOS removes each after about 24 hours, or sooner when space runs low"
+                )?;
             }
-        };
-        writeln!(out, "Snapshots   {snapshots}")?;
+        }
     }
     if explanation.container.len() > 1 {
         writeln!(out, "\n{:>10}  APFS volume", "Used")?;
@@ -666,8 +676,10 @@ mod tests {
         if cfg!(target_os = "macos") {
             assert!(
                 plain.contains(
-                    "Snapshots   2 local, 2026-11-20 10:15 to 2026-11-21 09:00, holding deleted files' space\n"
-                )
+                    "Snapshots   2 local, holding the space of files deleted since each was taken\n            \
+                     2026-11-20 10:15\n            2026-11-21 09:00\n            macOS removes each"
+                ),
+                "{plain}"
             );
             assert!(plain.contains("Used        60.00 GB, shared by the volumes"));
             assert!(plain.contains(" 813.50 GB  /System/Volumes/Data\n"));

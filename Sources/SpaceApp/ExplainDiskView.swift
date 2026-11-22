@@ -71,18 +71,17 @@ struct ExplainDiskView: View {
 
     private var snapshotSummary: String {
         guard let snapshots = explanation.snapshots else { return "Unknown" }
-        let dates = explanation.snapshotDates
-        switch (snapshots.count, dates.first, dates.last) {
-        case (0, _, _): return "None"
-        case let (count, first?, last?) where first != last: return "\(count) local, \(first) to \(last)"
-        case let (count, first?, _): return "\(count) local, \(first)"
-        case let (count, _, _): return "\(count) local"
-        }
+        return snapshots.isEmpty ? "None" : "\(snapshots.count) local"
     }
 
     private var snapshotNote: String? {
         guard let snapshots = explanation.snapshots else { return "tmutil couldn't list them." }
-        return snapshots.isEmpty ? nil : "They keep the space of files deleted since they were taken until macOS removes them."
+        guard !snapshots.isEmpty else { return nil }
+        // Oldest first. macOS reports no size for each one.
+        let taken = snapshots.map { DiskExplanation.snapshotDate($0) ?? $0 }.sorted()
+        return (taken + [
+            "Each keeps the space of files deleted since it was taken. macOS removes each after about 24 hours, or sooner when space runs low.",
+        ]).joined(separator: "\n")
     }
 
     private func row(_ title: String, _ value: String, _ note: String? = nil) -> some View {
