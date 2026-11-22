@@ -106,7 +106,7 @@ def capture_explorer(binary, fixture, saved):
         terminal.send(b"\x7f")
         wait_for(terminal, stream, screen, "Exports", "Media", "6 items")
         terminal.send(b"f")
-        wait_for(terminal, stream, screen, "Largest files", "60 shown", "interview.wav")
+        wait_for(terminal, stream, screen, "Largest files", "62 shown", "interview.wav")
         frames["rank"] = snapshot(screen, fixture)
 
         # Mark the two largest files and ask to move them. Answer n, so nothing moves.
