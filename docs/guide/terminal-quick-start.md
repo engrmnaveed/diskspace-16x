@@ -4,6 +4,8 @@ Explore your disk from the keyboard, on a Mac or on Linux, in about two minutes.
 
 The **terminal** is the window where you type commands: the Terminal app on a Mac, or the shell on a Linux computer or server. You type a command and press Return.
 
+Prefer to watch? The **terminal walkthrough** video is coming soon. <!-- Replace "is coming soon" with: [is on YouTube](VIDEO-LINK) -->
+
 ## 1. Install
 
 Copy the one-line installer from [Install the CLI](../install.md#install-the-cli-from-a-release), paste it into your terminal, and press Return. It installs the `space16x` command for your user only, so it doesn't ask for an admin password.
@@ -24,6 +26,8 @@ space16x ~
 
 Space 16X scans the folder and opens the explorer. The biggest items are at the top, and the bar on the right shows each item's share. Running `space16x` alone explores the folder you're in.
 
+![The explorer lists a home folder's contents, biggest first: Movies at 745 MB, then Downloads, Desktop and Library, with item counts and share bars.](images/terminal-folders.png)
+
 ## 3. Move around
 
 | Press | To |
@@ -35,11 +39,15 @@ Space 16X scans the folder and opens the explorer. The biggest items are at the 
 | `?` | See every key |
 | `q` | Quit |
 
+![Moving the highlight, opening a folder, seeing a file's details, going back, listing the largest files and marking two of them.](images/terminal-first-scan.gif)
+
 ## 4. Free up space
 
 1. Highlight an item you don't need and press Space to mark it. A ✓ appears beside it. Mark as many as you like.
 2. Press `d`. The bottom line asks, for example, "Move 2 items (50.3 MB) to the Trash? y/N".
 3. Press `y` to move them. Any other key keeps them.
+
+![Two marked files in the largest-files view, with the question Move 2 items (450.0 MB) to the Trash? y/N on the bottom line.](images/terminal-trash.png)
 
 The totals update right away. The space comes back when you empty the Trash. On Linux, items go to the same Trash your file manager uses, so you can restore them from there.
 

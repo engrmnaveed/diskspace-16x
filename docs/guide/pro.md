@@ -2,10 +2,14 @@
 
 Pro adds deeper views to Space 16X. It's free, like Basic, with nothing to buy or sign up for. Turn it on when you want more, and turn it off anytime.
 
+![A tour of Pro in the Mac app: cleanup suggestions, duplicates, a comparison with last week's scan, and Explain Disk Space.](images/pro-tour.gif)
+
 ## Turn on Pro
 
 - **Mac app:** open **Space 16X → Settings…** and turn on **Turn on Pro features**. It's the same app, so there's nothing to install. The new views appear right away.
 - **Terminal:** run the installer again with `--pro` added, as [Install Space 16X Pro](../install.md#install-space-16x-pro) shows. Pro replaces Basic under the same `space16x` command, and `space16x --version` ends with `(pro)`. To switch back, run the installer without `--pro`.
+
+![Space 16X Settings, with exclude patterns, Turn on Pro features switched on, and the menu-bar free-space options.](images/mac-settings.png)
 
 ## What Pro adds
 
@@ -35,6 +39,8 @@ Lists folders that apps and developer tools recreate on their own when they need
 
 Xcode archives and simulator devices are listed separately, under **review**, because they can't be recreated. Space 16X never selects anything for you, and it warns you plainly before moving one of those.
 
+![Cleanup lists Caches (app caches), a Rust target folder, node_modules, and Xcode archives marked to review.](images/mac-pro-cleanup.png)
+
 ## Duplicates
 
 Finds files with the same contents, grouped, with the space the extra copies use. It compares files of 1 MB or more.
@@ -44,6 +50,8 @@ Finds files with the same contents, grouped, with the space the extra copies use
 
 This is the only feature that reads what's inside files, and only after you start it. Some copies are marked **Clone, frees nothing** (`(clone)` in the terminal): on a Mac, a copy made in Finder can share its space with the original, so removing it frees nothing. The total counts only the space you can really get back.
 
+![Duplicates finds two groups, 252 MB in extra copies: three copies of a wedding video, two of them marked Clone, frees nothing, and two copies of a brochure.](images/mac-pro-duplicates.png)
+
 ## Exclusive size
 
 Adds an **Exclusive** column: the space that moving each item to the Trash and emptying it frees at least. It leaves out space shared with clones and with files that have other hard links, which removing the item wouldn't free.
@@ -52,6 +60,8 @@ Adds an **Exclusive** column: the space that moving each item to the Trash and e
 - **Terminal:** press `X` in the explorer, or add `--exclusive` to `space16x scan`.
 
 Space 16X measures it after the scan, in the background, and shows its progress.
+
+![The folder list with an Exclusive column: Desktop uses 258 MB but frees only 18 MB, because its video is a clone.](images/mac-pro-exclusive.png)
 
 ## Older files
 
@@ -69,12 +79,16 @@ See which kinds of files use the most space, such as `.mov` videos or `.jpg` pho
 
 On a shared Linux server, `space16x scan --by-owner` shows how much space each user's files take.
 
+![File types in a home folder: .mp4 videos use 720 MB, then .mov, .dmg and .heic photos.](images/mac-pro-types.png)
+
 ## Compare scans and keep a history
 
 See what grew or shrank since an earlier scan.
 
 - **Mac app:** click **Compare…** above the list. **Save to History** keeps the current scan. Next time, pick it from the same menu, or choose **Choose a Saved Scan…** for an exported one. A **Change** column shows what grew and what's new.
 - **Terminal:** `space16x history save ~` keeps a scan of your home folder. Later, `space16x history diff ~` shows what changed since then. `space16x diff old.json ~` compares with any saved scan.
+
+![Comparing with last week: Downloads grew by 210 MB and Developer by 110 MB, and the folder grew by 318 MB in all.](images/mac-pro-compare.png)
 
 Only these saves write anything, and Space 16X never deletes the scans it keeps. The app keeps them in `~/Library/Application Support/Space 16X/History`, and **Scan → Show History in Finder** opens that folder. The terminal keeps them in `~/.local/state/space16x/history`.
 
@@ -84,6 +98,10 @@ Measure how much space an install, an update or a build adds. Save a scan to the
 
 - **Mac app:** while comparing, choose **Scan → Save Footprint Receipt…**, or click the receipt button beside the comparison. Name what you measured, such as "first Xcode build", and optionally set a budget, such as 500 MB. The receipt is a short Markdown file with both totals and the files that changed most, and it says whether you stayed within the budget.
 - **Terminal:** add `--budget 500M` to `space16x diff` or `space16x history diff`. Space 16X says whether the growth stayed within the budget and exits with code 3 when it didn't, so an automated build can stop on it.
+
+![The Save Footprint Receipt sheet, with fields for the operation's name and an optional budget.](images/mac-pro-receipt.png)
+
+![space16x diff with --budget 500M: Downloads and Developer grew, and the last line reads Within the 500.0 MB budget, with 182.0 MB to spare.](images/terminal-pro-diff.png)
 
 ## Explain Disk Space
 
@@ -95,6 +113,8 @@ On a Mac, it lists the other volumes that share the disk, such as the system and
 - **Terminal:** press `E` in the explorer, or run `space16x explain`.
 
 It only reads system figures, and it never deletes snapshots.
+
+![Explain Disk Space for Macintosh HD: size, used, free and purgeable space, two local snapshots with their dates, and the other volumes in the container.](images/mac-pro-explain.png)
 
 ## HTML reports
 
@@ -118,6 +138,8 @@ Choose **File → New Window** (⌘N) to open another window with its own scan, 
 ## Terminal treemap
 
 Press `m` in the explorer to draw the open folder as boxes sized by the space they use. The arrow keys move the highlight, Enter opens a folder, and Space and `d` work as in the list. Press `m` again for the list.
+
+![The explorer's treemap draws Movies, Downloads, Desktop, Developer and the other folders as boxes sized by their space.](images/terminal-pro-treemap.png)
 
 ## Go further
 

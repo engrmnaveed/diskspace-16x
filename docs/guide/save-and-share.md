@@ -32,6 +32,8 @@ ssh -C server space16x scan / --export - | space16x --import -
 
 Replace `server` with the name you use for `ssh`, and `/` with the folder to scan. The scan runs on the server, and only the list of names and sizes travels to your computer. You browse it read-only, as with any saved scan.
 
+![A server's /srv folder browsed in the explorer. The heading says imported.](images/terminal-import.png)
+
 To check a server later, save the scan to a file instead:
 
 ```sh
@@ -64,6 +66,8 @@ space16x scan ~ --top 10              # the 10 largest files
 space16x scan /Volumes/Work --depth 2 # two levels deep
 space16x scan ~ --json > report.json  # for scripts
 ```
+
+![The output of space16x scan ~ --top 5: the five largest files with their sizes, then the total.](images/terminal-scan-top.png)
 
 The [CLI reference](../cli.md#generate-a-report) lists every option.
 

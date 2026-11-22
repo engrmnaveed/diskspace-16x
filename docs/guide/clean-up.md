@@ -10,6 +10,8 @@ Space 16X frees space one way only: it moves the items you choose to the Trash, 
 
 The items leave the list right away, and every total above them updates. You don't need to scan again.
 
+![Selecting two files in Largest Files with ⌘-click, then the confirmation that asks to move them to the Trash.](images/mac-clean-up.gif)
+
 ## Move items to the Trash in the terminal
 
 1. Highlight an item and press Space to mark it. A ✓ appears, and the top line counts what's marked. You can mark items in different folders and in the largest-files view.
@@ -56,3 +58,5 @@ When you delete or add files outside Space 16X, rescan just the folder you're in
 
 - **Mac app:** choose **Scan → Rescan Folder** (⌥⌘R), or right-click a folder and choose **Rescan Folder**. **Scan → Scan Again** (⌘R) scans the whole location again.
 - **Terminal:** press `r`. The bottom line reports the folder's new size and its old one. Press `c` to cancel a rescan and keep the earlier results.
+
+![The Downloads folder after a rescan picked up a new screen recording. The bottom line reads Rescanned "Downloads": 656.0 MB, was 592.0 MB.](images/terminal-rescan.png)
