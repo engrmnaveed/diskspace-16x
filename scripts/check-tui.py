@@ -111,6 +111,31 @@ def check_sort_size_and_color(binary, fixture):
             assert b"\x1b[7m" in terminal.output
 
 
+def check_duplicates_and_explain(binary):
+    """Pro: D lists duplicates once Enter starts comparing, and E explains the volume."""
+    with tempfile.TemporaryDirectory(prefix="space16x-tui-duplicates-") as directory:
+        root = Path(directory).resolve()
+        same = os.urandom(1_200_000)
+        (root / "a.bin").write_bytes(same)
+        (root / "b.bin").write_bytes(same)
+        (root / "other.bin").write_bytes(os.urandom(1_200_000))
+        with Terminal([binary, root]) as terminal:
+            terminal.expect(b"Scan complete")
+            # Nothing is read until Enter starts the comparison.
+            terminal.press(b"D", b"Press Enter to compare")
+            terminal.press(b"\r", b"1 group,")
+            terminal.expect(b"2 copies")
+            terminal.press(b" ", b"1 marked (")
+            terminal.press(b"d", b"to the Trash? y/N")
+            terminal.press(b"n", b"Nothing was moved.")
+            terminal.press(b"D", b"Folders")
+            terminal.press(b"E", b"Explain disk space")
+            terminal.expect(b"Volume")
+            terminal.press(b"E", b"other.bin")
+            terminal.send(b"q")
+            terminal.finish(0)
+
+
 def check_trash(binary):
     """Mark, decline, and confirm Move to Trash, and check that read-only mode refuses it.
 
@@ -218,6 +243,8 @@ def main():
         (nested / "payload.bin").write_bytes(os.urandom(65_536))
         check(binary, fixture)
         check_sort_size_and_color(binary, fixture)
+    if is_pro(binary):
+        check_duplicates_and_explain(binary)
     check_trash(binary)
     check_rescan(binary)
     check_import(binary)

@@ -136,6 +136,8 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer, tick: usi
         (Mode::Largest, 28..=49) => " Largest ",
         #[cfg(feature = "pro")]
         (Mode::Cleanup, 28..) => " Cleanup ",
+        #[cfg(feature = "pro")]
+        (Mode::Duplicates, 28..) => " Duplicates ",
         _ => "",
     };
     let left_width = (brand.width() + mode.width()).min(usize::from(area.width));
@@ -242,6 +244,15 @@ fn draw_summary(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
             Mode::Cleanup if count == 1 => " · 1 suggestion".into(),
             #[cfg(feature = "pro")]
             Mode::Cleanup => format!(" · {count} suggestions"),
+            #[cfg(feature = "pro")]
+            Mode::Duplicates => match (explorer.duplicate_search(), explorer.duplicate_summary) {
+                (Some(true), _) => " · comparing files…".into(),
+                (Some(false), (1, extra)) => format!(" · 1 group, {} extra", format_bytes(extra)),
+                (Some(false), (groups, extra)) => {
+                    format!(" · {groups} groups, {} extra", format_bytes(extra))
+                }
+                (None, _) => " · files of 1 MB or more".into(),
+            },
         }
     };
     paint(
@@ -324,7 +335,9 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         return;
     }
     if explorer.rows.is_empty() {
-        let empty = if explorer.is_ranking() {
+        let empty = if let Some(message) = duplicates_message(explorer) {
+            message
+        } else if explorer.is_ranking() {
             if explorer.mode == Mode::Largest {
                 "Ranking largest files…"
             } else if explorer.mode != Mode::Folders {
@@ -423,6 +436,13 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
             path.push_str("  · ");
             path.push_str(rule.label);
         }
+        #[cfg(feature = "pro")]
+        if explorer.mode == Mode::Duplicates
+            && let Some(label) = explorer.duplicate_labels.get(&id)
+        {
+            path.push_str("  · ");
+            path.push_str(label);
+        }
         let marked = explorer.marked.contains(&entry.path());
         // Pro: what trashing the row frees at least, once measured.
         #[cfg(feature = "pro")]
@@ -435,6 +455,30 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         let style = if selected { SELECTED } else { Style::default() };
         frame.render_widget(Paragraph::new(line).style(style), row);
     }
+}
+
+/// Pro: what the empty Duplicates view says: how to start, progress, or no duplicates.
+#[cfg(feature = "pro")]
+fn duplicates_message(explorer: &Explorer) -> Option<&'static str> {
+    if explorer.mode != Mode::Duplicates {
+        return None;
+    }
+    Some(match explorer.duplicate_search() {
+        Some(true) => "Comparing files of the same length…",
+        Some(false) => "No duplicate files of 1 MB or more.",
+        None if explorer.imported => {
+            "Duplicates need the files themselves. Scan the folder to find them."
+        }
+        None if explorer.is_active() => "Duplicates can be found when the scan finishes.",
+        None => {
+            "Press Enter to compare files of 1 MB or more by contents. Only this view reads files."
+        }
+    })
+}
+
+#[cfg(not(feature = "pro"))]
+fn duplicates_message(_explorer: &Explorer) -> Option<&'static str> {
+    None
 }
 
 /// Pro: the open folder's contents as a squarified treemap, with the selection highlighted.
@@ -879,6 +923,8 @@ fn draw_panel(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         Some(Panel::Details) => " File details ",
         #[cfg(feature = "pro")]
         Some(Panel::Types(_)) => " File types ",
+        #[cfg(feature = "pro")]
+        Some(Panel::Explain(_)) => " Explain disk space ",
         None => return,
     };
     let content = if area.width >= 24 && area.height >= 4 {
@@ -904,7 +950,32 @@ fn draw_panel(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         Some(Panel::Details) => draw_details(frame, content, explorer),
         #[cfg(feature = "pro")]
         Some(Panel::Types(_)) => draw_types(frame, content, explorer),
+        #[cfg(feature = "pro")]
+        Some(Panel::Explain(_)) => draw_explain(frame, content, explorer),
         None => {}
+    }
+}
+
+/// Pro: the open folder's volume and the space a scan can't see there, as `explain` prints.
+#[cfg(feature = "pro")]
+fn draw_explain(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
+    let lines = match &explorer.panel {
+        Some(Panel::Explain(lines)) => lines.clone(),
+        _ => return,
+    };
+    explorer.set_panel_page(lines.len(), usize::from(area.height));
+    for (y, line) in lines
+        .iter()
+        .skip(explorer.panel_offset)
+        .take(usize::from(area.height))
+        .enumerate()
+    {
+        let text = terminal_text(line);
+        paint(
+            frame,
+            line_at(area, y as u16),
+            Line::raw(shorten(&text, usize::from(area.width), false)),
+        );
     }
 }
 
@@ -999,6 +1070,10 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         ("m", "Show the open folder as a treemap"),
         #[cfg(feature = "pro")]
         ("X", "Show what trashing each item frees at least"),
+        #[cfg(feature = "pro")]
+        ("D", "List duplicate files; Enter compares them"),
+        #[cfg(feature = "pro")]
+        ("E", "Explain the open folder's volume"),
         trash[0],
         trash[1],
         ("r", "Rescan the open folder, or all in largest"),
