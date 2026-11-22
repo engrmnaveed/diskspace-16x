@@ -7,6 +7,7 @@
 - List the explorer's `m` treemap key in Space 16X Pro's `--help`.
 - Make Space 16X Pro easier to find. While **Settings → Pro features** is off, the Mac app's start screen ends with one quiet line, "More views and a menu-bar monitor are free in Pro.", whose link opens Settings and whose × hides it for good. The README has a short **Editions** section with what each edition does and how to turn on Pro in the app and the CLI.
 - Put each version's changelog section in its GitHub release notes, above the standard text about the assets. `scripts/release-notes VERSION` prints them.
+- See exclusive sizes beside every item in Space 16X Pro. Press `X` in the CLI explorer, or choose **View → Show Exclusive Size** in the Mac app, to add an **Exclusive** column: what moving each item to the Trash and emptying it frees at least, without blocks shared with clones or other hard links. Both measure the finished scan in the background with their progress shown, and only when you ask, so scans stay as fast as before. The Mac app's column sorts like the others.
 
 ## 0.8.0
 

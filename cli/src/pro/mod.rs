@@ -18,6 +18,7 @@ pub mod treemap;
 mod types;
 
 pub use cleanup::{rule_for as cleanup_rule, suggestions as cleanup_suggestions};
+pub use exclusive::{Exclusive, Measurement as ExclusiveMeasurement};
 pub use modified::format_date;
 pub use types::{TypeTotal, breakdown as type_breakdown};
 

@@ -88,6 +88,10 @@ def check_sort_size_and_color(binary, fixture):
             # m draws the open folder as a treemap, and m again returns to the list.
             terminal.press(b"m", "┌".encode())
             terminal.press(b"m", b"Items")
+            # X measures what trashing each item frees at least, after the scan.
+            terminal.press(b"X", b"Exclusive")
+            terminal.expect(b"B exclusive")
+            terminal.press(b"X", b"Items")
 
         terminal.press(b"s", b"by items")
         terminal.press(b"a", b"apparent")

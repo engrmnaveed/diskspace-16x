@@ -260,6 +260,7 @@ fn draw_summary(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
             Span::styled(quantity, MUTED),
             Span::styled(sorted, MUTED),
             Span::styled(excluded_note(explorer), MUTED),
+            Span::styled(exclusive_note(explorer), MUTED),
             Span::styled(marked_note(explorer), WARNING),
             Span::styled(
                 if explorer.imported {
@@ -273,6 +274,21 @@ fn draw_summary(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
             ),
         ]),
     );
+}
+
+/// Pro: the open scope's exclusive size, or the measurement's progress.
+#[cfg(feature = "pro")]
+fn exclusive_note(explorer: &Explorer) -> String {
+    match (explorer.exclusive_scope(), explorer.exclusive_rows()) {
+        (Some(bytes), _) => format!(" · {} exclusive", format_bytes(bytes)),
+        (None, Some((percent, None))) => format!(" · measuring exclusive {percent}%"),
+        _ => String::new(),
+    }
+}
+
+#[cfg(not(feature = "pro"))]
+fn exclusive_note(_explorer: &Explorer) -> String {
+    String::new()
 }
 
 fn marked_note(explorer: &Explorer) -> String {
@@ -374,6 +390,7 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         explorer.sort,
         explorer.metric,
         dated,
+        cfg!(feature = "pro") && explorer.exclusive_column(),
     );
     let header = columns.heading();
     paint(frame, line_at(area, 0), Line::styled(header, ACCENT));
@@ -384,6 +401,8 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
     let Some(tree) = explorer.rows_tree() else {
         return;
     };
+    #[cfg(feature = "pro")]
+    let exclusive = explorer.exclusive_rows();
     let visible = explorer
         .rows
         .iter()
@@ -405,7 +424,14 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
             path.push_str(rule.label);
         }
         let marked = explorer.marked.contains(&entry.path());
-        let line = columns.entry(entry, &path, total, selected, marked);
+        // Pro: what trashing the row frees at least, once measured.
+        #[cfg(feature = "pro")]
+        let freed = exclusive.map(|(_, sizes)| {
+            sizes.map_or_else(|| "…".into(), |sizes| format_bytes(sizes.bytes(entry)))
+        });
+        #[cfg(not(feature = "pro"))]
+        let freed: Option<String> = None;
+        let line = columns.entry(entry, &path, total, selected, marked, freed.as_deref());
         let style = if selected { SELECTED } else { Style::default() };
         frame.render_widget(Paragraph::new(line).style(style), row);
     }
@@ -503,6 +529,8 @@ struct Columns {
     items: usize,
     /// Pro's Modified column, which is zero-width in Basic.
     modified: usize,
+    /// Pro's Exclusive column, shown when the user turns it on.
+    exclusive: usize,
     state: usize,
     share: usize,
     /// The sorted column, marked in the heading: None in the largest-files view.
@@ -511,8 +539,19 @@ struct Columns {
 }
 
 impl Columns {
-    fn for_width(width: u16, mode: Mode, sort: Sort, metric: Metric, dated: bool) -> Self {
+    fn for_width(
+        width: u16,
+        mode: Mode,
+        sort: Sort,
+        metric: Metric,
+        dated: bool,
+        exclusive: bool,
+    ) -> Self {
         let width = usize::from(width);
+        let exclusive = match width {
+            60.. if exclusive => 11,
+            _ => 0,
+        };
         let size = (width / 3).min(13);
         let items = match (mode, width) {
             (Mode::Folders, 70..) => 9,
@@ -533,10 +572,11 @@ impl Columns {
             _ => 0,
         };
         Self {
-            name: width - size - items - modified - state - share,
+            name: width - size - exclusive - items - modified - state - share,
             size,
             items,
             modified,
+            exclusive,
             state,
             share,
             sort: (mode == Mode::Folders).then_some(sort),
@@ -565,6 +605,11 @@ impl Columns {
         } else {
             format!("{:>width$}", "Modified", width = self.modified)
         };
+        let exclusive = if self.exclusive == 0 {
+            String::new()
+        } else {
+            format!("{:>width$}", "Exclusive", width = self.exclusive)
+        };
         let state = if self.state == 0 {
             String::new()
         } else {
@@ -582,7 +627,7 @@ impl Columns {
         };
         let size_label = format!("{size_label}{}", arrow(Sort::Size));
         format!(
-            "{}{:>width$}{items}{modified}{state}{share}",
+            "{}{:>width$}{exclusive}{items}{modified}{state}{share}",
             padded(name, self.name),
             shorten(&size_label, self.size, false),
             width = self.size,
@@ -596,6 +641,7 @@ impl Columns {
         total: u64,
         selected: bool,
         marked: bool,
+        freed: Option<&str>,
     ) -> Line<'static> {
         let style = |value| if selected { SELECTED } else { value };
         let state = match entry.state() {
@@ -652,6 +698,13 @@ impl Columns {
                 width = self.size
             )),
         ];
+        if self.exclusive != 0 {
+            spans.push(Span::raw(format!(
+                "{:>width$}",
+                shorten(freed.unwrap_or(""), self.exclusive - 1, false),
+                width = self.exclusive
+            )));
+        }
         if self.items != 0 {
             let count = if entry.kind() == EntryKind::Directory {
                 format_count(entry.item_count())
@@ -944,6 +997,8 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         ("u", "List folders tools recreate, to trash them"),
         #[cfg(feature = "pro")]
         ("m", "Show the open folder as a treemap"),
+        #[cfg(feature = "pro")]
+        ("X", "Show what trashing each item frees at least"),
         trash[0],
         trash[1],
         ("r", "Rescan the open folder, or all in largest"),

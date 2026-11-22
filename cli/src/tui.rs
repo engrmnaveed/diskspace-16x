@@ -65,6 +65,7 @@ pub fn run(source: Source, plain: bool, read_only: bool) -> io::Result<()> {
         }
     };
     explorer.read_only = read_only || explorer.imported;
+    explorer.threads = threads;
     let started = Instant::now();
     let mut last_tick = 0;
     let mut dirty = true;
@@ -86,8 +87,16 @@ pub fn run(source: Source, plain: bool, read_only: bool) -> io::Result<()> {
         if let Some(request) = explorer.ranking_request() {
             ranking.submit(request)?;
         }
+        #[cfg(feature = "pro")]
+        let measuring = {
+            let (running, finished) = explorer.poll_exclusive();
+            dirty |= finished;
+            running
+        };
+        #[cfg(not(feature = "pro"))]
+        let measuring = false;
         let tick = started.elapsed().as_millis() / 150;
-        if dirty || (explorer.is_active() && tick != last_tick) {
+        if dirty || ((explorer.is_active() || measuring) && tick != last_tick) {
             terminal.draw(|frame| {
                 view::draw(frame, &mut explorer, (tick % 4) as usize);
                 if plain {

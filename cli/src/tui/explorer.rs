@@ -170,6 +170,18 @@ pub(super) struct Explorer {
     /// Pro: the folder view draws its contents as a treemap instead of a list.
     #[cfg(feature = "pro")]
     pub(super) treemap: bool,
+    /// Pro: the rows show an Exclusive column, measured after the scan.
+    #[cfg(feature = "pro")]
+    pub(super) exclusive_column: bool,
+    /// Pro: exclusive sizes of the latest finished scan, while the column is on.
+    #[cfg(feature = "pro")]
+    exclusive: Option<crate::pro::ExclusiveMeasurement>,
+    /// Pro: whether the finished measurement has been drawn.
+    #[cfg(feature = "pro")]
+    exclusive_drawn: bool,
+    /// The scan's thread count, which measuring exclusive sizes uses too.
+    #[cfg_attr(not(feature = "pro"), allow(dead_code))]
+    pub(super) threads: usize,
     /// A saved scan from `--import`. Its files may be elsewhere, so it is read-only and
     /// can't be rescanned.
     pub(super) imported: bool,
@@ -209,6 +221,13 @@ impl Explorer {
             read_only: false,
             #[cfg(feature = "pro")]
             treemap: false,
+            #[cfg(feature = "pro")]
+            exclusive_column: false,
+            #[cfg(feature = "pro")]
+            exclusive: None,
+            #[cfg(feature = "pro")]
+            exclusive_drawn: false,
+            threads: 1,
             imported: false,
             marked: BTreeSet::new(),
             prompt: None,
@@ -533,6 +552,115 @@ impl Explorer {
         };
         self.query.clear();
         self.reset_ranking(None);
+    }
+
+    /// Pro: turns the Exclusive column on or off. It measures the finished scan in the
+    /// background, so the walk itself stays as fast as before.
+    #[cfg(feature = "pro")]
+    fn toggle_exclusive(&mut self) {
+        let Some(report) = &self.report else { return };
+        if self.exclusive_column {
+            self.exclusive_column = false;
+            self.exclusive = None;
+            return;
+        }
+        if self.imported {
+            self.notice = Some(Notice::info(
+                "Exclusive sizes need the files themselves. Scan the folder to see them.",
+            ));
+            return;
+        }
+        if report.is_preview && !self.is_active() {
+            self.notice = Some(Notice::info(
+                "Exclusive sizes need a finished scan. Press r to scan again.",
+            ));
+            return;
+        }
+        self.exclusive_column = true;
+        self.sync_exclusive();
+    }
+
+    /// Pro: starts measuring the latest finished scan while the Exclusive column is on.
+    #[cfg(feature = "pro")]
+    fn sync_exclusive(&mut self) {
+        if !self.exclusive_column || self.is_active() {
+            return;
+        }
+        let Some(report) = self.report.as_ref().filter(|report| !report.is_preview) else {
+            return;
+        };
+        if self
+            .exclusive
+            .as_ref()
+            .is_some_and(|measurement| measurement.measures(&report.tree))
+        {
+            return;
+        }
+        match crate::pro::ExclusiveMeasurement::start(&report.tree, self.threads) {
+            Ok(measurement) => {
+                self.exclusive = Some(measurement);
+                self.exclusive_drawn = false;
+            }
+            Err(error) => {
+                self.exclusive_column = false;
+                self.notice = Some(Notice::warning(format!(
+                    "Couldn't measure exclusive sizes: {error}"
+                )));
+            }
+        }
+    }
+
+    /// Pro: starts or restarts the measurement when the scan changed. Returns whether it
+    /// is running, so the progress needs drawing, and whether it just finished.
+    #[cfg(feature = "pro")]
+    pub(super) fn poll_exclusive(&mut self) -> (bool, bool) {
+        self.sync_exclusive();
+        let Some(measurement) = &self.exclusive else {
+            return (false, false);
+        };
+        let finished = measurement.result().is_some();
+        let just_finished = finished && !self.exclusive_drawn;
+        self.exclusive_drawn = finished;
+        (!finished, just_finished)
+    }
+
+    /// Whether the rows show Pro's Exclusive column.
+    pub(super) fn exclusive_column(&self) -> bool {
+        #[cfg(feature = "pro")]
+        return self.exclusive_column;
+        #[cfg(not(feature = "pro"))]
+        false
+    }
+
+    /// Pro: the Exclusive column's state for the rows: None when it's off, else the
+    /// measurement's progress and, once finished for the rows' tree, its sizes.
+    #[cfg(feature = "pro")]
+    pub(super) fn exclusive_rows(&self) -> Option<(u8, Option<&crate::pro::Exclusive>)> {
+        if !self.exclusive_column {
+            return None;
+        }
+        let Some(measurement) = &self.exclusive else {
+            return Some((0, None));
+        };
+        let current = self
+            .ranking
+            .as_ref()
+            .is_some_and(|ranking| measurement.measures(&ranking.tree));
+        Some((
+            measurement.percent(),
+            measurement.result().filter(|_| current),
+        ))
+    }
+
+    /// Pro: the open scope's exclusive size, once measured.
+    #[cfg(feature = "pro")]
+    pub(super) fn exclusive_scope(&self) -> Option<u64> {
+        let report = self.report.as_ref()?;
+        let measurement = self.exclusive.as_ref().filter(|_| self.exclusive_column)?;
+        if !measurement.measures(&report.tree) {
+            return None;
+        }
+        Some(measurement.result()?.bytes(self.scope()?))
     }
 
     /// Re-ranks the current view, keeping the selection and the rows on screen meanwhile.
@@ -962,6 +1090,8 @@ impl Explorer {
             KeyCode::Char('u') => self.toggle_cleanup(),
             #[cfg(feature = "pro")]
             KeyCode::Char('m') => self.toggle_treemap(),
+            #[cfg(feature = "pro")]
+            KeyCode::Char('X') => self.toggle_exclusive(),
             _ => {}
         }
         Action::Stay
@@ -1431,6 +1561,60 @@ mod tests {
         };
         assert_eq!(types.len(), 1);
         assert_eq!(types[0].allocated_bytes, 120);
+    }
+
+    #[cfg(feature = "pro")]
+    #[test]
+    fn x_measures_exclusive_sizes_after_the_scan() {
+        let mut explorer = Explorer::new(Path::new("/r"));
+        let root = folder(
+            "/r",
+            vec![
+                folder("/r/big", vec![file("/r/big/1", 300), file("/r/big/2", 200)]),
+                file("/r/small", 10),
+            ],
+        );
+        // Before the scan finishes, the column waits for it.
+        show(&mut explorer, root.clone());
+        key(&mut explorer, KeyCode::Char('X'));
+        assert!(explorer.exclusive_column);
+        assert_eq!(explorer.poll_exclusive(), (false, false));
+        assert_eq!(
+            explorer.exclusive_rows().map(|(_, sizes)| sizes.is_some()),
+            Some(false)
+        );
+        explorer.finish(Ok(Report {
+            tree: root.tree(),
+            issues: Vec::new(),
+            excluded_count: 0,
+            is_preview: false,
+        }));
+        settle_ranking(&mut explorer);
+        let mut finished = false;
+        for _ in 0..200 {
+            let (running, just_finished) = explorer.poll_exclusive();
+            if just_finished {
+                finished = true;
+                break;
+            }
+            assert!(running);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(finished, "the measurement finishes");
+        // These paths don't exist, so nothing counts as shared.
+        assert_eq!(explorer.exclusive_scope(), Some(510));
+        let (_, sizes) = explorer.exclusive_rows().unwrap();
+        let big = explorer.current().unwrap();
+        assert_eq!(sizes.unwrap().bytes(big), 500);
+        assert_eq!(explorer.poll_exclusive(), (false, false));
+        key(&mut explorer, KeyCode::Char('X'));
+        assert!(explorer.exclusive_rows().is_none() && explorer.exclusive_scope().is_none());
+
+        // An imported scan's files may be elsewhere.
+        explorer.imported = true;
+        key(&mut explorer, KeyCode::Char('X'));
+        assert!(!explorer.exclusive_column);
+        assert!(notice(&explorer).0.contains("Scan the folder"));
     }
 
     #[cfg(feature = "pro")]
