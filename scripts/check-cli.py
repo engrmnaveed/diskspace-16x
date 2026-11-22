@@ -424,6 +424,11 @@ def check_duplicates(binary):
         assert groups == [["a.bin", "b/copy.bin"]], groups
         assert report["minSize"] == 1000 and report["groups"][0]["apparentBytes"] == 150_000, report
         assert report["duplicateBytes"] == report["groups"][0]["extraBytes"] > 0, report
+        # a.bin has another hard link, so removing it frees nothing: only copy.bin counts.
+        files = report["groups"][0]["files"]
+        assert [item["clone"] for item in files] == [True, False], files
+        assert files[0]["exclusiveBytes"] == 0, files
+        assert report["groups"][0]["extraBytes"] == files[1]["allocatedBytes"], report
         text = run(binary, "duplicates", root, "--min-size", "500").stdout
         assert "small1" in text and "2 groups, 4 files" in text, text
         assert "0 groups" in run(binary, "duplicates", root).stdout

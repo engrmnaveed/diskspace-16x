@@ -95,24 +95,35 @@ pub(crate) fn mounts() -> io::Result<Vec<Mount>> {
             continue;
         };
         let path = PathBuf::from(OsStr::from_bytes(&path));
-        // A bind mount repeats a device that is already listed.
-        let id = std::fs::metadata(&path).map(|metadata| {
+        let metadata = std::fs::metadata(&path).ok();
+        // A bind mount repeats a device that is already listed. Containers also bind
+        // single files, such as /etc/hostname, which aren't volumes to browse.
+        let directory = metadata.as_ref().is_none_or(std::fs::Metadata::is_dir);
+        let repeated = metadata.as_ref().is_some_and(|metadata| {
             use std::os::unix::fs::MetadataExt;
-            metadata.dev()
+            let id = metadata.dev();
+            let repeated = devices.contains(&id);
+            if directory {
+                devices.push(id);
+            }
+            repeated
         });
-        let repeated = id.as_ref().is_ok_and(|id| devices.contains(id));
-        if let Ok(id) = id {
-            devices.push(id);
-        }
-        let memory = matches!(&kind[..], b"tmpfs" | b"devtmpfs" | b"ramfs" | b"squashfs");
         mounts.push(Mount {
             path,
             device: String::from_utf8_lossy(&device).into_owned(),
             kind: String::from_utf8_lossy(&kind).into_owned(),
-            shown: !repeated && !memory,
+            shown: shown(&kind, repeated, directory),
         });
     }
     Ok(mounts)
+}
+
+/// Whether `volumes` lists a mount without `--all`: not a memory filesystem or snap image,
+/// not a bind mount of a device already listed, and a folder rather than a bound file.
+#[cfg(target_os = "linux")]
+fn shown(kind: &[u8], repeated: bool, directory: bool) -> bool {
+    let memory = matches!(kind, b"tmpfs" | b"devtmpfs" | b"ramfs" | b"squashfs");
+    !memory && !repeated && directory
 }
 
 /// Decodes the octal escapes the kernel writes for spaces, tabs, newlines and backslashes.
@@ -385,6 +396,16 @@ mod tests {
         assert!(root.total_bytes > 0 && root.used_bytes <= root.total_bytes);
         let (everything, _) = list(true).unwrap();
         assert!(everything.len() >= volumes.len());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn hides_bound_files_and_repeated_devices() {
+        assert!(shown(b"ext4", false, true));
+        // Docker binds /etc/hostname, /etc/hosts and /etc/resolv.conf from the host.
+        assert!(!shown(b"ext4", false, false));
+        assert!(!shown(b"ext4", true, true));
+        assert!(!shown(b"tmpfs", false, true));
     }
 
     #[cfg(target_os = "linux")]

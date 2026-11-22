@@ -144,7 +144,7 @@ Exports contain every path in the scan. Review them for personal paths before sh
 
 **Free** is the space you can use, which excludes blocks a filesystem reserves for root. **Use%** is used space as a share of used plus free, rounded up, as `df` reports it. **Inodes** is the share of file slots in use; a filesystem that runs out of them can't create files even with free space. It shows `-` for filesystems without a fixed inode count. The figures come from `statvfs` on Linux and `statfs` on macOS.
 
-By default the list leaves out memory filesystems such as `tmpfs`, snap images, empty pseudo-filesystems, bind mounts of a device already listed, and macOS system volumes other than `/System/Volumes/Data`, which holds your files. `--all` lists every mount. On APFS, the volumes in a container share its space, so each one shows the container's size and use, as Finder does.
+By default the list leaves out memory filesystems such as `tmpfs`, snap images, empty pseudo-filesystems, bind mounts of a device already listed, single files mounted into a container (such as `/etc/hostname` in Docker), and macOS system volumes other than `/System/Volumes/Data`, which holds your files. `--all` lists every mount. On APFS, the volumes in a container share its space, so each one shows the container's size and use, as Finder does.
 
 `--json` writes schema 3 with `schemaVersion`, `edition`, `volumes` and `issues`. Each volume has `path` (and `pathBytes` when it isn't UTF-8), `device`, `type`, `totalBytes`, `usedBytes`, `availableBytes`, `totalInodes`, `freeInodes`, and `readOnly`. A mount that can't be read is listed in `issues` and on standard error, and the exit code is `2`.
 

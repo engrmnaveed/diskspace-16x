@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use serde::Serialize;
 
+use super::exclusive::Sharing;
 use crate::report::{self, JsonPath, Metric, format_bytes, terminal_path};
 use crate::scanner::{self, Entry, EntryKind, EntryState, Issue, IssueKind, NodeId, Report};
 use crate::{ExcludeOptions, scan_error};
@@ -40,20 +41,39 @@ pub struct Group {
     /// The file length each copy has.
     pub length: u64,
     pub files: Vec<NodeId>,
+    /// The bytes of each file that moving it alone to the Trash wouldn't free, because it
+    /// shares them with a clone or reflink, or has another hard link. Zero for most.
+    pub shared: Vec<u64>,
 }
 
 impl Group {
-    /// The allocated bytes of every copy but the largest, which removing them would free
-    /// unless they share blocks.
-    fn extra_bytes(&self, report: &Report) -> u64 {
-        let sizes = self
-            .files
-            .iter()
-            .map(|&id| report.tree.entry(id).allocated_bytes());
-        let (total, largest) = sizes.fold((0_u64, 0_u64), |(total, largest), size| {
-            (total.saturating_add(size), largest.max(size))
+    /// Whether the copy at `index` shares blocks with another file, such as an APFS
+    /// clone, so that removing it alone frees only its own blocks.
+    pub fn is_clone(&self, index: usize) -> bool {
+        self.shared.get(index).is_some_and(|&shared| shared > 0)
+    }
+
+    /// The bytes that moving the copy at `index` alone to the Trash frees at least.
+    pub fn exclusive_bytes(&self, report: &Report, index: usize) -> u64 {
+        let allocated = report.tree.entry(self.files[index]).allocated_bytes();
+        allocated.saturating_sub(self.shared.get(index).copied().unwrap_or(0))
+    }
+
+    /// The space that moving every copy but one to the Trash and emptying it frees at
+    /// least. Each copy frees its exclusive bytes. The copy kept is the largest, or, when
+    /// some copies share blocks, the clone that would free the most, since its blocks may
+    /// be the ones the other clones share.
+    pub fn extra_bytes(&self, report: &Report) -> u64 {
+        let any_clone = (0..self.files.len()).any(|index| self.is_clone(index));
+        let (total, kept) = (0..self.files.len()).fold((0_u64, 0_u64), |(total, kept), index| {
+            let bytes = self.exclusive_bytes(report, index);
+            let keepable = !any_clone || self.is_clone(index);
+            (
+                total.saturating_add(bytes),
+                if keepable { kept.max(bytes) } else { kept },
+            )
         });
-        total - largest
+        total - kept
     }
 }
 
@@ -149,10 +169,22 @@ pub fn find(report: &Report, min_size: u64, threads: usize) -> (Vec<Group>, Vec<
     let (mut groups, unread) = found
         .into_inner()
         .unwrap_or_else(|error| error.into_inner());
+    // One metadata call per copy finds the ones that share blocks.
+    let sharing = Sharing::of(report.tree.root_path());
     for group in &mut groups {
         group
             .files
             .sort_by(|&left, &right| report.tree.cmp_paths(left, right));
+        group.shared = group
+            .files
+            .iter()
+            .map(|&id| {
+                let entry = report.tree.entry(id);
+                sharing
+                    .shared_bytes(&entry.path())
+                    .min(entry.allocated_bytes())
+            })
+            .collect();
     }
     groups.sort_by(|left, right| {
         right
@@ -192,6 +224,7 @@ fn compare(
             groups.push(Group {
                 length,
                 files: heads,
+                shared: Vec::new(),
             });
             continue;
         }
@@ -199,6 +232,7 @@ fn compare(
             groups.push(Group {
                 length,
                 files: whole,
+                shared: Vec::new(),
             });
         }
     }
@@ -250,7 +284,10 @@ pub fn write_plain(out: impl Write, report: &Report, groups: &[Group]) -> io::Re
         extra = extra.saturating_add(group.extra_bytes(report));
         files += group.files.len();
         for (index, &id) in group.files.iter().enumerate() {
-            let path = terminal_path(&report.tree.path(id));
+            let mut path = terminal_path(&report.tree.path(id));
+            if group.is_clone(index) {
+                path.push_str("  (clone)");
+            }
             if index == 0 {
                 writeln!(
                     out,
@@ -295,6 +332,8 @@ struct JsonFile {
     #[serde(flatten)]
     path: JsonPath<'static>,
     allocated_bytes: u64,
+    exclusive_bytes: u64,
+    clone: bool,
 }
 
 impl JsonDuplicates {
@@ -307,11 +346,14 @@ impl JsonDuplicates {
                 files: group
                     .files
                     .iter()
-                    .map(|&id| {
+                    .enumerate()
+                    .map(|(index, &id)| {
                         let entry: Entry<'_> = report.tree.entry(id);
                         JsonFile {
                             path: JsonPath::owned(&entry.path()),
                             allocated_bytes: entry.allocated_bytes(),
+                            exclusive_bytes: group.exclusive_bytes(report, index),
+                            clone: group.is_clone(index),
                         }
                     })
                     .collect(),
@@ -430,6 +472,67 @@ mod tests {
             json["duplicateBytes"],
             groups[0].extra_bytes(&report) + groups[1].extra_bytes(&report)
         );
+        assert_eq!(json["groups"][0]["files"][0]["clone"], false);
+        assert_eq!(
+            json["groups"][0]["files"][0]["exclusiveBytes"],
+            json["groups"][0]["files"][0]["allocatedBytes"]
+        );
         assert!(find(&report, 300_000, 1).0.is_empty());
+    }
+
+    /// The Mac app's `testCountsOnlyWhatRemovingClonesFrees` builds the same folder: a.bin,
+    /// a separate copy b.bin, and c.bin, an APFS clone of a.bin.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn counts_only_what_removing_clones_frees() {
+        use std::os::unix::ffi::OsStrExt;
+        let root =
+            std::env::temp_dir().join(format!("space16x-duplicate-clones-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let contents: Vec<u8> = (0..300_000_u32)
+            .map(|value| (value * 13 % 251) as u8)
+            .collect();
+        std::fs::write(root.join("a.bin"), &contents).unwrap();
+        std::fs::write(root.join("b.bin"), &contents).unwrap();
+        let source = std::ffi::CString::new(root.join("a.bin").as_os_str().as_bytes()).unwrap();
+        let clone = std::ffi::CString::new(root.join("c.bin").as_os_str().as_bytes()).unwrap();
+        // SAFETY: both paths are C strings.
+        let cloned = unsafe { libc::clonefile(source.as_ptr(), clone.as_ptr(), 0) } == 0;
+        let report = scanner::scan(
+            &root,
+            scanner::Options {
+                excludes: &scanner::Excludes::new(Vec::<String>::new()).unwrap(),
+                threads: 2,
+            },
+            false,
+            &AtomicBool::new(false),
+            |_| {},
+        )
+        .unwrap();
+        let (groups, _) = find(&report, 1_000, 2);
+        std::fs::remove_dir_all(&root).unwrap();
+        if !cloned {
+            return; // The temporary directory isn't on APFS.
+        }
+        assert_eq!(groups.len(), 1);
+        let group = &groups[0];
+        assert_eq!(group.files.len(), 3);
+        let clones: Vec<bool> = (0..3).map(|index| group.is_clone(index)).collect();
+        assert_eq!(clones, [true, false, true]);
+        assert_eq!(group.exclusive_bytes(&report, 0), 0);
+        // Removing b.bin frees its blocks. Removing a clone frees nothing while the other
+        // clone keeps their blocks.
+        let copy = report.tree.entry(group.files[1]).allocated_bytes();
+        assert!(copy >= 300_000);
+        assert_eq!(group.extra_bytes(&report), copy);
+        let mut plain = Vec::new();
+        write_plain(&mut plain, &report, &groups).unwrap();
+        let plain = String::from_utf8(plain).unwrap();
+        assert_eq!(plain.matches("  (clone)").count(), 2, "{plain}");
+        let json = serde_json::to_value(JsonDuplicates::new(&report, &groups, 1_000)).unwrap();
+        assert_eq!(json["duplicateBytes"], copy);
+        assert_eq!(json["groups"][0]["files"][2]["clone"], true);
+        assert_eq!(json["groups"][0]["files"][2]["exclusiveBytes"], 0);
     }
 }
