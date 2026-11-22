@@ -46,5 +46,17 @@
       "rule": "npm-cache",
       "allocatedBytes": 1100000
     }
+  ],
+  "review": [
+    {
+      "path": "/Users/me/Library/Developer/CoreSimulator/Devices",
+      "rule": "simulator-devices",
+      "allocatedBytes": 8000000
+    },
+    {
+      "path": "/Users/me/Library/Developer/Xcode/Archives",
+      "rule": "xcode-archives",
+      "allocatedBytes": 6000000
+    }
   ]
 }

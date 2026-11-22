@@ -17,6 +17,22 @@ public struct CleanupRule: Sendable, Equatable {
     /// What the folder holds, as lists show it.
     public let label: String
     let kind: Kind
+    /// For folders that can't be recreated, what removing one loses, as the warnings say
+    /// it. Review folders stay out of the recreatable total.
+    public var review: String?
+
+    init(id: String, label: String, kind: Kind, review: String? = nil) {
+        self.id = id
+        self.label = label
+        self.kind = kind
+        self.review = review
+    }
+
+    /// Whether `path` is a folder this rule matches by its path alone.
+    func matches(path: String) -> Bool {
+        if case let .pathEnd(suffix) = kind { return path.hasSuffix("/" + suffix) }
+        return false
+    }
 }
 
 /// A folder the scan found that a rule matches.
@@ -42,6 +58,12 @@ public enum CleanupSuggestions {
                     kind: .pathEnd("Library/Developer/Xcode/iOS DeviceSupport")),
         CleanupRule(id: "simulator-caches", label: "Simulator caches",
                     kind: .pathEnd("Library/Developer/CoreSimulator/Caches")),
+        CleanupRule(id: "xcode-archives", label: "Xcode archives",
+                    kind: .pathEnd("Library/Developer/Xcode/Archives"),
+                    review: "Xcode archives hold the builds you distributed and the symbols that read their crash reports. They can't be recreated."),
+        CleanupRule(id: "simulator-devices", label: "Simulator devices",
+                    kind: .pathEnd("Library/Developer/CoreSimulator/Devices"),
+                    review: "Simulator devices hold every simulator's apps and data. They can't be recreated, and simctl delete unavailable removes only unused ones."),
         CleanupRule(id: "app-caches", label: "App caches", kind: .pathEnd("Library/Caches")),
         CleanupRule(id: "gradle-caches", label: "Gradle caches", kind: .pathEnd(".gradle/caches")),
         CleanupRule(id: "npm-cache", label: "npm cache", kind: .pathEnd(".npm/_cacache")),
@@ -49,6 +71,25 @@ public enum CleanupSuggestions {
         CleanupRule(id: "node-modules", label: "Node packages", kind: .name("node_modules")),
         CleanupRule(id: "rust-target", label: "Rust build output", kind: .beside("target", marker: "Cargo.toml")),
     ]
+
+    /// A plain warning when `entries` are or hold folders to review before removing, which
+    /// can't be recreated, such as Xcode archives, as the CLI explorer's prompt gives it.
+    public static func reviewWarning(for entries: [ScanEntry]) -> String? {
+        var labels: [String] = []
+        var pending = entries.filter(\.isDirectory)
+        while let folder = pending.popLast() {
+            if let rule = rules.first(where: { $0.review != nil && $0.matches(path: folder.path) }) {
+                if !labels.contains(rule.label) { labels.append(rule.label) }
+            } else {
+                pending.append(contentsOf: folder.children.filter(\.isDirectory))
+            }
+        }
+        switch labels.count {
+        case 0: return nil
+        case 1: return "\(labels[0]) can't be recreated."
+        default: return "Xcode archives and simulator devices can't be recreated."
+        }
+    }
 
     /// The rule that `child`, a folder inside `folder`, matches, if any.
     public static func rule(for child: ScanEntry, in folder: ScanEntry) -> CleanupRule? {

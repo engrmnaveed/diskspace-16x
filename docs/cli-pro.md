@@ -185,7 +185,11 @@ Suggestions come from names in the finished scan, so they read nothing new:
 | Node packages | any `node_modules` folder | `npm install` or your package manager |
 | Rust build output | `target` beside `Cargo.toml` | `cargo build` |
 
-A folder is listed only when it was read completely and uses at least 1 MB, and folders inside a listed one aren't listed again, so `node_modules` inside `node_modules` counts once. Xcode archives and simulator devices aren't suggested, because they can't be recreated. JSON reports put `cleanupBytes` and `suggestions` in place of `depth` and `entries`. Each suggestion has `path`, `rule` (a stable name, such as `node-modules` or `rust-target`), `label`, `allocatedBytes`, `apparentBytes` and `itemCount`. `--cleanup` takes no `--depth`, `--top`, `--types` or `--by-owner`.
+A folder is listed only when it was read completely and uses at least 1 MB, and folders inside a listed one aren't listed again, so `node_modules` inside `node_modules` counts once.
+
+Xcode archives (`~/Library/Developer/Xcode/Archives`) and simulator devices (`~/Library/Developer/CoreSimulator/Devices`) are listed after the total, under "Review before removing: these can't be recreated.", and stay out of the total. An archive holds a build you distributed and the symbols that read its crash reports, and a simulator device holds its apps and data. In the explorer's `u` view they say "review: can't be recreated", nothing is ever marked for you, and the Move to Trash prompt warns plainly, as in "Xcode archives can't be recreated.", when the items are or hold one. The Mac app's Cleanup view and its Move to Trash confirmation do the same.
+
+JSON reports put `cleanupBytes` and `suggestions` in place of `depth` and `entries`, then `reviewBytes` and `review` for the folders to review. Each suggestion has `path`, `rule` (a stable name, such as `node-modules`, `rust-target` or `xcode-archives`), `label`, `allocatedBytes`, `apparentBytes` and `itemCount`, and each review folder adds `warning`, a sentence on what removing it loses. Version 0.9.0 added `reviewBytes`, `review` and `warning`. `--cleanup` takes no `--depth`, `--top`, `--types` or `--by-owner`.
 
 ## Scan history
 

@@ -90,7 +90,7 @@ The owner's v0.8.0 QA found that every Pro feature works but is easy to miss, an
 - [x] M7.6 Size budgets for Build Footprint [Pro]:
   - **CLI:** `diff` and `history diff` take `--budget SIZE`, with a new, documented exit status when growth exceeds it (versioned in `docs/cli-pro.md`).
   - **Mac:** the receipt sheet takes an optional budget, remembered per operation name, and the receipt says whether the operation stayed within it.
-- [ ] M7.7 "Review" cleanup suggestions [Pro]:
+- [x] M7.7 "Review" cleanup suggestions [Pro]:
   - Add Xcode Archives and simulator devices from the shared rule table, in both apps, as a separate **Review** kind: they can't be recreated.
   - Review items stay out of the recreatable total and are never pre-marked.
   - Move to Trash warns plainly before moving them.

@@ -1,7 +1,8 @@
 //! Cleanup suggestions: folders that tools recreate when they need them, such as
 //! `node_modules`, Cargo's `target` or Xcode's DerivedData, found by name in a finished
-//! scan. It reads nothing new and removes nothing. The explorer's `u` view and the Mac
-//! app hand the folders a user picks to the confirmed Move to Trash.
+//! scan, and folders to review, such as Xcode's archives, which can't be recreated. It
+//! reads nothing new and removes nothing. The explorer's `u` view and the Mac app hand the
+//! folders a user picks to the confirmed Move to Trash, which warns about review folders.
 
 use std::io::{self, Write};
 use std::path::Path;
@@ -14,13 +15,16 @@ use crate::scanner::{Entry, EntryKind, EntryState, NodeId, Report};
 /// The smallest folder worth suggesting, in allocated bytes.
 pub const SMALLEST: u64 = 1_000_000;
 
-/// A kind of folder that a tool recreates.
+/// A kind of folder that a tool recreates, or that's worth reviewing.
 pub struct Rule {
     /// A stable name for JSON, as `node-modules`.
     pub id: &'static str,
     /// What the folder holds, as reports show it.
     pub label: &'static str,
     kind: Kind,
+    /// For folders that can't be recreated, what removing one loses, as the warnings say
+    /// it. Review folders stay out of the recreatable total.
+    pub review: Option<&'static str>,
 }
 
 enum Kind {
@@ -38,46 +42,71 @@ pub const RULES: &[Rule] = &[
         id: "xcode-derived-data",
         label: "Xcode build data",
         kind: Kind::PathEnd("Library/Developer/Xcode/DerivedData"),
+        review: None,
     },
     Rule {
         id: "xcode-device-support",
         label: "Xcode device support",
         kind: Kind::PathEnd("Library/Developer/Xcode/iOS DeviceSupport"),
+        review: None,
     },
     Rule {
         id: "simulator-caches",
         label: "Simulator caches",
         kind: Kind::PathEnd("Library/Developer/CoreSimulator/Caches"),
+        review: None,
+    },
+    Rule {
+        id: "xcode-archives",
+        label: "Xcode archives",
+        kind: Kind::PathEnd("Library/Developer/Xcode/Archives"),
+        review: Some(
+            "Xcode archives hold the builds you distributed and the symbols that read their crash reports. They can't be recreated.",
+        ),
+    },
+    Rule {
+        id: "simulator-devices",
+        label: "Simulator devices",
+        kind: Kind::PathEnd("Library/Developer/CoreSimulator/Devices"),
+        review: Some(
+            "Simulator devices hold every simulator's apps and data. They can't be recreated, and simctl delete unavailable removes only unused ones.",
+        ),
     },
     Rule {
         id: "app-caches",
         label: "App caches",
         kind: Kind::PathEnd("Library/Caches"),
+        review: None,
     },
     Rule {
         id: "gradle-caches",
         label: "Gradle caches",
         kind: Kind::PathEnd(".gradle/caches"),
+        review: None,
     },
     Rule {
         id: "npm-cache",
         label: "npm cache",
         kind: Kind::PathEnd(".npm/_cacache"),
+        review: None,
     },
     Rule {
         id: "cache-folder",
         label: "Cache folder",
         kind: Kind::Name(".cache"),
+        review: None,
     },
     Rule {
         id: "node-modules",
         label: "Node packages",
         kind: Kind::Name("node_modules"),
+        review: None,
     },
     Rule {
         id: "rust-target",
         label: "Rust build output",
         kind: Kind::Beside("target", "Cargo.toml"),
+        review: None,
     },
 ];
 
@@ -149,25 +178,36 @@ pub fn suggestions(scope: Entry<'_>, metric: Metric) -> Vec<Suggestion> {
 /// The text report: each suggestion with its size and kind, then the total.
 pub fn write_plain(out: impl Write, report: &Report, metric: Metric) -> io::Result<()> {
     let mut out = io::BufWriter::new(out);
-    let found = suggestions(report.root(), metric);
+    let (found, review): (Vec<_>, Vec<_>) = suggestions(report.root(), metric)
+        .into_iter()
+        .partition(|suggestion| suggestion.rule.review.is_none());
     writeln!(out, "{:>10}  {:<20}  Path", "Size", "Suggestion")?;
-    let mut total = 0_u64;
-    for suggestion in &found {
+    let line = |out: &mut io::BufWriter<_>, suggestion: &Suggestion| {
         let entry = report.tree.entry(suggestion.id);
-        total = total.saturating_add(metric.bytes(entry));
         writeln!(
             out,
             "{:>10}  {:<20}  {}",
             format_bytes(metric.bytes(entry)),
             suggestion.rule.label,
             terminal_path(&entry.path())
-        )?;
+        )
+    };
+    let mut total = 0_u64;
+    for suggestion in &found {
+        total = total.saturating_add(metric.bytes(report.tree.entry(suggestion.id)));
+        line(&mut out, suggestion)?;
     }
     let count = match found.len() {
         1 => "1 suggestion".to_owned(),
         count => format!("{count} suggestions"),
     };
     writeln!(out, "{:>10}  {count:<20}  [total]", format_bytes(total))?;
+    if !review.is_empty() {
+        writeln!(out, "\nReview before removing: these can't be recreated.")?;
+        for suggestion in &review {
+            line(&mut out, suggestion)?;
+        }
+    }
     out.flush()
 }
 
@@ -177,6 +217,8 @@ pub fn write_plain(out: impl Write, report: &Report, metric: Metric) -> io::Resu
 pub struct JsonCleanup {
     cleanup_bytes: u64,
     suggestions: Vec<JsonSuggestion>,
+    review_bytes: u64,
+    review: Vec<JsonSuggestion>,
 }
 
 #[derive(Serialize)]
@@ -186,6 +228,8 @@ struct JsonSuggestion {
     path: JsonPath<'static>,
     rule: &'static str,
     label: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    warning: Option<&'static str>,
     allocated_bytes: u64,
     apparent_bytes: u64,
     item_count: u64,
@@ -193,28 +237,35 @@ struct JsonSuggestion {
 
 impl JsonCleanup {
     pub fn new(report: &Report, metric: Metric) -> Self {
-        let suggestions: Vec<JsonSuggestion> = suggestions(report.root(), metric)
-            .into_iter()
-            .map(|suggestion| {
-                let entry = report.tree.entry(suggestion.id);
-                JsonSuggestion {
-                    path: JsonPath::owned(&entry.path()),
-                    rule: suggestion.rule.id,
-                    label: suggestion.rule.label,
-                    allocated_bytes: entry.allocated_bytes(),
-                    apparent_bytes: entry.apparent_bytes(),
-                    item_count: entry.item_count(),
-                }
-            })
-            .collect();
-        Self {
-            cleanup_bytes: suggestions.iter().fold(0, |total, suggestion| {
+        let (suggestions, review): (Vec<JsonSuggestion>, Vec<JsonSuggestion>) =
+            suggestions(report.root(), metric)
+                .into_iter()
+                .map(|suggestion| {
+                    let entry = report.tree.entry(suggestion.id);
+                    JsonSuggestion {
+                        path: JsonPath::owned(&entry.path()),
+                        rule: suggestion.rule.id,
+                        label: suggestion.rule.label,
+                        warning: suggestion.rule.review,
+                        allocated_bytes: entry.allocated_bytes(),
+                        apparent_bytes: entry.apparent_bytes(),
+                        item_count: entry.item_count(),
+                    }
+                })
+                .partition(|suggestion| suggestion.warning.is_none());
+        let total = |items: &[JsonSuggestion]| {
+            items.iter().fold(0_u64, |total, suggestion| {
                 total.saturating_add(match metric {
                     Metric::Allocated => suggestion.allocated_bytes,
                     Metric::Apparent => suggestion.apparent_bytes,
                 })
-            }),
+            })
+        };
+        Self {
+            cleanup_bytes: total(&suggestions),
+            review_bytes: total(&review),
             suggestions,
+            review,
         }
     }
 }
@@ -228,6 +279,7 @@ mod tests {
     struct Expected {
         minimum_bytes: u64,
         suggestions: Vec<ExpectedSuggestion>,
+        review: Vec<ExpectedSuggestion>,
     }
 
     #[derive(serde::Deserialize)]
@@ -252,23 +304,31 @@ mod tests {
             serde_json::from_str(include_str!("../../../fixtures/cleanup/expected.json")).unwrap();
         assert_eq!(expected.minimum_bytes, SMALLEST);
         let report = fixture();
-        let found: Vec<(String, &str, u64)> = suggestions(report.root(), Metric::Allocated)
+        let (found, review): (Vec<_>, Vec<_>) = suggestions(report.root(), Metric::Allocated)
             .into_iter()
-            .map(|suggestion| {
-                let entry = report.tree.entry(suggestion.id);
-                (
-                    entry.path().to_string_lossy().into_owned(),
-                    suggestion.rule.id,
-                    entry.allocated_bytes(),
-                )
-            })
-            .collect();
-        let wanted: Vec<(String, &str, u64)> = expected
-            .suggestions
-            .iter()
-            .map(|item| (item.path.clone(), item.rule.as_str(), item.allocated_bytes))
-            .collect();
-        assert_eq!(found, wanted);
+            .partition(|suggestion| suggestion.rule.review.is_none());
+        let rows = |items: Vec<Suggestion>| -> Vec<(String, &str, u64)> {
+            items
+                .into_iter()
+                .map(|suggestion| {
+                    let entry = report.tree.entry(suggestion.id);
+                    (
+                        entry.path().to_string_lossy().into_owned(),
+                        suggestion.rule.id,
+                        entry.allocated_bytes(),
+                    )
+                })
+                .collect()
+        };
+        fn wanted(items: &[ExpectedSuggestion]) -> Vec<(String, &str, u64)> {
+            items
+                .iter()
+                .map(|item| (item.path.clone(), item.rule.as_str(), item.allocated_bytes))
+                .collect()
+        }
+        assert_eq!(rows(found), wanted(&expected.suggestions));
+        // Xcode archives and simulator devices can't be recreated, so they're for review.
+        assert_eq!(rows(review), wanted(&expected.review));
         // Below a folder, only its own matches are listed.
         let projects = report
             .tree
@@ -293,9 +353,15 @@ mod tests {
             lines[1],
             "    7.0 MB  App caches            /Users/me/Library/Caches"
         );
+        assert_eq!(lines[10], "   26.1 MB  9 suggestions         [total]");
         assert_eq!(
-            lines.last(),
-            Some(&"   26.1 MB  9 suggestions         [total]")
+            &lines[11..],
+            [
+                "",
+                "Review before removing: these can't be recreated.",
+                "    8.0 MB  Simulator devices     /Users/me/Library/Developer/CoreSimulator/Devices",
+                "    6.0 MB  Xcode archives        /Users/me/Library/Developer/Xcode/Archives",
+            ]
         );
 
         let json = serde_json::to_value(JsonCleanup::new(&report, Metric::Allocated)).unwrap();
@@ -305,5 +371,14 @@ mod tests {
         assert_eq!(json["suggestions"][0]["label"], "App caches");
         assert_eq!(json["suggestions"][0]["itemCount"], 4);
         assert_eq!(json["suggestions"].as_array().unwrap().len(), 9);
+        assert!(json["suggestions"][0].get("warning").is_none());
+        assert_eq!(json["reviewBytes"], 14_000_000);
+        assert_eq!(json["review"][1]["rule"], "xcode-archives");
+        assert!(
+            json["review"][1]["warning"]
+                .as_str()
+                .unwrap()
+                .contains("can't be recreated")
+        );
     }
 }
