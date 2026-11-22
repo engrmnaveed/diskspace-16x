@@ -16,8 +16,8 @@ It's free and open source, works offline, and needs no account.
 <th width="50%">In a terminal, on a Mac or Linux</th>
 </tr>
 <tr>
-<td><a href="mac-quick-start.md"><img src="images/mac-first-scan.gif" width="400" alt="The Mac app scans a home folder, lists its biggest folders, opens one, and shows a treemap, a donut chart and the largest files."></a></td>
-<td><a href="terminal-quick-start.md"><img src="images/terminal-first-scan.gif" width="400" alt="Typing space16x opens the terminal explorer, which lists the biggest folders, opens one, shows a file's details, lists the largest files and asks before moving marked items to the Trash."></a></td>
+<td><a href="mac-quick-start.md"><img src="images/mac-first-scan.gif" width="360" alt="The Mac app scans a home folder, lists its biggest folders, opens one, and shows a treemap, a donut chart and the largest files."></a></td>
+<td><a href="terminal-quick-start.md"><img src="images/terminal-first-scan.gif" width="360" alt="Typing space16x opens the terminal explorer, which lists the biggest folders, opens one, shows a file's details, lists the largest files and asks before moving marked items to the Trash."></a></td>
 </tr>
 <tr>
 <td><b><a href="mac-quick-start.md">Mac app quick start →</a></b><br>Click a disk or folder, then browse a list, a treemap and a donut chart.</td>
@@ -31,8 +31,8 @@ Not sure? On a Mac, start with the app. Both show the same numbers, so you can u
 
 Two short videos with on-screen captions show every step:
 
-- ▶ **Mac app walkthrough** (2:46): coming soon <!-- Replace "coming soon" with [watch on YouTube](VIDEO-LINK) -->
-- ▶ **Terminal walkthrough** (2:30): coming soon <!-- Replace "coming soon" with [watch on YouTube](VIDEO-LINK) -->
+- **Mac app walkthrough** (2:46): coming soon <!-- Replace "coming soon" with [watch on YouTube](VIDEO-LINK) -->
+- **Terminal walkthrough** (2:30): coming soon <!-- Replace "coming soon" with [watch on YouTube](VIDEO-LINK) -->
 
 ## What you can do
 
