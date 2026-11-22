@@ -345,6 +345,66 @@ mod tests {
         assert!(html.contains("<td>.mov</td>"));
     }
 
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Structure {
+        heading: String,
+        sections: Vec<String>,
+        contents: Vec<String>,
+        largest_files: Vec<String>,
+        file_types: Vec<String>,
+        forbidden: Vec<String>,
+    }
+
+    /// The text of each cell of `class` in the section headed `heading`.
+    fn cells(html: &str, heading: &str, class: &str) -> Vec<String> {
+        let start = html.find(&format!("<h2>{heading}</h2>")).expect(heading);
+        let section = &html[start + 4..];
+        let section = &section[..section.find("<h2>").unwrap_or(section.len())];
+        let marker = format!("<td{class}>");
+        section
+            .split(&marker)
+            .skip(1)
+            .map(|cell| cell[..cell.find("</td>").unwrap()].to_owned())
+            .collect()
+    }
+
+    /// `HTMLReportTests` in the Mac app checks its page against the same structure.
+    #[test]
+    fn matches_the_shared_structure() {
+        let expected: Structure =
+            serde_json::from_str(include_str!("../../../fixtures/html-report/expected.json"))
+                .unwrap();
+        let mut input: &[u8] = include_bytes!("../../../fixtures/cleanup/scan.json");
+        let report = crate::ncdu::read(&mut |buffer| io::Read::read(&mut input, buffer))
+            .unwrap()
+            .report;
+        let html = page(&report, Metric::Allocated, &[], None);
+        assert!(html.contains(&format!("<h1>{}</h1>", expected.heading)));
+        let sections: Vec<&str> = html
+            .split("<h2>")
+            .skip(1)
+            .map(|part| &part[..part.find("</h2>").unwrap()])
+            .collect();
+        assert_eq!(sections, expected.sections);
+        let contents = cells(&html, "Contents", " class=\"p\"");
+        assert_eq!(&contents[..expected.contents.len()], expected.contents);
+        let files = cells(&html, "Largest files", " class=\"p\"");
+        assert_eq!(
+            &files[..expected.largest_files.len()],
+            expected.largest_files
+        );
+        // Each app names files without an extension its own way.
+        let types: Vec<String> = cells(&html, "File types", "")
+            .into_iter()
+            .filter(|label| label.starts_with('.'))
+            .collect();
+        assert_eq!(&types[..expected.file_types.len()], expected.file_types);
+        for forbidden in &expected.forbidden {
+            assert!(!html.contains(forbidden.as_str()), "{forbidden}");
+        }
+    }
+
     #[test]
     fn groups_digits() {
         assert_eq!(thousands(0), "0");

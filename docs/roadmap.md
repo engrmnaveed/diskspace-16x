@@ -94,10 +94,11 @@ The owner's v0.8.0 QA found that every Pro feature works but is easy to miss, an
   - Add Xcode Archives and simulator devices from the shared rule table, in both apps, as a separate **Review** kind: they can't be recreated.
   - Review items stay out of the recreatable total and are never pre-marked.
   - Move to Trash warns plainly before moving them.
-- [ ] M7.8 Mac parity [Pro]:
+- [x] M7.8 Mac parity [Pro]:
   - An older-than filter, like `scan --older-than`: **View → Show Files Older Than…** with a few presets.
   - **Export HTML Report…**, writing the same self-contained page as `scan --html`, with a shared structural test.
   - Owners in Scan Details if that's simple. Otherwise, record why the Mac app leaves owners out.
+  - **Outcome (2026-11-22):** **View → Show Files Older Than** (Any Age, 30 and 90 days, 6 months, 1 or 2 years) filters the results with `SpacePro/OlderThan.swift`, the CLI's rule. Saving, exporting a scan, rescanning and Move to Trash work from the unfiltered results, Move to Trash refuses folders while the filter is on (they may hold newer files), and Compare is off while it's on. **File → Export HTML Report…** writes `SpacePro/HTMLReport.swift`'s port of the CLI page, and `fixtures/html-report` checks both pages' structure. **Owners stay out of the Mac app:** it scans the signed-in user's folders, where nearly every file has one owner, so a breakdown would say little, and storing each entry's owner would grow `ScanEntry` past its 64 bytes. The CLI's `--by-owner` serves shared servers.
 - [ ] M7.9 QA, benchmarks, archive sizes and a promo refresh:
   - Exercise every Mac feature M7 touches at runtime, not only in offscreen renders. A temporary debug build that drives `ScanWorkspace` and logs, run with `-proFeatures YES` argument overrides, works well; don't commit it.
   - Add manual QA rows, and list what still needs the owner's eyes.

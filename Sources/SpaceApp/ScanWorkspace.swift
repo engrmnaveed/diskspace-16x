@@ -149,6 +149,19 @@ final class ScanWorkspace {
             measureExclusiveSizes()
         }
     }
+    /// Pro: **View → Show Files Older Than**, in days, or nil for files of any age. The
+    /// results then count only files last modified before then, as `scan --older-than` does.
+    var olderThanDays: Int? {
+        didSet { if olderThanDays != oldValue { applyAgeFilter() } }
+    }
+    /// The latest results before the age filter, which saving, exporting a scan, rescanning
+    /// and Move to Trash work from.
+    private var unfilteredReport: ScanReport?
+    /// Whether the shown results leave out files newer than the age filter.
+    var isAgeFiltered: Bool {
+        olderThanDays != nil && ProFeatures.isEnabled && importedFile == nil && report?.isPreview == false
+    }
+
     /// Pro: the current scan's exclusive sizes, once measured.
     private(set) var exclusiveSizes: ExclusiveSizes?
     /// Pro: the share of the scan measured so far, from 0 to 1, while measuring.
@@ -252,7 +265,7 @@ final class ScanWorkspace {
     var canRescan: Bool { report != nil && canChooseFolder && !isImported }
     var canReveal: Bool { canBrowse && !isImported }
     var canExport: Bool { canBrowse && canChooseFolder }
-    var canCompare: Bool { canBrowse && canChooseFolder && ProFeatures.isEnabled }
+    var canCompare: Bool { canBrowse && canChooseFolder && ProFeatures.isEnabled && !isAgeFiltered }
     var canSaveToHistory: Bool { canExport && ProFeatures.isEnabled }
 
     /// Suggests Full Disk Access only when macOS privacy controls kept items out of this scan.
@@ -452,6 +465,7 @@ final class ScanWorkspace {
     func stopProFeatures() {
         stopComparing()
         showsExclusive = false
+        olderThanDays = nil
         if mode == .cleanup || mode == .duplicates {
             mode = .folders
         }
@@ -461,6 +475,26 @@ final class ScanWorkspace {
         if sortOrder.first?.key == .modified {
             sortOrder = [.largestFirst]
         }
+    }
+
+    /// Pro: shows the latest results again through the age filter. Comparing ends, since a
+    /// saved scan counts files of every age.
+    private func applyAgeFilter() {
+        guard let unfilteredReport else { return }
+        if olderThanDays != nil { stopComparing() }
+        acceptReport(unfilteredReport)
+        if olderThanDays != nil, importedFile != nil {
+            notice = Notice(
+                title: "Opened scans don’t have modification dates",
+                message: "Scan the folder to show only older files."
+            )
+        }
+    }
+
+    /// The results with only files older than the age filter, when it's on.
+    private func ageFiltered(_ result: ScanReport) -> ScanReport {
+        guard let days = olderThanDays, ProFeatures.isEnabled, importedFile == nil, !result.isPreview else { return result }
+        return OlderThan.filter(result, cutoff: OlderThan.cutoff(days: days))
     }
 
     /// Pro: measures the finished scan's exclusive sizes while the Exclusive column is shown,
@@ -511,7 +545,7 @@ final class ScanWorkspace {
 
     /// Pro: keeps the results in the history, to compare with later.
     func saveToHistory() {
-        guard canSaveToHistory, let report else { return }
+        guard canSaveToHistory, let report = unfilteredReport ?? report else { return }
         let saved = SavedScan(report: report, excludes: reportExcludes)
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
         Task {
@@ -592,7 +626,7 @@ final class ScanWorkspace {
 
     func exportScan() {
         guard canExport, let report else { return }
-        let saved = SavedScan(report: report, excludes: reportExcludes)
+        let saved = SavedScan(report: unfilteredReport ?? report, excludes: reportExcludes)
         let panel = NSSavePanel()
         panel.title = "Export Scan"
         panel.message = "Open it later with Open Scan…, space16x --import, ncdu -f, or gdu -f. It lists every path in the scan."
@@ -620,6 +654,47 @@ final class ScanWorkspace {
                     message: error.localizedDescription,
                     isError: true
                 )
+            }
+        }
+    }
+
+    /// Pro: saves one self-contained HTML page with the totals, a treemap, the scan root's
+    /// contents, the largest files and file types, as `space16x scan --html` writes it.
+    func exportHTMLReport() {
+        guard canExport, ProFeatures.isEnabled, let report else { return }
+        let panel = NSSavePanel()
+        panel.title = "Export HTML Report"
+        panel.message = "The page lists the scan’s largest items and files with their paths. It has no scripts and loads nothing."
+        panel.prompt = "Export"
+        panel.allowedContentTypes = [.html]
+        panel.nameFieldStringValue = "\(report.root.path == "/" ? "Startup Disk" : report.root.name) report.html"
+        let metric = sizeMetric
+        let excludes = reportExcludes
+        let days = isAgeFiltered ? olderThanDays : nil
+        let scannedAt = scannedAt ?? Date()
+        isPresentingPicker = true
+        Task {
+            let result = await panel.begin()
+            isPresentingPicker = false
+            guard result == .OK, let url = panel.url else { return }
+            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+            let outcome = await Task.detached(priority: .userInitiated) {
+                Result {
+                    let page = HTMLReport.page(
+                        report: report, metric: metric, excludes: excludes, olderThanDays: days,
+                        version: version, scannedAt: scannedAt
+                    )
+                    try Data(page.utf8).write(to: url, options: .atomic)
+                }
+            }.value
+            switch outcome {
+            case .success:
+                notice = Notice(
+                    title: "Exported “\(url.lastPathComponent)”",
+                    message: "Open it in any browser. Review the paths on the page before you share it."
+                )
+            case let .failure(error):
+                notice = Notice(title: "Couldn’t export the report", message: error.localizedDescription, isError: true)
             }
         }
     }
@@ -704,7 +779,7 @@ final class ScanWorkspace {
     }
 
     private func finishRescan(of folder: ScanEntry, with result: ScanReport) {
-        guard let merged = report?.replacing(result) else {
+        guard let merged = (unfilteredReport ?? report)?.replacing(result) else {
             notice = Notice(
                 title: "Couldn’t update “\(folder.name)”",
                 message: "It’s no longer in the results. Scan again to refresh them.",
@@ -728,7 +803,8 @@ final class ScanWorkspace {
     private func failRescan(of folder: ScanEntry, error: Error, cancelled: Bool) {
         if cancelled {
             notice = Notice(title: "Rescan cancelled", message: "The earlier results stay.")
-        } else if let report, (try? URL(filePath: folder.path).checkResourceIsReachable()) != true {
+        } else if let report = unfilteredReport ?? report,
+                  (try? URL(filePath: folder.path).checkResourceIsReachable()) != true {
             acceptReport(report.removing([folder.path]))
             notice = Notice(title: "“\(folder.name)” no longer exists", message: "It left the results.")
         } else {
@@ -847,6 +923,15 @@ final class ScanWorkspace {
             )
             return
         }
+        // A folder in the age-filtered results may hold newer files the list leaves out.
+        if isAgeFiltered, let folder = entries.first(where: \.isDirectory) {
+            notice = Notice(
+                title: "“\(folder.name)” may hold newer files",
+                message: "The list shows only older files. Choose View → Show Files Older Than → Any Age to move folders to the Trash.",
+                isError: true
+            )
+            return
+        }
         for entry in entries {
             if let blocker = report.trashBlocker(for: entry) {
                 notice = Notice(
@@ -914,7 +999,7 @@ final class ScanWorkspace {
             let remaining = duplicateGroups?.compactMap { group in
                 group.keeping { file in !trashed.contains { file.path == $0 || file.path.hasPrefix($0 + "/") } }
             }
-            acceptReport(report.removing(trashed), duplicates: remaining)
+            acceptReport((unfilteredReport ?? report).removing(trashed), duplicates: remaining)
         }
         let freed = moved.reduce(UInt64(0)) { $0 + $1.allocatedBytes }
         let what = moved.count == 1 ? "“\(moved[0].name)”" : ScanFormat.items(moved.count)
@@ -1023,7 +1108,7 @@ final class ScanWorkspace {
     }
 
     private func acceptReport(
-        _ result: ScanReport, from source: ReportSource? = nil, duplicates: [DuplicateGroup]? = nil
+        _ incoming: ScanReport, from source: ReportSource? = nil, duplicates: [DuplicateGroup]? = nil
     ) {
         duplicateGroups = duplicates
         switch source {
@@ -1038,6 +1123,8 @@ final class ScanWorkspace {
         case nil:
             break
         }
+        unfilteredReport = incoming
+        let result = ageFiltered(incoming)
         let newRoot = report?.root.path != result.root.path
         let continuing = scanHasResults
         scanHasResults = true

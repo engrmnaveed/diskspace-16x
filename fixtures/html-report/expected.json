@@ -1,0 +1,39 @@
+{
+  "heading": "/Users/me",
+  "sections": [
+    "Treemap",
+    "Contents",
+    "Largest files",
+    "File types"
+  ],
+  "contents": [
+    "Library/",
+    "Documents/",
+    "Projects/",
+    ".gradle/",
+    ".cache/",
+    ".npm/"
+  ],
+  "largestFiles": [
+    "/Users/me/Documents/report.pdf",
+    "/Users/me/Library/Developer/CoreSimulator/Devices/phone/disk.img",
+    "/Users/me/Library/Developer/Xcode/Archives/App.xcarchive/app",
+    "/Users/me/Library/Caches/com.app/data.bin",
+    "/Users/me/Library/Developer/Xcode/DerivedData/App-abc/Build.o"
+  ],
+  "fileTypes": [
+    ".pdf",
+    ".img",
+    ".bin",
+    ".o",
+    ".js"
+  ],
+  "forbidden": [
+    "<script",
+    "http://",
+    "https://",
+    "<link",
+    "<img",
+    "url("
+  ]
+}
