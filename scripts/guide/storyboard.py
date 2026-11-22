@@ -160,12 +160,15 @@ TERMINAL_SHOTS = {
     "terminal-pro-diff": "c-diff",
 }
 SHOT_WIDTH = 1040
+# Narrow windows keep their own proportions on the page.
+NARROW = {"mac-settings": 560}
 
 
 def shots(folder):
     outputs = []
     for name, source in SHOTS.items():
-        outputs.append(dict(kind="shot", path=str(folder / f"{name}.png"), width=SHOT_WIDTH, source=source))
+        outputs.append(dict(kind="shot", path=str(folder / f"{name}.png"), width=NARROW.get(name, SHOT_WIDTH),
+                            source=source))
     for name, frame in TERMINAL_SHOTS.items():
         outputs.append(dict(kind="shot", path=str(folder / f"{name}.png"), width=SHOT_WIDTH, frame=frame))
     return outputs
