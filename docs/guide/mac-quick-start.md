@@ -8,7 +8,7 @@ Prefer to watch? The **Mac app walkthrough** video is coming soon. <!-- Replace 
 
 Install the app with Homebrew or download it from GitHub. [Install the Mac app](../install.md#install-the-mac-app) has both ways.
 
-Space 16X is free, so it isn't notarized by Apple, and macOS asks you to approve it the first time:
+Space 16X is free and isn't notarized by Apple, so macOS asks you to approve it the first time:
 
 1. Open Space 16X. When macOS warns you, click **Done**. Don't click **Move to Trash**.
 2. Open **System Settings → Privacy & Security**, scroll down to **Security**, and click **Open Anyway**.

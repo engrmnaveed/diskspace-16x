@@ -6,7 +6,7 @@ Space 16X frees space one way only: it moves the items you choose to the Trash, 
 
 1. Select what you don't need. Click one item, hold ⌘ and click to add more, or hold ⇧ and click to select a range. This works in the folder list and in **Largest Files**.
 2. Press ⌘⌫, click **Move to Trash** at the bottom of the window, or right-click and choose **Move to Trash…**.
-3. Check the confirmation. It names the items and how much space they use. Click **Move to Trash**, or **Cancel** to keep them.
+3. Check the confirmation. It says how many items you picked and how much space they use. Click **Move to Trash**, or **Cancel** to keep them.
 
 The items leave the list right away, and every total above them updates. You don't need to scan again.
 
@@ -37,7 +37,7 @@ Sometimes emptying the Trash frees less than you expected:
 To keep you safe, Space 16X doesn't offer to move:
 
 - items it couldn't read completely, such as **Protected**, **Incomplete** or **Cloud only** ones
-- folders it hasn't finished scanning, while a scan is running
+- anything at all while a scan is still running
 - items in a saved scan you opened, because those files may be on another computer or may have changed
 
 In the terminal, `space16x --read-only` turns Move to Trash off completely, which is handy on a shared server.
