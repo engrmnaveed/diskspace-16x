@@ -6,9 +6,11 @@ Space 16X frees space one way only: it moves the items you choose to the Trash, 
 
 1. Select what you don't need. Click one item, hold ⌘ and click to add more, or hold ⇧ and click to select a range. This works in the folder list and in **Largest Files**.
 2. Press ⌘⌫, click **Move to Trash** at the bottom of the window, or right-click and choose **Move to Trash…**.
-3. Check the confirmation. It names the items and how much space they use. Click **Move to Trash**, or **Cancel** to keep them.
+3. Check the confirmation. It says how many items you picked and how much space they use. Click **Move to Trash**, or **Cancel** to keep them.
 
 The items leave the list right away, and every total above them updates. You don't need to scan again.
+
+![Selecting two files in Largest Files with ⌘-click, then the confirmation that asks to move them to the Trash.](images/mac-clean-up.gif)
 
 ## Move items to the Trash in the terminal
 
@@ -35,7 +37,7 @@ Sometimes emptying the Trash frees less than you expected:
 To keep you safe, Space 16X doesn't offer to move:
 
 - items it couldn't read completely, such as **Protected**, **Incomplete** or **Cloud only** ones
-- folders it hasn't finished scanning, while a scan is running
+- anything at all while a scan is still running
 - items in a saved scan you opened, because those files may be on another computer or may have changed
 
 In the terminal, `space16x --read-only` turns Move to Trash off completely, which is handy on a shared server.
@@ -56,3 +58,5 @@ When you delete or add files outside Space 16X, rescan just the folder you're in
 
 - **Mac app:** choose **Scan → Rescan Folder** (⌥⌘R), or right-click a folder and choose **Rescan Folder**. **Scan → Scan Again** (⌘R) scans the whole location again.
 - **Terminal:** press `r`. The bottom line reports the folder's new size and its old one. Press `c` to cancel a rescan and keep the earlier results.
+
+![The Downloads folder after a rescan picked up a new screen recording. The bottom line reads Rescanned "Downloads": 656.0 MB, was 592.0 MB.](images/terminal-rescan.png)

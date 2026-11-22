@@ -27,12 +27,16 @@ Some rows carry a state instead of a full size:
 
 A good habit: open the biggest folder, then the biggest folder inside it, and repeat. A few clicks usually lead to the culprit.
 
+![The Movies folder, opened from the home folder, with Holiday 2025.mov as its biggest file. The path at the top reads Home › Movies.](images/mac-open-folder.png)
+
 ## See it as a picture (Mac app)
 
 Above the list, switch **Contents** between **List**, **Treemap** and **Donut**.
 
 - The **treemap** draws each item as a box sized by the space it uses, so the biggest things jump out. Click a folder's box to open it, or a file's box to select it. Small leftovers are grouped as **Other Items**.
 - The **donut** shows each item's share as a slice. Click a folder in the legend beside it to open it.
+
+![The donut chart of a 2.44 GB home folder, with a legend listing Movies, Downloads, Desktop and the other folders with their shares.](images/mac-donut.png)
 
 ✨ **Pro, free:** the terminal gets a treemap too. Press `m` in the explorer. See [Space 16X Pro](pro.md).
 
@@ -51,6 +55,8 @@ Big files hide deep inside folders. This view finds them wherever they are.
 
 Sorting by **Items** finds folders full of tiny files, which slow down backups and copying.
 
+![The explorer filtered by "do", showing only Downloads and Documents. The bottom line reads Filter do.](images/terminal-filter.png)
+
 ## Look closer at an item
 
 **Mac app:**
@@ -60,6 +66,8 @@ Sorting by **Items** finds folders full of tiny files, which slow down backups a
 - Hover over a size to see the exact number of bytes.
 
 **Terminal:** press Enter on a file to see its details: both sizes, the exact byte count, and its full path.
+
+![File details for a 240 MB video: its allocated and apparent sizes in MB, MiB and bytes, and its path.](images/terminal-file-details.png)
 
 ## Go further
 
@@ -87,3 +95,5 @@ The scan details list what Space 16X skipped and why, and how it counts sizes.
 
 - **Mac app:** click **Scan Details** at the bottom of the sidebar, or press ⌘I.
 - **Terminal:** press `e`.
+
+![Scan Details for a home folder: how sizes are counted, and No scan errors.](images/mac-scan-details.png)

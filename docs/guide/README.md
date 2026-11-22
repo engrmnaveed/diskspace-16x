@@ -10,12 +10,29 @@ It's free and open source, works offline, and needs no account.
 
 ## Pick your path
 
-| On a Mac, with windows and charts | In a terminal, on a Mac or Linux |
-| --- | --- |
-| **[Mac app quick start →](mac-quick-start.md)** | **[Terminal quick start →](terminal-quick-start.md)** |
-| Click a disk or folder, then browse a list, a treemap and a donut chart. | Type `space16x` and explore with the arrow keys. Great for servers. |
+<table>
+<tr>
+<th width="50%">On a Mac, with windows and charts</th>
+<th width="50%">In a terminal, on a Mac or Linux</th>
+</tr>
+<tr>
+<td><a href="mac-quick-start.md"><img src="images/mac-first-scan.gif" width="360" alt="The Mac app scans a home folder, lists its biggest folders, opens one, and shows a treemap, a donut chart and the largest files."></a></td>
+<td><a href="terminal-quick-start.md"><img src="images/terminal-first-scan.gif" width="360" alt="Typing space16x opens the terminal explorer, which lists the biggest folders, opens one, shows a file's details, lists the largest files and asks before moving marked items to the Trash."></a></td>
+</tr>
+<tr>
+<td><b><a href="mac-quick-start.md">Mac app quick start →</a></b><br>Click a disk or folder, then browse a list, a treemap and a donut chart.</td>
+<td><b><a href="terminal-quick-start.md">Terminal quick start →</a></b><br>Type <code>space16x</code> and explore with the arrow keys. Great for servers.</td>
+</tr>
+</table>
 
 Not sure? On a Mac, start with the app. Both show the same numbers, so you can use either one, or both.
+
+## Watch a walkthrough
+
+Two short videos with on-screen captions show every step:
+
+- **Mac app walkthrough** (2:46): coming soon <!-- Replace "coming soon" with [watch on YouTube](VIDEO-LINK) -->
+- **Terminal walkthrough** (2:30): coming soon <!-- Replace "coming soon" with [watch on YouTube](VIDEO-LINK) -->
 
 ## What you can do
 
@@ -28,3 +45,7 @@ Not sure? On a Mac, start with the app. Both show the same numbers, so you can u
 ## Our promise
 
 Space 16X only looks. While it scans, it reads the names and sizes of your files, never what's inside them. The one change it ever makes is moving the items you pick to the Trash, after you confirm.
+
+---
+
+The screenshots, GIFs and videos come from the real app and CLI. [User guide media](../promo.md#user-guide-media) explains how to rebuild them.
