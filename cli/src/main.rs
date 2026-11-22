@@ -94,8 +94,10 @@ This is Space 16X Pro. It adds:
              standard output.
   scan --cleanup
              List folders that tools recreate, such as node_modules, Cargo's target,
-             Xcode's DerivedData and caches, instead of entries. u in the explorer
-             lists them for Move to Trash. Nothing is removed without your confirmation.
+             Xcode's DerivedData and caches, instead of entries, then Xcode archives
+             and simulator devices to review, which can't be recreated. u in the
+             explorer lists them for Move to Trash. Nothing is removed without your
+             confirmation.
   space16x history save [PATH] [--threads N] [EXCLUDES]
              Scan PATH and keep the scan in the history folder,
              $XDG_STATE_HOME/space16x/history or ~/.local/state/space16x/history.

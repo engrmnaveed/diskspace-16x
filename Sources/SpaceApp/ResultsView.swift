@@ -41,10 +41,11 @@ struct ResultsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 let bytes = workspace.pendingTrash.reduce(UInt64(0)) { $0 + $1.allocatedBytes }
+                let warning = workspace.pendingReviewWarning.map { "\($0) " } ?? ""
                 if let exclusive = workspace.pendingExclusiveBytes, exclusive < bytes {
-                    Text("\(ScanFormat.size(bytes)) of allocated space. Emptying the Trash frees at least \(ScanFormat.size(exclusive)), because clones or other hard links share the rest.")
+                    Text("\(warning)\(ScanFormat.size(bytes)) of allocated space. Emptying the Trash frees at least \(ScanFormat.size(exclusive)), because clones or other hard links share the rest.")
                 } else {
-                    Text("\(ScanFormat.size(bytes)) of allocated space. Space is freed when you empty the Trash.")
+                    Text("\(warning)\(ScanFormat.size(bytes)) of allocated space. Space is freed when you empty the Trash.")
                 }
             }
             .onChange(of: proFeatures, initial: true) { _, enabled in
@@ -145,8 +146,13 @@ struct ResultsView: View {
         }
         if workspace.mode == .cleanup {
             if workspace.report?.isPreview == true { return "Suggestions appear when the scan finishes" }
-            let total = workspace.rows.reduce(UInt64(0)) { $0 + $1.bytes(for: workspace.sizeMetric) }
-            return "\(ScanFormat.size(total)) in folders that tools recreate when needed"
+            // Folders to review can't be recreated, so they stay out of the total.
+            let total = workspace.rows.reduce(UInt64(0)) { total, entry in
+                workspace.reviewPaths.contains(entry.path) ? total : total + entry.bytes(for: workspace.sizeMetric)
+            }
+            let review = workspace.rows.filter { workspace.reviewPaths.contains($0.path) }.count
+            let suffix = review == 0 ? "" : " · \(review) to review"
+            return "\(ScanFormat.size(total)) in folders that tools recreate when needed" + suffix
         }
         if workspace.report?.isPreview == true { return "Largest files found so far" + suffix }
         return "Top \(ScanWorkspace.largestFileLimit) files across the scan root" + suffix

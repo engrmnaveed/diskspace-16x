@@ -435,6 +435,9 @@ fn draw_results(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
         {
             path.push_str("  · ");
             path.push_str(rule.label);
+            if rule.review.is_some() {
+                path.push_str(", review: can't be recreated");
+            }
         }
         #[cfg(feature = "pro")]
         if explorer.mode == Mode::Duplicates
@@ -832,7 +835,11 @@ fn draw_footer(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer) {
             [item] => item.quoted_name(),
             items => format!("{} items", items.len()),
         };
-        let question = format!(" Move {what} ({}) to the Trash? ", format_bytes(plan.bytes));
+        let mut question = format!(" Move {what} ({}) to the Trash? ", format_bytes(plan.bytes));
+        if let Some(warning) = &plan.warning {
+            question.push_str(warning);
+            question.push(' ');
+        }
         let answer = "y/N";
         let budget = usize::from(area.width).saturating_sub(answer.width());
         paint(

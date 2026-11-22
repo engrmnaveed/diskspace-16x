@@ -124,6 +124,9 @@ fn quoted_name(path: &Path) -> String {
 pub(super) struct TrashPlan {
     pub(super) items: Vec<TrashItem>,
     pub(super) bytes: u64,
+    /// Pro: a plain warning when the items are or hold folders that can't be recreated,
+    /// such as Xcode archives.
+    pub(super) warning: Option<String>,
 }
 
 /// A message shown in the footer until the next key press.
@@ -1074,8 +1077,50 @@ impl Explorer {
         }
         if !items.is_empty() {
             let bytes = items.iter().map(|item| item.allocated_bytes).sum();
-            self.prompt = Some(TrashPlan { items, bytes });
+            let warning = self.review_warning(&items);
+            self.prompt = Some(TrashPlan {
+                items,
+                bytes,
+                warning,
+            });
         }
+    }
+
+    /// Pro: a warning when the items are or hold folders to review before removing, which
+    /// can't be recreated, such as Xcode archives or simulator devices.
+    #[cfg(feature = "pro")]
+    fn review_warning(&self, items: &[TrashItem]) -> Option<String> {
+        let tree = &self.report.as_ref()?.tree;
+        let mut labels: Vec<&'static str> = Vec::new();
+        for item in items
+            .iter()
+            .filter(|item| item.kind == EntryKind::Directory)
+        {
+            let Some(entry) = tree.find(&item.path).map(|id| tree.entry(id)) else {
+                continue;
+            };
+            let candidates = std::iter::once(entry).chain(entry.descendants());
+            for folder in candidates.filter(|folder| folder.kind() == EntryKind::Directory) {
+                if let Some(rule) = folder
+                    .parent()
+                    .and_then(|parent| crate::pro::cleanup_rule(parent, folder))
+                    .filter(|rule| rule.review.is_some())
+                    && !labels.contains(&rule.label)
+                {
+                    labels.push(rule.label);
+                }
+            }
+        }
+        match labels.as_slice() {
+            [] => None,
+            [label] => Some(format!("{label} can't be recreated.")),
+            _ => Some("Xcode archives and simulator devices can't be recreated.".into()),
+        }
+    }
+
+    #[cfg(not(feature = "pro"))]
+    fn review_warning(&self, _items: &[TrashItem]) -> Option<String> {
+        None
     }
 
     fn read_only_notice(&self) -> &'static str {
@@ -1910,6 +1955,50 @@ mod tests {
         // Enter on a copy opens its folder.
         key(&mut explorer, KeyCode::Enter);
         assert!(explorer.mode == Mode::Folders);
+    }
+
+    #[cfg(feature = "pro")]
+    #[test]
+    fn warns_before_trashing_folders_that_cant_be_recreated() {
+        let mut explorer = Explorer::new(Path::new("/u"));
+        let xcode = folder(
+            "/u/Library/Developer/Xcode",
+            vec![
+                folder(
+                    "/u/Library/Developer/Xcode/Archives",
+                    vec![file("/u/Library/Developer/Xcode/Archives/App", 6_000_000)],
+                ),
+                folder(
+                    "/u/Library/Developer/Xcode/DerivedData",
+                    vec![file("/u/Library/Developer/Xcode/DerivedData/b", 2_000_000)],
+                ),
+            ],
+        );
+        let developer = folder("/u/Library/Developer", vec![xcode]);
+        show(
+            &mut explorer,
+            folder("/u", vec![folder("/u/Library", vec![developer])]),
+        );
+        explorer.status = Status::Complete;
+        key(&mut explorer, KeyCode::Char('u'));
+        settle_ranking(&mut explorer);
+        // Review folders are listed but never marked for you.
+        assert_eq!(names(&explorer), ["Archives", "DerivedData"]);
+        assert!(explorer.marked.is_empty());
+        key(&mut explorer, KeyCode::Char('d'));
+        let plan = explorer.prompt.take().expect("d asks to confirm");
+        assert_eq!(
+            plan.warning.as_deref(),
+            Some("Xcode archives can't be recreated.")
+        );
+        key(&mut explorer, KeyCode::Down);
+        key(&mut explorer, KeyCode::Char('d'));
+        assert!(explorer.prompt.take().unwrap().warning.is_none());
+        // A folder that holds archives warns too.
+        key(&mut explorer, KeyCode::Char('u'));
+        settle_ranking(&mut explorer);
+        key(&mut explorer, KeyCode::Char('d'));
+        assert!(explorer.prompt.take().unwrap().warning.is_some());
     }
 
     #[cfg(feature = "pro")]

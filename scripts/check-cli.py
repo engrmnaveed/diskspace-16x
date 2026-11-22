@@ -366,6 +366,7 @@ def check_cleanup(binary):
             "rust/Cargo.toml": 100,
             "rust/target/debug/app": 1_500_000,
             "notes/target/plan.txt": 1_500_000,
+            "Library/Developer/Xcode/Archives/App.xcarchive/app": 1_300_000,
         }
         for name, size in files.items():
             path = root / name
@@ -376,8 +377,14 @@ def check_cleanup(binary):
         assert found == [("web/node_modules", "node-modules"), ("rust/target", "rust-target")], found
         assert report["cleanupBytes"] == sum(item["allocatedBytes"] for item in report["suggestions"]), report
         assert report["suggestions"][0]["itemCount"] == 4 and "entries" not in report, report
+        # Xcode archives can't be recreated, so they're listed for review, out of the total.
+        review = [(str(Path(item["path"]).relative_to(root)), item["rule"]) for item in report["review"]]
+        assert review == [("Library/Developer/Xcode/Archives", "xcode-archives")], review
+        assert report["reviewBytes"] == report["review"][0]["allocatedBytes"], report
+        assert "can't be recreated" in report["review"][0]["warning"], report
         text = run(binary, "scan", root, "--cleanup")
         assert "Node packages" in text.stdout and "2 suggestions" in text.stdout, text.stdout
+        assert "Review before removing" in text.stdout and "Xcode archives" in text.stdout, text.stdout
         assert "press u in the explorer" in text.stderr, text.stderr
         for invalid in (("--cleanup", "--top", "3"), ("--cleanup", "--types", "2"), ("--cleanup", "--cleanup")):
             assert run(binary, "scan", root, *invalid, status=1).stderr

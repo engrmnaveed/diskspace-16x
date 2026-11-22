@@ -135,6 +135,8 @@ final class ScanWorkspace {
     private(set) var chartRows: [ScanEntry] = []
     /// Pro: a note for each row of Cleanup or Duplicates, by path.
     private(set) var rowLabels: [String: String] = [:]
+    /// Pro: Cleanup rows to review before removing, which can't be recreated.
+    private(set) var reviewPaths: Set<String> = []
     /// Pro: files with the same contents, or nil until the user asks to find them.
     private(set) var duplicateGroups: [DuplicateGroup]?
     private(set) var isFindingDuplicates = false
@@ -221,6 +223,9 @@ final class ScanWorkspace {
     /// Pro: the bytes that emptying the Trash frees at least for `pendingTrash`, without
     /// blocks shared with clones or files with other hard links, when measured in time.
     private(set) var pendingExclusiveBytes: UInt64?
+    /// Pro: a plain warning when `pendingTrash` is or holds folders that can't be recreated,
+    /// such as Xcode archives.
+    private(set) var pendingReviewWarning: String?
     private(set) var isMeasuringTrash = false
     private(set) var isTrashing = false
     var canMoveToTrash: Bool {
@@ -854,17 +859,20 @@ final class ScanWorkspace {
         }
         guard ProFeatures.isEnabled else {
             pendingExclusiveBytes = nil
+            pendingReviewWarning = nil
             pendingTrash = entries
             return
         }
-        // Pro reads how much of the items is shared before asking, for up to two seconds.
+        // Pro reads how much of the items is shared before asking, for up to two seconds,
+        // and warns about folders that can't be recreated.
         isMeasuringTrash = true
         Task {
-            let measured = await Task.detached(priority: .userInitiated) {
-                ExclusiveSize.measure(entries)
+            let (measured, warning) = await Task.detached(priority: .userInitiated) {
+                (ExclusiveSize.measure(entries), CleanupSuggestions.reviewWarning(for: entries))
             }.value
             isMeasuringTrash = false
             pendingExclusiveBytes = measured
+            pendingReviewWarning = warning
             pendingTrash = entries
         }
     }
@@ -1089,6 +1097,7 @@ final class ScanWorkspace {
             guard !Task.isCancelled else { return }
             let worker = Task.detached(priority: .userInitiated) {
                 var labels: [String: String] = [:]
+                var review: Set<String> = []
                 let ranked: [ScanEntry]
                 switch mode {
                 case .folders: ranked = folder.rankedChildren(by: metric)
@@ -1097,7 +1106,12 @@ final class ScanWorkspace {
                     // Suggestions come from a finished scan, never a preview.
                     let found = report.isPreview ? [] : CleanupSuggestions.find(in: report, metric: metric)
                     ranked = found.map(\.entry)
-                    for suggestion in found { labels[suggestion.entry.path] = suggestion.rule.label }
+                    for suggestion in found {
+                        labels[suggestion.entry.path] = suggestion.rule.review == nil
+                            ? suggestion.rule.label
+                            : suggestion.rule.label + " · review, can't be recreated"
+                        if suggestion.rule.review != nil { review.insert(suggestion.entry.path) }
+                    }
                 case .duplicates:
                     ranked = duplicates?.flatMap(\.files) ?? []
                     for group in duplicates ?? [] {
@@ -1133,7 +1147,7 @@ final class ScanWorkspace {
                 } else {
                     rows = ranked.ordered(by: sort.key, ascending: sort.order == .forward, metric: metric)
                 }
-                return (rows: rows, chart: Array(ranked.prefix(32)), changes: changes, labels: labels)
+                return (rows: rows, chart: Array(ranked.prefix(32)), changes: changes, labels: labels, review: review)
             }
             let result = await withTaskCancellationHandler {
                 await worker.value
@@ -1146,6 +1160,7 @@ final class ScanWorkspace {
             chartRows = result.chart
             folderChanges = result.changes
             rowLabels = result.labels
+            reviewPaths = result.review
             let rowPaths = Set(rows.map(\.path))
             if !selectedPaths.isSubset(of: rowPaths) { selectedPaths.formIntersection(rowPaths) }
             selectedEntry = selection.flatMap(entry(withPath:))
