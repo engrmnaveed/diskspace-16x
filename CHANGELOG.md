@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.1
 
 - Stop the Mac app's folder list from logging an AppKit warning, "reentrant operation in its NSTableView delegate", when the age filter was cleared or the Exclusive sort was reversed. Re-sorting, switching between allocated and apparent sizes, and changing the age filter now show the new order from the top, keeping the selection and the keyboard focus. Showing or hiding a Pro column keeps the keyboard focus too.
 
