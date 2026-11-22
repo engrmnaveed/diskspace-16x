@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add a user guide in `docs/guide` for people new to Space 16X. It has a two-minute quick start for the Mac app and one for the terminal, then pages on finding what uses space, cleaning up safely, saving and sharing scans, Pro, and common questions, with screenshots and GIFs of the real app and CLI. Two captioned walkthroughs are on YouTube: the Mac app at https://youtu.be/34wE80c-4d0 and the terminal at https://youtu.be/5aBSDL4HIuo. The README links the guide near the top.
+
 ## 0.9.1
 
 - Stop the Mac app's folder list from logging an AppKit warning, "reentrant operation in its NSTableView delegate", when the age filter was cleared or the Exclusive sort was reversed. Re-sorting, switching between allocated and apparent sizes, and changing the age filter now show the new order from the top, keeping the selection and the keyboard focus. Showing or hiding a Pro column keeps the keyboard focus too.

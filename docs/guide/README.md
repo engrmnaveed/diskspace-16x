@@ -31,8 +31,8 @@ Not sure? On a Mac, start with the app. Both show the same numbers, so you can u
 
 Two short videos with on-screen captions show every step:
 
-- **Mac app walkthrough** (2:46): coming soon <!-- Replace "coming soon" with [watch on YouTube](VIDEO-LINK) -->
-- **Terminal walkthrough** (2:30): coming soon <!-- Replace "coming soon" with [watch on YouTube](VIDEO-LINK) -->
+- **Mac app walkthrough** (2:46): [watch on YouTube](https://youtu.be/34wE80c-4d0)
+- **Terminal walkthrough** (2:30): [watch on YouTube](https://youtu.be/5aBSDL4HIuo)
 
 ## What you can do
 

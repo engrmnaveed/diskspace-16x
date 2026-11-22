@@ -4,7 +4,7 @@ Explore your disk from the keyboard, on a Mac or on Linux, in about two minutes.
 
 The **terminal** is the window where you type commands: the Terminal app on a Mac, or the shell on a Linux computer or server. You type a command and press Return.
 
-Prefer to watch? The **terminal walkthrough** video is coming soon. <!-- Replace "is coming soon" with: [is on YouTube](VIDEO-LINK) -->
+Prefer to watch? The **terminal walkthrough** video [is on YouTube](https://youtu.be/5aBSDL4HIuo).
 
 ## 1. Install
 
