@@ -9,6 +9,8 @@
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, OnceLock, Weak};
 
 use serde::Serialize;
 
@@ -23,16 +25,21 @@ pub struct Exclusive {
 impl Exclusive {
     /// Reads how much of each counted file in `tree` is shared, on `threads` threads.
     pub fn measure(tree: &Tree, threads: usize) -> Self {
-        let files: Vec<NodeId> = tree
-            .root()
-            .descendants()
-            .filter(|entry| {
-                entry.kind() == EntryKind::File
-                    && entry.state() == EntryState::Local
-                    && entry.allocated_bytes() > 0
+        Self::measure_counting(tree, threads, &AtomicUsize::new(0), &AtomicBool::new(false))
+            .unwrap_or_else(|| Self {
+                shared: HashMap::new(),
             })
-            .map(Entry::id)
-            .collect();
+    }
+
+    /// Like [`Self::measure`], adding each file measured to `done`. Returns None when
+    /// `cancelled` is set before it finishes.
+    fn measure_counting(
+        tree: &Tree,
+        threads: usize,
+        done: &AtomicUsize,
+        cancelled: &AtomicBool,
+    ) -> Option<Self> {
+        let files = measured_files(tree);
         let sharing = Sharing::of(tree.root_path());
         let chunk = files.len().div_ceil(threads.max(1)).max(1);
         let shared_files: Vec<(NodeId, u64)> = std::thread::scope(|scope| {
@@ -40,15 +47,23 @@ impl Exclusive {
                 .chunks(chunk)
                 .map(|part| {
                     scope.spawn(move || {
-                        part.iter()
-                            .filter_map(|&id| {
-                                let entry = tree.entry(id);
-                                let bytes = sharing
-                                    .shared_bytes(&entry.path())
-                                    .min(entry.allocated_bytes());
-                                (bytes > 0).then_some((id, bytes))
-                            })
-                            .collect::<Vec<_>>()
+                        let mut found = Vec::new();
+                        for (index, &id) in part.iter().enumerate() {
+                            if index % 256 == 255 {
+                                if cancelled.load(Ordering::Relaxed) {
+                                    break;
+                                }
+                                done.fetch_add(256, Ordering::Relaxed);
+                            }
+                            let entry = tree.entry(id);
+                            let bytes = sharing
+                                .shared_bytes(&entry.path())
+                                .min(entry.allocated_bytes());
+                            if bytes > 0 {
+                                found.push((id, bytes));
+                            }
+                        }
+                        found
                     })
                 })
                 .collect();
@@ -57,6 +72,9 @@ impl Exclusive {
                 .flat_map(|worker| worker.join().unwrap_or_default())
                 .collect()
         });
+        if cancelled.load(Ordering::Relaxed) {
+            return None;
+        }
         let mut shared = HashMap::new();
         for (id, bytes) in shared_files {
             let mut current = Some(tree.entry(id));
@@ -66,13 +84,100 @@ impl Exclusive {
                 current = entry.parent();
             }
         }
-        Self { shared }
+        done.store(files.len(), Ordering::Relaxed);
+        Some(Self { shared })
     }
 
     /// The bytes that removing `entry` frees at least.
     pub fn bytes(&self, entry: Entry<'_>) -> u64 {
         let shared = self.shared.get(&entry.id()).copied().unwrap_or(0);
         entry.allocated_bytes().saturating_sub(shared)
+    }
+}
+
+/// The files whose sharing is measured: local files that use space.
+fn measured_files(tree: &Tree) -> Vec<NodeId> {
+    tree.root()
+        .descendants()
+        .filter(|entry| {
+            entry.kind() == EntryKind::File
+                && entry.state() == EntryState::Local
+                && entry.allocated_bytes() > 0
+        })
+        .map(Entry::id)
+        .collect()
+}
+
+/// Exclusive sizes measured in the background for the explorer's Exclusive column,
+/// after the scan and only when the user asks, so the walk stays as fast as before.
+/// Dropping it stops the measurement.
+pub struct Measurement {
+    tree: Weak<Tree>,
+    job: Arc<Job>,
+}
+
+/// What the measuring thread shares with its [`Measurement`].
+struct Job {
+    files: AtomicUsize,
+    done: AtomicUsize,
+    cancelled: AtomicBool,
+    result: OnceLock<Exclusive>,
+}
+
+impl Measurement {
+    /// Starts measuring `tree` on `threads` threads.
+    pub fn start(tree: &Arc<Tree>, threads: usize) -> io::Result<Self> {
+        let job = Arc::new(Job {
+            files: AtomicUsize::new(0),
+            done: AtomicUsize::new(0),
+            cancelled: AtomicBool::new(false),
+            result: OnceLock::new(),
+        });
+        let shared = Arc::clone(&job);
+        let measured = Arc::clone(tree);
+        std::thread::Builder::new()
+            .name("space16x-exclusive".into())
+            .spawn(move || {
+                shared
+                    .files
+                    .store(measured_files(&measured).len(), Ordering::Relaxed);
+                if let Some(exclusive) =
+                    Exclusive::measure_counting(&measured, threads, &shared.done, &shared.cancelled)
+                {
+                    let _ = shared.result.set(exclusive);
+                }
+            })?;
+        Ok(Self {
+            tree: Arc::downgrade(tree),
+            job,
+        })
+    }
+
+    /// Whether this measures `tree`, rather than a tree from before a rescan or a move
+    /// to the Trash.
+    pub fn measures(&self, tree: &Arc<Tree>) -> bool {
+        std::ptr::eq(self.tree.as_ptr(), Arc::as_ptr(tree))
+    }
+
+    /// The finished measurement.
+    pub fn result(&self) -> Option<&Exclusive> {
+        self.job.result.get()
+    }
+
+    /// The share measured so far, from 0 to 99 until it finishes.
+    pub fn percent(&self) -> u8 {
+        let files = self.job.files.load(Ordering::Relaxed);
+        let done = self.job.done.load(Ordering::Relaxed);
+        if files == 0 {
+            return 0;
+        }
+        (done.min(files) * 100 / files).min(99) as u8
+    }
+}
+
+impl Drop for Measurement {
+    fn drop(&mut self) {
+        self.job.cancelled.store(true, Ordering::Relaxed);
     }
 }
 
@@ -362,7 +467,6 @@ impl JsonExclusive {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
     fn scan(root: &Path) -> Report {
         crate::scanner::scan(

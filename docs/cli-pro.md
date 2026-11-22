@@ -150,6 +150,8 @@ A folder's exclusive size is the sum of its files', so it's a lower bound: delet
 
 JSON reports add `exclusiveBytes` to the report, each entry and each top file. Exclusive sizes are allocated bytes, so `--exclusive` takes no `--apparent`, and it takes no `--types`, `--by-owner` or `--cleanup`.
 
+In the explorer, press `X` to add an **Exclusive** column beside the size, and `X` again to remove it. The explorer measures the finished scan in the background, on the scan's threads, with its progress in the summary line ("measuring exclusive 40%"), then shows each row's exclusive size and the open folder's ("4.20 GB exclusive"). The scan itself stays as fast as without it. After Move to Trash or a rescan, it measures again. Imported scans don't have the files at hand, so the column needs a scan of the folder.
+
 ## Cleanup suggestions
 
 ```text

@@ -74,7 +74,7 @@ The owner's v0.8.0 QA found that every Pro feature works but is easy to miss, an
   - **Mac:** while Pro features is off, show one quiet, dismissible line, for example on the start screen: "More views are free in Pro". It opens **Settings → Pro features**.
   - **README:** a short **Editions** section with a Basic/Pro table and how to turn on each, in place of the long paragraph.
   - **Release notes:** each GitHub release includes its version's `CHANGELOG.md` section above the standard text (`publish-cli.yml`).
-- [ ] M7.3 Exclusive size as a column [Pro]:
+- [x] M7.3 Exclusive size as a column [Pro]:
   - **CLI explorer:** a key turns on an **Exclusive** column.
   - **Mac:** a sortable **Exclusive** column, shown from the View menu.
   - Both measure after the scan, in the background and only when asked, with progress. The walk stays as fast as before.

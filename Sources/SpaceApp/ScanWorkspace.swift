@@ -46,9 +46,12 @@ struct EntrySort: SortComparator, Hashable {
     var order: SortOrder
     /// Ranks by the change since a saved scan instead, for Pro's Compare.
     var byChange = false
+    /// Ranks by exclusive size instead, for Pro's Exclusive column.
+    var byExclusive = false
 
     static let largestFirst = EntrySort(key: .size, order: .reverse)
     static let biggestGrowth = EntrySort(key: .size, order: .reverse, byChange: true)
+    static let mostExclusive = EntrySort(key: .size, order: .reverse, byExclusive: true)
 
     /// The workspace sorts rows itself with the current size metric. This serves other callers.
     func compare(_ lhs: ScanEntry, _ rhs: ScanEntry) -> ComparisonResult {
@@ -135,6 +138,21 @@ final class ScanWorkspace {
     /// Pro: files with the same contents, or nil until the user asks to find them.
     private(set) var duplicateGroups: [DuplicateGroup]?
     private(set) var isFindingDuplicates = false
+    /// Pro: the Exclusive column, from **View → Show Exclusive Size**. Turning it on measures
+    /// the finished scan in the background, so scans stay as fast as before.
+    var showsExclusive = false {
+        didSet {
+            guard showsExclusive != oldValue else { return }
+            if !showsExclusive, sortOrder.first?.byExclusive == true { sortOrder = [.largestFirst] }
+            measureExclusiveSizes()
+        }
+    }
+    /// Pro: the current scan's exclusive sizes, once measured.
+    private(set) var exclusiveSizes: ExclusiveSizes?
+    /// Pro: the share of the scan measured so far, from 0 to 1, while measuring.
+    private(set) var exclusiveProgress: Double?
+    private var exclusiveTask: Task<Void, Never>?
+    private var exclusiveGeneration = 0
 
     var sizeMetric: SizeMetric = SizeMetric(rawValue: UserDefaults.standard.string(forKey: "sizeMetric") ?? "")
         ?? .allocated
@@ -428,6 +446,7 @@ final class ScanWorkspace {
     /// Leaves Pro's sort orders when **Settings → Pro features** turns off.
     func stopProFeatures() {
         stopComparing()
+        showsExclusive = false
         if mode == .cleanup || mode == .duplicates {
             mode = .folders
         }
@@ -436,6 +455,43 @@ final class ScanWorkspace {
         }
         if sortOrder.first?.key == .modified {
             sortOrder = [.largestFirst]
+        }
+    }
+
+    /// Pro: measures the finished scan's exclusive sizes while the Exclusive column is shown,
+    /// replacing any earlier measurement. Opened scans can't be measured: their files may be
+    /// elsewhere.
+    private func measureExclusiveSizes(reloadingRows: Bool = true) {
+        exclusiveTask?.cancel()
+        exclusiveTask = nil
+        exclusiveGeneration += 1
+        let hadSizes = exclusiveSizes != nil
+        exclusiveSizes = nil
+        exclusiveProgress = nil
+        if reloadingRows, hadSizes, sortOrder.first?.byExclusive == true { loadRows(keepingRows: true) }
+        guard showsExclusive, ProFeatures.isEnabled, importedFile == nil, let report, !report.isPreview else { return }
+        let generation = exclusiveGeneration
+        exclusiveProgress = 0
+        let showProgress: @Sendable (Double) -> Void = { [self] fraction in
+            Task { @MainActor in
+                guard exclusiveGeneration == generation, exclusiveSizes == nil else { return }
+                exclusiveProgress = fraction
+            }
+        }
+        exclusiveTask = Task { [weak self] in
+            let worker = Task.detached(priority: .utility) {
+                await ExclusiveSizes.measure(report, progress: showProgress)
+            }
+            let sizes = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard let self, !Task.isCancelled, self.exclusiveGeneration == generation, let sizes else { return }
+            self.exclusiveSizes = sizes
+            self.exclusiveProgress = nil
+            self.exclusiveTask = nil
+            if self.sortOrder.first?.byExclusive == true { self.loadRows(keepingRows: true) }
         }
     }
 
@@ -979,6 +1035,7 @@ final class ScanWorkspace {
         scanHasResults = true
         report = result
         if newRoot { refreshSavedScans() }
+        if showsExclusive || exclusiveSizes != nil { measureExclusiveSizes(reloadingRows: false) }
         issuePaths = Set(result.issues.map(\.path))
         let protectedIssues = result.protectedIssues
         protectedPaths = Set(protectedIssues.map(\.path))
@@ -1021,9 +1078,11 @@ final class ScanWorkspace {
         let metric = sizeMetric
         let comparison = mode == .folders ? comparison : nil
         let duplicates = duplicateGroups
+        let exclusive = exclusiveSizes
         let names = scope.dropFirst().map(\.name)
         let requested = sortOrder.first ?? .largestFirst
-        let sort = requested.byChange && comparison == nil ? .largestFirst : requested
+        let sort = (requested.byChange && comparison == nil) || (requested.byExclusive && exclusive == nil)
+            ? .largestFirst : requested
         rowsTask = Task { [weak self] in
             // Let a running sort release its buffers before allocating for a newer ranking.
             await previousTask?.value
@@ -1059,6 +1118,13 @@ final class ScanWorkspace {
                     // Largest growth first, or largest shrink first in ascending order.
                     rows = ranked.sorted { left, right in
                         let (a, b) = (changes.delta(for: left, metric: metric), changes.delta(for: right, metric: metric))
+                        if a == b { return left.name.utf8.lexicographicallyPrecedes(right.name.utf8) }
+                        return sort.order == .forward ? a < b : a > b
+                    }
+                } else if sort.byExclusive, let exclusive {
+                    // Most exclusive first, or least first in ascending order.
+                    rows = ranked.sorted { left, right in
+                        let (a, b) = (exclusive.bytes(for: left), exclusive.bytes(for: right))
                         if a == b { return left.name.utf8.lexicographicallyPrecedes(right.name.utf8) }
                         return sort.order == .forward ? a < b : a > b
                     }

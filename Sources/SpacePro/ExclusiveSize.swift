@@ -51,3 +51,77 @@ public enum ExclusiveSize {
         }
     }
 }
+
+/// Exclusive sizes of a whole scan for the Exclusive column, measured after the scan and
+/// only when the user asks, as the CLI explorer's Exclusive column measures them. Only
+/// files that share blocks and the folders above them are kept.
+public struct ExclusiveSizes: Sendable {
+    /// Shared bytes of each file that shares blocks, and the totals of the folders above,
+    /// by path.
+    let shared: [String: UInt64]
+
+    /// The bytes that moving `entry` to the Trash and emptying it frees at least.
+    public func bytes(for entry: ScanEntry) -> UInt64 {
+        entry.allocatedBytes - min(entry.allocatedBytes, shared[entry.path] ?? 0)
+    }
+
+    /// Measures every counted file of `report`, `concurrency` files at a time, and reports
+    /// the share done so far, from 0 to 1. Returns nil when the task is cancelled. Files
+    /// that can't be read count as unshared.
+    public static func measure(
+        _ report: ScanReport, concurrency: Int = 8, progress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async -> ExclusiveSizes? {
+        var files: [ScanEntry] = []
+        var folders = [report.root]
+        while let folder = folders.popLast() {
+            for child in folder.children {
+                if child.isDirectory {
+                    folders.append(child)
+                } else if !child.isHardLinkAlias, !child.isCloudOnly, !child.isPending, child.allocatedBytes > 0 {
+                    files.append(child)
+                }
+            }
+        }
+        let size = 2048
+        let chunks = stride(from: 0, to: files.count, by: size).map { files[$0..<min($0 + size, files.count)] }
+        var sharing: [(path: String, bytes: UInt64)] = []
+        var done = 0
+        await withTaskGroup(of: [(path: String, bytes: UInt64)].self) { group in
+            var next = 0
+            func addNext() {
+                guard next < chunks.count else { return }
+                let chunk = chunks[next]
+                next += 1
+                group.addTask {
+                    var found: [(path: String, bytes: UInt64)] = []
+                    for file in chunk {
+                        if Task.isCancelled { break }
+                        let path = file.path
+                        let bytes = min(ExclusiveSize.sharedBytes(atPath: path), file.allocatedBytes)
+                        if bytes > 0 { found.append((path, bytes)) }
+                    }
+                    return found
+                }
+            }
+            for _ in 0..<max(1, concurrency) { addNext() }
+            for await found in group {
+                sharing += found
+                done += 1
+                progress(Double(done) / Double(chunks.count))
+                addNext()
+            }
+        }
+        if Task.isCancelled { return nil }
+        let root = report.root.path
+        var shared: [String: UInt64] = [:]
+        for (path, bytes) in sharing {
+            var current = path
+            while true {
+                shared[current, default: 0] += bytes
+                guard current.count > root.count else { break }
+                current = (current as NSString).deletingLastPathComponent
+            }
+        }
+        return ExclusiveSizes(shared: shared)
+    }
+}

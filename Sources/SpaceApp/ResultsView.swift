@@ -14,6 +14,11 @@ struct ResultsView: View {
         proFeatures && workspace.comparison != nil && workspace.mode == .folders
     }
 
+    /// Pro's **View → Show Exclusive Size** adds an Exclusive column.
+    private var showsExclusive: Bool {
+        proFeatures && workspace.showsExclusive
+    }
+
     var body: some View {
         if let scope = workspace.visibleScope {
             VStack(spacing: 0) {
@@ -49,6 +54,9 @@ struct ResultsView: View {
             }
             .onChange(of: showsChanges, initial: true) { _, shown in
                 columns[visibility: "change"] = shown ? .visible : .hidden
+            }
+            .onChange(of: showsExclusive, initial: true) { _, shown in
+                columns[visibility: "exclusive"] = shown ? .visible : .hidden
             }
         }
     }
@@ -117,7 +125,12 @@ struct ResultsView: View {
 
     private func scopeCaption(_ scope: ScanEntry) -> String {
         let excluded = workspace.report?.excludedCount ?? 0
-        let suffix = excluded == 0 ? "" : " · \(ScanFormat.excluded(excluded))"
+        var suffix = excluded == 0 ? "" : " · \(ScanFormat.excluded(excluded))"
+        if let progress = workspace.exclusiveProgress {
+            suffix += " · Measuring exclusive sizes \(Int(progress * 100))%"
+        } else if workspace.showsExclusive, workspace.importedFile != nil {
+            suffix += " · Exclusive sizes need a scan of the files"
+        }
         if workspace.mode == .folders {
             if scope.isCloudOnly { return "Cloud only" }
             let count = ScanFormat.items(scope.children.count)
@@ -350,6 +363,23 @@ struct ResultsView: View {
     }
 
     @ViewBuilder
+    private func exclusiveCell(_ entry: ScanEntry) -> some View {
+        if let sizes = workspace.exclusiveSizes {
+            let bytes = sizes.bytes(for: entry)
+            Text(ScanFormat.size(bytes))
+                .monospacedDigit()
+                .foregroundStyle(bytes < entry.allocatedBytes ? Color.secondary : Color.primary)
+                .help(bytes < entry.allocatedBytes
+                    ? "Emptying the Trash frees at least this much: clones or other hard links share the rest"
+                    : "Emptying the Trash frees all of it")
+        } else {
+            Text("…")
+                .foregroundStyle(.tertiary)
+                .accessibilityLabel(workspace.importedFile == nil ? "Measuring" : "Not measured for opened scans")
+        }
+    }
+
+    @ViewBuilder
     private func changeCell(_ entry: ScanEntry) -> some View {
         switch workspace.folderChanges?.change(for: entry) {
         case .added:
@@ -388,6 +418,15 @@ struct ResultsView: View {
             }
             .width(min: 52, ideal: 72, max: 110)
 
+            // Pro: what moving each item to the Trash and emptying it frees at least.
+            TableColumn("Exclusive", sortUsing: EntrySort.mostExclusive) { entry in
+                exclusiveCell(entry)
+            }
+            .width(min: 80, ideal: 100, max: 150)
+            .customizationID("exclusive")
+            .defaultVisibility(.hidden)
+            .disabledCustomizationBehavior(.visibility)
+
             TableColumn("Change", sortUsing: EntrySort.biggestGrowth) { entry in
                 changeCell(entry)
             }
@@ -413,7 +452,7 @@ struct ResultsView: View {
         }
         .tableStyle(.inset(alternatesRowBackgrounds: false))
         // Rebuild the table when a Pro column appears or leaves, so its cells fill in.
-        .id([showsChanges, proFeatures])
+        .id([showsChanges, proFeatures, showsExclusive])
         .contextMenu(forSelectionType: String.self) { identifiers in
             if identifiers.count > 1 {
                 Button("Move \(identifiers.count) Items to Trash…") {

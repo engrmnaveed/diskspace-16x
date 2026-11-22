@@ -50,6 +50,13 @@ struct WorkspaceCommands: Commands {
             }
             .pickerStyle(.inline)
             .disabled(!hasWindow)
+            if proFeatures {
+                Toggle("Show Exclusive Size", isOn: Binding(
+                    get: { workspace.showsExclusive },
+                    set: { workspace.showsExclusive = $0 }
+                ))
+                .disabled(!hasWindow)
+            }
             Divider()
         }
         CommandGroup(replacing: .newItem) {

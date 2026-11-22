@@ -112,8 +112,8 @@ This is Space 16X Pro. It adds:
              APFS container's volumes, purgeable space and local snapshots, and on
              Linux, space reserved for root and deleted files still held open.
 The explorer adds a Modified column with each item's newest modification date, t lists
-the file types in the open folder, u lists cleanup suggestions, and m draws the open
-folder as a treemap.
+the file types in the open folder, u lists cleanup suggestions, m draws the open folder
+as a treemap, and X adds an Exclusive column, measured after the scan.
 ";
 
 /// Subcommands only Space 16X Pro has. Basic builds answer them with an install hint.
