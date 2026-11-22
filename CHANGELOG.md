@@ -9,6 +9,7 @@
 - Put each version's changelog section in its GitHub release notes, above the standard text about the assets. `scripts/release-notes VERSION` prints them.
 - See exclusive sizes beside every item in Space 16X Pro. Press `X` in the CLI explorer, or choose **View → Show Exclusive Size** in the Mac app, to add an **Exclusive** column: what moving each item to the Trash and emptying it frees at least, without blocks shared with clones or other hard links. Both measure the finished scan in the background with their progress shown, and only when you ask, so scans stay as fast as before. The Mac app's column sorts like the others.
 - Find duplicates and explain disk space in the CLI explorer of Space 16X Pro. `D` opens a **Duplicates** view that reads nothing until you press Enter, then lists each group's copies with their extra space and clones marked, for Space and `d`'s confirmed Move to Trash. `E` shows `space16x explain`'s report for the open folder's volume.
+- List each Time Machine local snapshot's date in Space 16X Pro's `space16x explain` and the Mac app's **Explain Disk Space**, oldest first, with how macOS frees them: after about 24 hours, or sooner when space runs low. macOS has no supported way to size each snapshot without root, so neither shows per-snapshot sizes, and neither deletes snapshots.
 
 ## 0.8.0
 
