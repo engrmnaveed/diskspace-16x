@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Stop the Mac app's folder list from logging an AppKit warning, "reentrant operation in its NSTableView delegate", when the age filter was cleared or the Exclusive sort was reversed. Re-sorting, switching between allocated and apparent sizes, and changing the age filter now show the new order from the top, keeping the selection and the keyboard focus. Showing or hiding a Pro column keeps the keyboard focus too.
+
 ## 0.9.0
 
 - Count only the space that removing duplicates would free in Space 16X Pro. A copy that shares its blocks with another file, such as an APFS clone made by Finder or `cp -c`, a Btrfs or XFS reflink, or a file with another hard link, is marked **(clone)** in `space16x duplicates`, and **Extra** counts only what moving every copy but one to the Trash frees at least. A group of a file, a separate copy and a clone of the file now shows 2 MB extra for 2 MB files instead of 4 MB. JSON adds each file's `exclusiveBytes` and `clone`. The Mac app's **Duplicates** view labels them **Clone, frees nothing** and counts the same total.

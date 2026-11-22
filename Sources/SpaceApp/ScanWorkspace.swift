@@ -96,6 +96,9 @@ final class ScanWorkspace {
     private var hasPrivacyRefusals = false
     private(set) var scope: [ScanEntry] = []
     private(set) var rows: [ScanEntry] = []
+    /// Changes when the folder list should be rebuilt with the new rows instead of updated in
+    /// place, after the user rearranges them. See `loadRows(keepingRows:rearranging:)`.
+    private(set) var tableGeneration = 0
     private(set) var rankedScope: ScanEntry?
     private(set) var isLoadingRows = false
     private(set) var scanPath: String?
@@ -175,14 +178,14 @@ final class ScanWorkspace {
         didSet {
             guard sizeMetric != oldValue else { return }
             UserDefaults.standard.set(sizeMetric.rawValue, forKey: "sizeMetric")
-            loadRows(keepingRows: true)
+            loadRows(keepingRows: true, rearranging: true)
         }
     }
 
     var sortOrder: [EntrySort] = [.largestFirst] {
         didSet {
             guard sortOrder != oldValue else { return }
-            loadRows(keepingRows: true)
+            loadRows(keepingRows: true, rearranging: true)
         }
     }
 
@@ -454,7 +457,7 @@ final class ScanWorkspace {
                     title: "Comparing with “\(name)”",
                     message: "The Change column shows what grew or shrank since that scan. Click its header to rank by change."
                 )
-                loadRows(keepingRows: true)
+                loadRows(keepingRows: true, rearranging: true)
             case let .failure(error):
                 notice = Notice(title: "Couldn’t open “\(name)”", message: error.localizedDescription, isError: true)
             }
@@ -482,7 +485,7 @@ final class ScanWorkspace {
     private func applyAgeFilter() {
         guard let unfilteredReport else { return }
         if olderThanDays != nil { stopComparing() }
-        acceptReport(unfilteredReport)
+        acceptReport(unfilteredReport, rearranging: true)
         if olderThanDays != nil, importedFile != nil {
             notice = Notice(
                 title: "Opened scans don’t have modification dates",
@@ -507,7 +510,7 @@ final class ScanWorkspace {
         let hadSizes = exclusiveSizes != nil
         exclusiveSizes = nil
         exclusiveProgress = nil
-        if reloadingRows, hadSizes, sortOrder.first?.byExclusive == true { loadRows(keepingRows: true) }
+        if reloadingRows, hadSizes, sortOrder.first?.byExclusive == true { loadRows(keepingRows: true, rearranging: true) }
         guard showsExclusive, ProFeatures.isEnabled, importedFile == nil, let report, !report.isPreview else { return }
         let generation = exclusiveGeneration
         exclusiveProgress = 0
@@ -530,7 +533,7 @@ final class ScanWorkspace {
             self.exclusiveSizes = sizes
             self.exclusiveProgress = nil
             self.exclusiveTask = nil
-            if self.sortOrder.first?.byExclusive == true { self.loadRows(keepingRows: true) }
+            if self.sortOrder.first?.byExclusive == true { self.loadRows(keepingRows: true, rearranging: true) }
         }
     }
 
@@ -1103,12 +1106,15 @@ final class ScanWorkspace {
                     isError: true
                 )
             }
-            loadRows(keepingRows: true)
+            loadRows(keepingRows: true, rearranging: true)
         }
     }
 
+    /// Shows new results. `rearranging` rebuilds the folder list when its rows change, for a
+    /// change the user made, such as the age filter, rather than results arriving from a scan.
     private func acceptReport(
-        _ incoming: ScanReport, from source: ReportSource? = nil, duplicates: [DuplicateGroup]? = nil
+        _ incoming: ScanReport, from source: ReportSource? = nil, duplicates: [DuplicateGroup]? = nil,
+        rearranging: Bool = false
     ) {
         duplicateGroups = duplicates
         switch source {
@@ -1146,7 +1152,7 @@ final class ScanWorkspace {
             }
             let sameLocation = mode != .folders || oldScope.last?.id == scope.last?.id
             if !sameLocation { selection = nil }
-            loadRows(keepingRows: sameLocation)
+            loadRows(keepingRows: sameLocation, rearranging: rearranging)
         } else if mode != .folders {
             mode = .folders
         } else {
@@ -1155,7 +1161,15 @@ final class ScanWorkspace {
         }
     }
 
-    private func loadRows(keepingRows: Bool = false) {
+    /// Ranks the open folder's rows in the background. `keepingRows` leaves the current rows
+    /// on screen until the new ones are ready, so the list doesn't blank for a re-sort.
+    ///
+    /// `rearranging` marks a change the user made, such as a new sort order. When it puts the
+    /// rows in a different order, the folder list is rebuilt with them instead of updated in
+    /// place: when rows are inserted or moved in more than one place, NSTableView measures
+    /// their heights reentrantly and logs a warning that it will become an assertion.
+    /// Results streaming in from a scan update the list in place, keeping its scroll position.
+    private func loadRows(keepingRows: Bool = false, rearranging: Bool = false) {
         let previousTask = rowsTask
         previousTask?.cancel()
         if !keepingRows {
@@ -1175,6 +1189,7 @@ final class ScanWorkspace {
         let duplicates = duplicateGroups
         let exclusive = exclusiveSizes
         let names = scope.dropFirst().map(\.name)
+        let previousRows = rearranging ? rows : []
         let requested = sortOrder.first ?? .largestFirst
         let sort = (requested.byChange && comparison == nil) || (requested.byExclusive && exclusive == nil)
             ? .largestFirst : requested
@@ -1235,7 +1250,11 @@ final class ScanWorkspace {
                 } else {
                     rows = ranked.ordered(by: sort.key, ascending: sort.order == .forward, metric: metric)
                 }
-                return (rows: rows, chart: Array(ranked.prefix(32)), changes: changes, labels: labels, review: review)
+                let rearranged = !previousRows.isEmpty && !previousRows.elementsEqual(rows) { $0.path == $1.path }
+                return (
+                    rows: rows, chart: Array(ranked.prefix(32)), changes: changes, labels: labels, review: review,
+                    rearranged: rearranged
+                )
             }
             let result = await withTaskCancellationHandler {
                 await worker.value
@@ -1244,6 +1263,7 @@ final class ScanWorkspace {
             }
             guard !Task.isCancelled, let self else { return }
             rankedScope = mode == .folders ? folder : report.root
+            if result.rearranged { tableGeneration &+= 1 }
             rows = result.rows
             chartRows = result.chart
             folderChanges = result.changes

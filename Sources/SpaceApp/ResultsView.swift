@@ -11,6 +11,10 @@ struct ResultsView: View {
     @ViewState private var columns = TableColumnCustomization<ScanEntry>()
     /// The Pro columns `columns` was recorded with.
     @ViewState private var columnsShown: [Bool] = []
+    /// Whether the folder list has keyboard focus.
+    @FocusState private var tableFocused: Bool
+    /// Set while a rebuilt folder list should take back the keyboard focus the old one had.
+    @ViewState private var refocusesTable = false
 
     /// Pro's Compare adds a Change column to the folder list.
     private var showsChanges: Bool {
@@ -60,6 +64,16 @@ struct ResultsView: View {
 
     /// Which of Pro's columns the table shows: Modified, Change and Exclusive.
     private var proColumns: [Bool] { [proFeatures, showsChanges, showsExclusive] }
+
+    /// What the folder list is rebuilt for: its Pro columns, and the user rearranging its rows.
+    private struct TableIdentity: Hashable {
+        let columns: [Bool]
+        let generation: Int
+    }
+
+    private var tableIdentity: TableIdentity {
+        TableIdentity(columns: proColumns, generation: workspace.tableGeneration)
+    }
 
     /// The column customization with Pro's columns shown or hidden for the current state,
     /// so a rebuilt table lays out only the columns it shows. Column widths apply only to the
@@ -483,8 +497,19 @@ struct ResultsView: View {
 
         }
         .tableStyle(.inset(alternatesRowBackgrounds: false))
-        // Rebuild the table when a Pro column appears or leaves, so its cells fill in.
-        .id(proColumns)
+        .focused($tableFocused)
+        // Rebuild the table when a Pro column appears or leaves, so its cells fill in, and when
+        // the user rearranges the rows, which NSTableView can't always apply in place.
+        .id(tableIdentity)
+        // The old table leaves the window with the focus, so the new one takes it back for
+        // the arrow keys, Return and Space.
+        .onChange(of: tableIdentity) {
+            if tableFocused { refocusesTable = true }
+        }
+        .onChange(of: tableFocused) { _, focused in
+            if !focused, refocusesTable { tableFocused = true }
+            refocusesTable = false
+        }
         .contextMenu(forSelectionType: String.self) { identifiers in
             if identifiers.count > 1 {
                 Button("Move \(identifiers.count) Items to Trash…") {
