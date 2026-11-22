@@ -343,6 +343,14 @@ def check_diff(binary):
         assert piped.returncode == 0 and json.loads(piped.stdout)["changeBytes"] == report["changeBytes"]
         same = json.loads(run(binary, "diff", newer, root, "--json").stdout)
         assert same["changeBytes"] == 0 and same["entries"] == [], same
+        # --budget exits with 3 when the total grew by more than it.
+        growth = report["changeBytes"]
+        over = run(binary, "diff", old, root, "--budget", str(growth - 1), status=3).stdout
+        assert "Over the " in over and " budget by " in over, over
+        within = json.loads(run(binary, "diff", old, root, "--budget", str(growth), "--json").stdout)
+        assert within["budgetBytes"] == growth and within["overBudget"] is False, within
+        assert "overBudget" not in report, report
+        assert run(binary, "diff", old, root, "--budget", "big", status=1).stderr
         for invalid in (("diff", old), ("diff", "-", "-"), ("diff", base / "missing.json", root)):
             assert run(binary, *invalid, status=1).stderr
 

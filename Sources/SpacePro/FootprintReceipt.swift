@@ -50,10 +50,42 @@ public enum FootprintReceipt {
         }
     }
 
-    /// The receipt in Markdown, with the `limit` largest file changes.
+    /// The UserDefaults key for each operation's last budget, by its lowercased name.
+    public static let budgetsKey = "footprintBudgets"
+
+    /// Parses a budget such as `500 MB`, `2GB`, `1.5 G` or `750000`, in decimal units as
+    /// `space16x diff --budget` takes them. Nil for an empty or unreadable size.
+    public static func parseBudget(_ text: String) -> UInt64? {
+        let compact = text.uppercased().filter { !$0.isWhitespace }
+        let number = compact.hasSuffix("B") ? String(compact.dropLast()) : compact
+        guard let unit = number.last else { return nil }
+        let scale: Double
+        var digits = number
+        switch unit {
+        case "K": scale = 1e3
+        case "M": scale = 1e6
+        case "G": scale = 1e9
+        case "T": scale = 1e12
+        default: scale = 1
+        }
+        if scale != 1 { digits.removeLast() }
+        guard !digits.isEmpty, digits.allSatisfy({ $0.isNumber || $0 == "." }), let value = Double(digits) else {
+            return nil
+        }
+        let bytes = (value * scale).rounded()
+        return bytes < 1.8e19 ? UInt64(bytes) : nil
+    }
+
+    /// Whether growing by `delta` bytes exceeds `budget`, as `space16x diff --budget` decides.
+    public static func isOverBudget(_ delta: Int64, budget: UInt64) -> Bool {
+        delta > 0 && UInt64(delta) > budget
+    }
+
+    /// The receipt in Markdown, with the `limit` largest file changes and, with a budget,
+    /// whether the operation stayed within it.
     public static func markdown(
         label: String, comparison: ScanComparison, after: ScanReport, afterDate: Date?,
-        metric: SizeMetric, version: String, limit: Int = 25
+        metric: SizeMetric, version: String, limit: Int = 25, budget: UInt64? = nil
     ) -> String {
         let before = comparison.baseline
         let changes = fileChanges(before: before.root, after: after.root, metric: metric)
@@ -76,6 +108,15 @@ public enum FootprintReceipt {
             "",
             "Files gained \(size(gained)) and lost \(size(freed)): \(changes.count.formatted()) \(changes.count == 1 ? "file" : "files") changed.",
         ]
+        if let budget {
+            lines.append("")
+            if isOverBudget(total, budget: budget) {
+                lines.append("**Over budget:** the operation grew \(size(total.magnitude)), \(size(total.magnitude - budget)) more than its \(size(budget)) budget.")
+            } else {
+                let spare = budget - UInt64(max(0, total))
+                lines.append("**Within budget:** the operation's \(size(budget)) budget has \(size(spare)) to spare.")
+            }
+        }
         if before.root.path != after.root.path {
             lines.append("")
             lines.append("The scans are of different folders, compared by the paths below each one.")

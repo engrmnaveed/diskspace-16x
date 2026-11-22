@@ -49,6 +49,28 @@ pub struct DiffOptions {
     metric: Metric,
     json: bool,
     threads: Option<usize>,
+    /// The most the total may grow before the exit status reports it.
+    budget: Option<u64>,
+}
+
+/// The exit status of `diff` and `history diff` when the total grew by more than
+/// `--budget`.
+const OVER_BUDGET: u8 = 3;
+
+/// Takes the size after `--budget`, in bytes or decimal units such as `500M`.
+fn take_budget(
+    current: &mut Option<u64>,
+    arguments: &mut impl Iterator<Item = OsString>,
+) -> Result<(), String> {
+    if current.is_some() {
+        return Err("Use --budget once.".into());
+    }
+    let budget = arguments
+        .next()
+        .and_then(|value| duplicates::parse_size(value.to_str()?))
+        .ok_or("--budget requires a size, such as 500M or 2GB.")?;
+    *current = Some(budget);
+    Ok(())
 }
 
 /// Options only Pro's `scan` takes, listed in `main.rs`'s `PRO_SCAN_OPTIONS`.
@@ -377,6 +399,7 @@ fn parse_history(arguments: impl Iterator<Item = OsString>) -> Result<crate::Com
     let mut since = None;
     let mut selection = None;
     let mut metric = None;
+    let mut budget = None;
     let mut literal = false;
     let mut chosen = 0;
     while let Some(argument) = arguments.next() {
@@ -416,6 +439,7 @@ fn parse_history(arguments: impl Iterator<Item = OsString>) -> Result<crate::Com
                 });
             }
             ("diff", Some("--apparent")) if metric.is_none() => metric = Some(Metric::Apparent),
+            ("diff", Some("--budget")) => take_budget(&mut budget, &mut arguments)?,
             _ => return Err(format!("Unknown or repeated option {argument:?}.")),
         }
     }
@@ -432,6 +456,7 @@ fn parse_history(arguments: impl Iterator<Item = OsString>) -> Result<crate::Com
             metric: metric.unwrap_or_default(),
             json,
             threads,
+            budget,
         },
         _ => history::HistoryCommand::List { path, json },
     };
@@ -444,6 +469,7 @@ fn parse_diff(mut arguments: impl Iterator<Item = OsString>) -> Result<crate::Co
     let mut metric = None;
     let mut json = false;
     let mut threads = None;
+    let mut budget = None;
     let mut literal = false;
     while let Some(argument) = arguments.next() {
         if literal || argument == "-" || !crate::is_option(&argument) {
@@ -467,6 +493,7 @@ fn parse_diff(mut arguments: impl Iterator<Item = OsString>) -> Result<crate::Co
             Some("--json") if !json => json = true,
             Some("--apparent") if metric.is_none() => metric = Some(Metric::Apparent),
             Some("--threads") => crate::take_threads(&mut threads, &mut arguments)?,
+            Some("--budget") => take_budget(&mut budget, &mut arguments)?,
             _ => return Err(format!("Unknown or repeated option {argument:?}.")),
         }
     }
@@ -483,6 +510,7 @@ fn parse_diff(mut arguments: impl Iterator<Item = OsString>) -> Result<crate::Co
         metric: metric.unwrap_or_default(),
         json,
         threads,
+        budget,
     })))
 }
 
@@ -532,16 +560,29 @@ fn run_diff(options: DiffOptions) -> io::Result<u8> {
     };
     let stdout = io::stdout().lock();
     if options.json {
-        diff::write_json(stdout, &summary, options.selection, &changes)?;
+        diff::write_json(
+            stdout,
+            &summary,
+            options.selection,
+            &changes,
+            options.budget,
+        )?;
     } else {
-        diff::write_plain(stdout, &summary, &changes)?;
+        diff::write_plain(stdout, &summary, &changes, options.budget)?;
         if let Some(excludes) = &excludes {
             crate::report_issues(&new.issues, true);
             crate::report_excluded(new.excluded_count, excludes.sources().len());
         }
     }
     let partial = !old.report.issues.is_empty() || !new.issues.is_empty();
-    Ok(if partial { 2 } else { 0 })
+    // Growth past the budget is what a build check acts on, even in a partial scan.
+    Ok(if summary.over_budget(options.budget) {
+        OVER_BUDGET
+    } else if partial {
+        2
+    } else {
+        0
+    })
 }
 
 #[cfg(test)]
@@ -577,7 +618,9 @@ mod tests {
             }))) if path == Path::new(".")
         ));
         assert_eq!(
-            history(&["diff", "/srv", "--since", "7", "--top", "5", "--json"]),
+            history(&[
+                "diff", "/srv", "--since", "7", "--top", "5", "--json", "--budget", "2G"
+            ]),
             command(history::HistoryCommand::Diff {
                 path: "/srv".into(),
                 since: 7,
@@ -585,6 +628,7 @@ mod tests {
                 metric: Metric::Allocated,
                 json: true,
                 threads: None,
+                budget: Some(2_000_000_000),
             })
         );
         // A folder named like an action can still be listed.
@@ -676,8 +720,16 @@ mod tests {
                 metric: Metric::Apparent,
                 json: true,
                 threads: None,
+                budget: None,
             })))
         );
+        assert!(matches!(
+            args(&["old.json", "/data", "--budget", "500M"]),
+            Ok(crate::Command::Pro(Command::Diff(DiffOptions {
+                budget: Some(500_000_000),
+                ..
+            })))
+        ));
         assert!(matches!(
             args(&["-", "--threads", "2", "--", "-new"]),
             Ok(crate::Command::Pro(Command::Diff(DiffOptions { threads: Some(2), ref new, .. })))
@@ -691,6 +743,9 @@ mod tests {
             &["a", "b", "--depth", "1", "--top", "2"],
             &["a", "b", "--json", "--json"],
             &["a", "b", "--color"],
+            &["a", "b", "--budget"],
+            &["a", "b", "--budget", "big"],
+            &["a", "b", "--budget", "1M", "--budget", "2M"],
         ] {
             assert!(args(invalid).is_err(), "{invalid:?}");
         }
