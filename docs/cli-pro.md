@@ -5,7 +5,7 @@ Space 16X Pro is a free edition of the CLI with more analysis. It has every Basi
 ## Compare scans with diff
 
 ```text
-space16x diff OLD NEW|PATH [--depth N | --top N] [--apparent] [--json] [--threads N]
+space16x diff OLD NEW|PATH [--depth N | --top N] [--apparent] [--json] [--threads N] [--budget SIZE]
 ```
 
 `space16x diff` shows what grew or shrank. OLD is a saved scan: a `scan --export` file, an ncdu or gdu export, or `-` for standard input. NEW is another saved scan, or a folder to scan now. A folder scan uses OLD's exclude patterns and `--threads`, so both sides count the same things. Entries match by their path below each root, so the roots can differ, as for a server's export compared with a backup.
@@ -32,8 +32,9 @@ ssh server space16x scan /srv --export - | space16x diff - srv-last-week.json
 | `--apparent` | Compare apparent sizes instead of allocated bytes. |
 | `--json` | Write schema 3 with `schemaVersion`, `edition`, `rankedBy`, `old` and `new` summaries (`scope`, `allocatedBytes`, `apparentBytes`, `itemCount`, `isPartial`), `changeBytes`, and either `depth` and `entries` or `topLimit` and `topFiles`. Each change has `path`, `kind`, `oldBytes`, `newBytes` (`null` when that scan doesn't have it), and a signed `changeBytes`. |
 | `--threads N` | Threads for scanning NEW when it's a folder. |
+| `--budget SIZE` | Say whether the total grew by more than SIZE, in bytes or a decimal unit such as `500M` or `2GB`, and exit with `3` when it did. A last line reads "Within the 500.0 MB budget, with 120.0 MB to spare." or "Over the 500.0 MB budget by 80.0 MB.", and JSON adds `budgetBytes` and `overBudget`. A build or CI step can fail on it: `space16x history diff . --budget 500M`. |
 
-Entries only one scan has are marked `[added]` or `[removed]`. The exit code is `0`, `2` when either scan is partial, and `1` for errors.
+Entries only one scan has are marked `[added]` or `[removed]`. The exit code is `0`, `2` when either scan is partial, `3` with `--budget` when the total grew by more than the budget, even if a scan is partial, and `1` for errors. Version 0.9.0 added `--budget` and exit code `3`.
 
 ## Modification times and --older-than
 
@@ -192,6 +193,7 @@ A folder is listed only when it was read completely and uses at least 1 MB, and 
 space16x history save [PATH] [--threads N] [EXCLUDES]
 space16x history [list] [PATH] [--json]
 space16x history diff [PATH] [--since DAYS] [--depth N | --top N] [--apparent] [--json] [--threads N]
+                      [--budget SIZE]
 ```
 
 `history save` scans PATH and keeps the scan, so you can later see what grew since then. `history` lists the kept scans, newest first, of PATH or of every folder. `history diff` compares PATH now with its newest kept scan, using that scan's exclude patterns, and shows the same report as [`diff`](#compare-scans-with-diff). With `--since DAYS`, it uses the newest kept scan that is at least DAYS days old, which answers "what grew this week?":

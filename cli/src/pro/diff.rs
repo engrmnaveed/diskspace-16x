@@ -201,6 +201,11 @@ pub struct Summary<'a> {
 }
 
 impl Summary<'_> {
+    /// Whether the total grew by more than `budget` bytes.
+    pub fn over_budget(&self, budget: Option<u64>) -> bool {
+        budget.is_some_and(|budget| self.total().delta() > i128::from(budget))
+    }
+
     fn total(&self) -> Change {
         Change {
             path: self.new.tree.root_path().to_path_buf(),
@@ -211,7 +216,12 @@ impl Summary<'_> {
     }
 }
 
-pub fn write_plain(out: impl Write, summary: &Summary<'_>, changes: &[Change]) -> io::Result<()> {
+pub fn write_plain(
+    out: impl Write,
+    summary: &Summary<'_>,
+    changes: &[Change],
+    budget: Option<u64>,
+) -> io::Result<()> {
     let mut out = io::BufWriter::new(out);
     writeln!(out, "{:>11} {:>10} {:>10}  Path", "Change", "Old", "New")?;
     let line = |out: &mut io::BufWriter<_>, change: &Change, note: &str| {
@@ -240,6 +250,25 @@ pub fn write_plain(out: impl Write, summary: &Summary<'_>, changes: &[Change]) -
         "  [total]"
     };
     line(&mut out, &summary.total(), note)?;
+    if let Some(budget) = budget {
+        let growth = summary.total().delta();
+        let limit = report::format_bytes(budget);
+        if summary.over_budget(Some(budget)) {
+            let over = (growth - i128::from(budget)) as u64;
+            writeln!(
+                out,
+                "Over the {limit} budget by {}.",
+                report::format_bytes(over)
+            )?;
+        } else {
+            let spare = (i128::from(budget) - growth.max(0)) as u64;
+            writeln!(
+                out,
+                "Within the {limit} budget, with {} to spare.",
+                report::format_bytes(spare)
+            )?;
+        }
+    }
     out.flush()
 }
 
@@ -252,6 +281,10 @@ struct JsonDiff<'a> {
     old: JsonScan<'a>,
     new: JsonScan<'a>,
     change_bytes: i128,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    budget_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    over_budget: Option<bool>,
     #[serde(flatten)]
     result: JsonResult<'a>,
 }
@@ -326,6 +359,7 @@ pub fn write_json(
     summary: &Summary<'_>,
     selection: Selection,
     changes: &[Change],
+    budget: Option<u64>,
 ) -> io::Result<()> {
     let mut out = io::BufWriter::new(out);
     let list = changes.iter().map(JsonChange::from).collect();
@@ -339,6 +373,8 @@ pub fn write_json(
         old: JsonScan::from(summary.old),
         new: JsonScan::from(summary.new),
         change_bytes: summary.total().delta(),
+        budget_bytes: budget,
+        over_budget: budget.map(|budget| summary.over_budget(Some(budget))),
         result: match selection {
             Selection::Depth(depth) => JsonResult::Depth {
                 depth,
@@ -487,7 +523,7 @@ mod tests {
         };
         let changes = entries(&old.tree, &new.tree, 1, Metric::Allocated);
         let mut text = Vec::new();
-        write_plain(&mut text, &summary, &changes).unwrap();
+        write_plain(&mut text, &summary, &changes, None).unwrap();
         assert_eq!(
             String::from_utf8(text).unwrap(),
             concat!(
@@ -497,13 +533,43 @@ mod tests {
             )
         );
         let mut json = Vec::new();
-        write_json(&mut json, &summary, Selection::Depth(1), &changes).unwrap();
+        write_json(&mut json, &summary, Selection::Depth(1), &changes, None).unwrap();
         let json: serde_json::Value = serde_json::from_slice(&json).unwrap();
+        assert!(json.get("budgetBytes").is_none() && json.get("overBudget").is_none());
         assert_eq!(json["changeBytes"], -2_000_000);
         assert_eq!(json["edition"], "pro");
         assert_eq!(json["entries"][0]["oldBytes"], 3_000_000);
         assert_eq!(json["old"]["allocatedBytes"], 3_000_000);
         assert_eq!(signed(0), "0 B");
         assert_eq!(signed(1500), "+2 KB");
+
+        // The Mac app's footprint receipts check budgets by the same rule.
+        let grown = Summary {
+            old: &new,
+            new: &old,
+            metric: Metric::Allocated,
+        };
+        assert!(!summary.over_budget(Some(0)) && !summary.over_budget(None));
+        assert!(grown.over_budget(Some(1_999_999)));
+        assert!(!grown.over_budget(Some(2_000_000)));
+        let mut text = Vec::new();
+        write_plain(&mut text, &grown, &[], Some(1_500_000)).unwrap();
+        let text = String::from_utf8(text).unwrap();
+        assert!(
+            text.ends_with("Over the 1.5 MB budget by 500 KB.\n"),
+            "{text}"
+        );
+        let mut text = Vec::new();
+        write_plain(&mut text, &summary, &[], Some(1_500_000)).unwrap();
+        let text = String::from_utf8(text).unwrap();
+        assert!(
+            text.ends_with("Within the 1.5 MB budget, with 1.5 MB to spare.\n"),
+            "{text}"
+        );
+        let mut json = Vec::new();
+        write_json(&mut json, &grown, Selection::Top(5), &[], Some(1_500_000)).unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&json).unwrap();
+        assert_eq!(json["budgetBytes"], 1_500_000);
+        assert_eq!(json["overBudget"], true);
     }
 }

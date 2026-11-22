@@ -44,6 +44,7 @@ pub enum HistoryCommand {
         metric: Metric,
         json: bool,
         threads: Option<usize>,
+        budget: Option<u64>,
     },
 }
 
@@ -120,6 +121,7 @@ pub fn run(command: HistoryCommand) -> io::Result<u8> {
             metric,
             json,
             threads,
+            budget,
         } => {
             let folder = directory()?;
             let scope = scanner::scope(&path)?;
@@ -155,6 +157,7 @@ pub fn run(command: HistoryCommand) -> io::Result<u8> {
                 metric,
                 json,
                 threads,
+                budget,
             })
         }
     }

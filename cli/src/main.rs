@@ -71,8 +71,10 @@ duplicates and reports. Install it with install.sh --pro. See docs/install.md.
 const EDITION_HELP: &str = "
 This is Space 16X Pro. It adds:
   space16x diff OLD NEW|PATH [--depth N | --top N] [--apparent] [--json] [--threads N]
+                [--budget SIZE]
              Compare a saved scan with another one, or with PATH scanned now using the
              saved scan's excludes. Lists what changed, or the N files that changed most.
+             With --budget, exit with 3 when the total grew by more than SIZE.
   scan --older-than DAYS
              Count only files last modified more than DAYS days ago, and the folders
              that hold them. JSON reports add newestModified, as Unix seconds, to each
@@ -100,7 +102,7 @@ This is Space 16X Pro. It adds:
   space16x history [PATH] [--json]
              List the kept scans, newest first, of PATH or of every folder.
   space16x history diff [PATH] [--since DAYS] [--depth N | --top N] [--apparent]
-                        [--json] [--threads N]
+                        [--json] [--threads N] [--budget SIZE]
              Compare PATH now with its newest kept scan, or the newest one at least
              DAYS days old.
   space16x duplicates [PATH] [--min-size SIZE] [--json] [--threads N] [EXCLUDES]

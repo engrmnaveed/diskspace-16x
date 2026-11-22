@@ -87,7 +87,7 @@ The owner's v0.8.0 QA found that every Pro feature works but is easy to miss, an
   - Otherwise, show each snapshot's date and how macOS frees snapshots, and record here why per-snapshot sizes stay out.
   - No private APIs and no deletion.
   - **Outcome (2026-11-22):** there's no supported way. `tmutil listlocalsnapshots` and `diskutil apfs listSnapshots` give only names, XIDs and whether a snapshot is purgeable, never a size. `fs_snapshot_list` needs root, and sizing a snapshot otherwise means mounting it (root) and walking it file by file, as `tmutil uniquesize` would. So `explain` and the Mac sheet list each snapshot's date, oldest first, with how macOS frees them (after about 24 hours, or sooner when space runs low), and per-snapshot sizes stay out.
-- [ ] M7.6 Size budgets for Build Footprint [Pro]:
+- [x] M7.6 Size budgets for Build Footprint [Pro]:
   - **CLI:** `diff` and `history diff` take `--budget SIZE`, with a new, documented exit status when growth exceeds it (versioned in `docs/cli-pro.md`).
   - **Mac:** the receipt sheet takes an optional budget, remembered per operation name, and the receipt says whether the operation stayed within it.
 - [ ] M7.7 "Review" cleanup suggestions [Pro]:

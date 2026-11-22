@@ -550,7 +550,7 @@ final class ScanWorkspace {
 
     /// Saves the results in ncdu's JSON format, which the CLI, ncdu, and gdu also open.
     /// Pro: saves a Build Footprint receipt of the comparison, labelled `label`, as Markdown.
-    func saveReceipt(label: String) {
+    func saveReceipt(label: String, budget: UInt64? = nil) {
         guard canSaveReceipt, let comparison, let report else { return }
         let panel = NSSavePanel()
         panel.title = "Save Footprint Receipt"
@@ -571,7 +571,7 @@ final class ScanWorkspace {
                 Result {
                     let text = FootprintReceipt.markdown(
                         label: label, comparison: comparison, after: report, afterDate: scannedAt,
-                        metric: metric, version: version
+                        metric: metric, version: version, budget: budget
                     )
                     try Data(text.utf8).write(to: url, options: .atomic)
                 }
