@@ -1,0 +1,30 @@
+# Space 16X user guide
+
+Space 16X shows you what's filling up your disk, so you can free space with confidence.
+
+- **See it at a glance.** Your folders ranked from biggest to smallest, as a list or as a picture.
+- **Find the big files fast.** The largest files anywhere on a disk, in one list.
+- **Clean up safely.** Move what you don't need to the Trash. Nothing is gone until you empty it.
+
+It's free and open source, works offline, and needs no account.
+
+## Pick your path
+
+| On a Mac, with windows and charts | In a terminal, on a Mac or Linux |
+| --- | --- |
+| **[Mac app quick start →](mac-quick-start.md)** | **[Terminal quick start →](terminal-quick-start.md)** |
+| Click a disk or folder, then browse a list, a treemap and a donut chart. | Type `space16x` and explore with the arrow keys. Great for servers. |
+
+Not sure? On a Mac, start with the app. Both show the same numbers, so you can use either one, or both.
+
+## What you can do
+
+1. **[Find what's using space](find-what-uses-space.md):** read the list, the treemap and the donut, and find the largest files.
+2. **[Clean up safely](clean-up.md):** move items to the Trash, and rescan after changes.
+3. **[Save, share and check servers](save-and-share.md):** keep a scan, open it later, and scan a server from your own computer.
+4. **[Space 16X Pro](pro.md):** free extra views, such as cleanup suggestions, a duplicate finder and scan comparisons.
+5. **[FAQ and troubleshooting](faq.md):** permissions, why sizes differ from Finder, and what Space 16X never does.
+
+## Our promise
+
+Space 16X only looks. While it scans, it reads the names and sizes of your files, never what's inside them. The one change it ever makes is moving the items you pick to the Trash, after you confirm.

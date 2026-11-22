@@ -8,6 +8,8 @@ Find the file or folder using your disk space. Space 16X is a disk analyzer with
 
 Space 16X is a project by Muhammad Naveed Akram, developed under the [16X Brains](https://16xbrains.com/) banner.
 
+**New here? Read the [user guide](docs/guide/README.md).** It takes you from install to your first cleanup in about two minutes, in the Mac app or the terminal, in plain words.
+
 ![Space 16X opens an interactive terminal explorer for drilling into folders and ranking files. The macOS app shows a treemap, donut chart, and Largest Files view.](Branding/Space16X-Demo.gif)
 
 ## Editions
