@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — **M8 (v1.0.0) Ready for the public** is under way: the owner said go on 2026-11-24 and decided M8.3 (no notarization), M8.4 (free channels only: Homebrew formulas and `.deb`/`.rpm`, crates.io only if the owner agrees) and M8.7 (not decided, so Basic stays within 600 KB). The decisions are recorded under each item. M8.4's Homebrew formulas and `.deb`/`.rpm` packages landed (`feature/m8-install-channels`), and crates.io waits for the owner. M8.5 (updates) and M8.6 (the 1.x promise) are done. Next: the docs refresh (M8.8), the GitHub page (M8.9) and the support checks (M8.2), several of which need the owner. A Mac app path in `install.sh` that avoids the **Open Anyway** step is proposed to the owner and waits for their answer. Milestones 1–7 shipped as v0.3.0–v0.9.0, and v0.9.1 fixed the table warning noted under M7.9. Cross-platform work comes after v1.0.0 and waits for the owner's feasibility review (see **Future**). Basic's published Linux x86-64 archive is 590,256 bytes in v0.9.1, against its 600 KB budget. A user guide for people new to Space 16X is in `docs/guide/`, with screenshots, GIFs and two YouTube walkthroughs, rebuilt by `scripts/build-guide-media.py`.
+**Resume here** — **M8 (v1.0.0) Ready for the public** is under way since the owner's go-ahead on 2026-11-24. Done: the decisions (M8.3 no notarization, M8.4 free channels only, M8.7 budget stays 600 KB), M8.4's Homebrew formulas and `.deb`/`.rpm` packages, M8.5 updates and M8.6 the 1.x promise. **The owner renamed the product to DiskUse16x (M8.10)**, which comes next, PR by PR in the order M8.10 lists. Waiting for the owner: crates.io (M8.4), the macOS 14 image and hardware (M8.2), and a proposed `install.sh --app` path for the Mac app that would avoid the **Open Anyway** step (curl adds no quarantine flag; to be confirmed on a real first launch before any doc claims it). Cross-platform work comes after v1.0.0 and waits for the owner's feasibility review (see **Future**). Basic's published Linux x86-64 archive is 590,256 bytes in v0.9.1, against its 600 KB budget. A user guide for people new to the tool is in `docs/guide/`, rebuilt by `scripts/build-guide-media.py`.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -121,6 +121,7 @@ The features now cover every gap in §2, so M8 adds no new views. It checks what
   - **VoiceOver:** a pass over the main window, its sheets and Settings, adding any labels that are missing.
   - **A physical Intel Mac** and **Linux on real hardware** (the Linux benchmark has only run in Docker on a Mac): run them if the owner has the hardware. Otherwise post them as contribution issues (M8.9).
   - Record each result in `docs/qa.md`.
+  - *Asked the owner on 2026-11-24 whether to download a macOS 14 image (about 15 GB) and which hardware they have, not answered yet.*
 - [x] M8.3 Notarization. **Owner decides** whether to join the Apple Developer Program (about $99 a year).
   - **If yes:** the owner stores the Developer ID and notarization credentials in the `release-signing` environment ([release procedure](release.md)). Each release publishes the notarized ZIP and cask. The guide and `docs/install.md` drop the **Open Anyway** steps and the note that Full Disk Access can reset after an update.
   - **If no:** record why here, and keep ad hoc signing and today's first-launch steps.
@@ -132,7 +133,7 @@ The features now cover every gap in §2, so M8 adds no new views. It checks what
   - **Decision (2026-11-24): only channels that cost nothing.**
     - **Homebrew formulas:** yes, in `engrmnaveed/homebrew-tap`, for Basic and Pro on macOS and Linux. `publish-cli.yml` publishes them like the cask, with the existing deploy key. Their names mustn't clash with the `space16x` cask.
     - **`.deb` and `.rpm`:** yes, built from the static Linux binaries and attached to each release.
-    - **crates.io:** free, but it needs the owner to create an account and a token. Ask the owner first, and leave it out if they don't want it.
+    - **crates.io:** free, but it needs the owner to create an account and a token. Ask the owner first, and leave it out if they don't want it. *Asked 2026-11-24, not answered yet.* A no-account alternative is `cargo install --git`.
   - **Progress (2026-11-24):** the Homebrew formulas `space16x-cli` and `space16x-cli-pro` (`packaging/homebrew/space16x-cli.rb.in`, `scripts/render-formula`) and the `.deb`/`.rpm` packages (`scripts/package-linux.sh`) landed, with install steps in `docs/install.md`, the README and the guide. CI's Linux jobs install, switch and remove the packages (`scripts/check-linux-packages.py`, `.rpm` in a Fedora container), and the macOS arm64 and Linux x86-64 jobs install and test both formulas (`scripts/check-formula.sh`), so the release run checks them too. The packages are unsigned: RPM 6 (Fedora 43 and later) refuses unsigned packages in plain `rpm -i`, so the docs use `dnf install`, and zypper needs `--allow-unsigned-rpm`. Signing them would need a GPG key in a release secret, which the owner would create. crates.io waits for the owner's answer.
 - [x] M8.5 Updates [Basic]:
   - `docs/install.md` and the guide say how to update: run the installer one-liner again for the CLI, `brew upgrade --cask space16x` for the cask, or download the new ZIP.
@@ -145,12 +146,20 @@ The features now cover every gap in §2, so M8 adds no new views. It checks what
 - [ ] M8.8 Docs refresh:
   - `PRD.md` for 1.0: its status line, its deferred list (duplicate hashing and background monitoring now ship in Pro), its public-release milestone, and the naming and launch decisions, which the owner confirms.
   - Mark this file's **Context** and **What exists today** as the 2026-11-21 starting point.
+  - **Decision (2026-11-24): the name changes to DiskUse16x** before 1.0, with the commands `diskuse16x` and `du16x`. See M8.10.
 - [ ] M8.9 The GitHub page:
   - The owner approves a new description, topics and a homepage that points at the user guide, and a session sets them with `gh`.
   - The owner uploads a social preview image, which a session can prepare from `Branding/`.
   - The owner turns on Dependabot alerts and private vulnerability reporting in the repository settings.
   - Once the owner approves, post the three issues drafted in `docs/contribution-issues.md`, and any from M8.2, labelled **good first issue** or **help wanted**.
-- [ ] M8.10 QA, archive sizes and release v1.0.0. Refresh the promo only if M8 noticeably changes the UI.
+- [ ] M8.10 Rename to DiskUse16x. **Decision (2026-11-24):** the owner renamed the product before 1.0, so the 1.x promise starts with the new names. Recorded choices:
+  - **Names:** the product and app are **DiskUse16x** (`DiskUse16x.app`, written exactly so). The CLI answers to `diskuse16x` and `du16x`, one executable with `du16x` as a symlink in the archives, the installer, the packages and the formulas. `--version` prints `diskuse16x X.Y.Z`. The bundle ID becomes `com.16xbrains.diskuse16x`. The repository becomes `engrmnaveed/diskuse16x`, renamed with `gh` once the owner confirms (GitHub redirects the old URLs).
+  - **Release assets and channels:** `diskuse16x-<target>.tar.gz`, `diskuse16x-pro-<target>.tar.gz`, `diskuse16x-X.Y.Z-macos-universal.zip`; the `.deb`/`.rpm` packages `diskuse16x` and `diskuse16x-pro`; the cask `diskuse16x`, which the tap's `cask_renames.json` maps from `space16x`; and the formulas `du16x` and `du16x-pro`, which leave `diskuse16x` to the cask. M8.4's `space16x-*` formula and package names were never published, so they simply change.
+  - **Existing users switch and keep their data:** upgrading replaces `space16x` with the new commands, and the installer removes its old managed `space16x` install. New versions still read `SPACE16X_READ_ONLY`, `space16x_` export keys, an existing `$XDG_STATE_HOME/space16x/history` and `~/Library/Application Support/Space 16X/History`, and the Mac app copies the old app's settings once on its first launch.
+  - **Docs and media:** every doc and the guide; the guide's screenshots, GIFs and both walkthrough videos; the promo and its GIF; and the lockup, all regenerated with the new name. The owner uploads the new walkthroughs. Branding stays code-drawn (`Branding/generate.swift`). The owner's Gemini in Claude's Chrome session is available if an illustrated asset is wanted.
+  - **Internal names stay:** the Swift targets (`SpaceCore`, `SpacePro`, `SpaceApp`), Rust module paths, the roadmap lock and the history of this file.
+  - **PRs, in order:** the CLI, installer and packaging; the Mac app and cask; the docs and guide text; the media; the tap's rename map and README; the repository rename and URLs; then re-pin the install one-liners.
+- [ ] M8.11 QA, archive sizes and release v1.0.0. M8.10 noticeably changes the UI, so it refreshes the promo.
 
 ### Future
 - **Cross-platform (owner to plan).** After v1.0.0, the owner will review whether the Rust core can carry a desktop app beyond macOS. Don't start this work until the owner has reviewed feasibility and approved a plan. A plan's likely first step is splitting `cli/` into a scanner library and the `space16x` binary, so that another desktop app can reuse the Rust scanner.
@@ -362,7 +371,7 @@ Effort: S is about 1 day, M is 2–4 days, L is 1–2 weeks. Each milestone is o
   - HTML report and terminal treemap.
   - Mac menu-bar monitor and alerts, Build Footprint receipts, multiple windows.
 - **M7 (v0.9) Complete and stable (M).** Fixes from the owner's v0.8.0 QA (clone-aware duplicates, Pro discoverability, release notes from the changelog), then what M6 cut: an exclusive-size column, duplicates and explain in the explorer, snapshot detail, footprint budgets, "review" cleanup suggestions, and Mac parity for age filters and the HTML report. *Items in Progress.*
-- **M8 (v1.0) Ready for the public (M).** No new features: the owner's runtime checks, the support claims nobody has tested, notarization, CLI install channels and updates, a stable 1.x contract, Basic's size budget, a docs refresh and the GitHub page. *Items in Progress.*
+- **M8 (v1.0) Ready for the public (M).** No new features: the owner's runtime checks, the support claims nobody has tested, notarization, CLI install channels and updates, a stable 1.x contract, Basic's size budget, a docs refresh, the GitHub page and the rename to DiskUse16x. *Items in Progress.*
 
 ## 6. Milestone 1 (v0.3.0) in detail: Focus [Basic]
 
