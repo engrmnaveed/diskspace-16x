@@ -16,6 +16,8 @@ The one-liners download the installer from a fixed commit. To review the script 
 
 Run `space16x --version` or open the explorer with `space16x`. The installer checks the archive's SHA-256 digest and installs to `$HOME/.local/share/space16x/bin`. It sets up your shell's startup file when needed, and the one-liner updates the current shell's PATH. Use curl or GNU Wget for the asset download. On a BusyBox-only image, install curl or use the manual archive instructions.
 
+Prefer a package manager? Use [Homebrew](#install-the-cli-with-homebrew) on macOS or Linux, or a [.deb or .rpm package](#install-a-linux-package) on Linux.
+
 Pass `--version 0.2.1` after `--shell-path` to select a published version. Use `--bin-dir PATH` to choose another directory or `--repo OWNER/REPO` for a public mirror with the same asset names. [GitHub Releases](https://github.com/engrmnaveed/diskspace-16x/releases)
 
 ## Uninstall the managed CLI
@@ -79,7 +81,7 @@ On Linux, use `sha256sum -c "$archive.sha256"` and substitute your target. The [
 
 ### Verify a release archive
 
-The SHA-256 file only proves the download wasn't corrupted, because it comes from the same place as the archive. Each release, starting with 0.2.2, also publishes a GitHub build-provenance attestation for every archive and for `install.sh`. The attestation shows that the file was built by this repository's release workflow from the tagged commit. Check it with the [GitHub CLI](https://cli.github.com/):
+The SHA-256 file only proves the download wasn't corrupted, because it comes from the same place as the archive. Each release, starting with 0.2.2, also publishes a GitHub build-provenance attestation for every archive and for `install.sh`, and from 1.0.0 for every `.deb` and `.rpm` package. The attestation shows that the file was built by this repository's release workflow from the tagged commit. Check it with the [GitHub CLI](https://cli.github.com/):
 
 ```sh
 gh attestation verify space16x-aarch64-apple-darwin.tar.gz \
@@ -87,7 +89,66 @@ gh attestation verify space16x-aarch64-apple-darwin.tar.gz \
   --signer-workflow engrmnaveed/diskspace-16x/.github/workflows/publish-cli.yml
 ```
 
-Use the same command with `install.sh` to verify the installer. Add `--source-ref` with the full tag ref, such as `refs/tags/vX.Y.Z`, to require a specific release tag.
+Use the same command with `install.sh` to verify the installer, or with a package name, such as `space16x_amd64.deb`, to verify a Linux package. Add `--source-ref` with the full tag ref, such as `refs/tags/vX.Y.Z`, to require a specific release tag.
+
+## Install the CLI with Homebrew
+
+Releases from 1.0.0 publish Homebrew formulas for the CLI on macOS and Linux, in the same tap as the Mac app. `space16x-cli` installs Basic, and `space16x-cli-pro` installs Pro. Homebrew 6 and later load formulas only from taps you trust, so run `brew trust` once.
+
+```sh
+brew tap engrmnaveed/tap
+```
+
+```sh
+brew trust engrmnaveed/tap
+```
+
+```sh
+brew install engrmnaveed/tap/space16x-cli
+```
+
+For Pro, install `engrmnaveed/tap/space16x-cli-pro` instead. Both formulas install the `space16x` command, so Homebrew keeps one at a time: run `brew uninstall space16x-cli` before installing Pro, and the reverse to switch back. Update with `brew upgrade space16x-cli`, and remove with `brew uninstall space16x-cli`. Use `space16x-cli-pro` in both commands for Pro.
+
+Homebrew installs into its own folder, apart from the installer's `$HOME/.local/share/space16x/bin`. If you install both ways, the one earlier on your PATH runs, so remove the other.
+
+## Install a Linux package
+
+Releases from 1.0.0 attach `.deb` and `.rpm` packages, built from the same static executables as the Linux archives. A package installs `/usr/bin/space16x` for every user on the computer, so it needs `sudo`.
+
+| Edition and CPU | Debian, Ubuntu | Fedora, RHEL, openSUSE |
+| --- | --- | --- |
+| Basic, x86-64 | `space16x_amd64.deb` | `space16x.x86_64.rpm` |
+| Basic, ARM64 | `space16x_arm64.deb` | `space16x.aarch64.rpm` |
+| Pro, x86-64 | `space16x-pro_amd64.deb` | `space16x-pro.x86_64.rpm` |
+| Pro, ARM64 | `space16x-pro_arm64.deb` | `space16x-pro.aarch64.rpm` |
+
+The names stay the same in every release, so `releases/latest/download/` always points at the newest one. On Debian or Ubuntu, download the package for your CPU and install it with apt. The commands below use Basic for x86-64.
+
+```sh
+curl -fLO https://github.com/engrmnaveed/diskspace-16x/releases/latest/download/space16x_amd64.deb
+```
+
+```sh
+sudo apt install ./space16x_amd64.deb
+```
+
+Installing the Pro package replaces Basic, and the reverse. Remove the command with `sudo apt remove space16x`, or `space16x-pro` for Pro.
+
+On Fedora or RHEL, use dnf:
+
+```sh
+curl -fLO https://github.com/engrmnaveed/diskspace-16x/releases/latest/download/space16x.x86_64.rpm
+```
+
+```sh
+sudo dnf install ./space16x.x86_64.rpm
+```
+
+The packages aren't signed, so dnf notes that it skipped OpenPGP checks. Check the download with its `.sha256` file or `gh attestation verify`, as [Verify a release archive](#verify-a-release-archive) shows. To switch editions, add `--allowerasing`, as in `sudo dnf install --allowerasing ./space16x-pro.x86_64.rpm`. Remove the command with `sudo dnf remove space16x`.
+
+On openSUSE, install with `sudo zypper install --allow-unsigned-rpm ./space16x.x86_64.rpm`. To switch editions, remove the other one first with `sudo zypper remove space16x`.
+
+To update a package, download the new release's package and install it the same way.
 
 ## Build the CLI from source
 

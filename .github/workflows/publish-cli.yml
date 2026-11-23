@@ -83,6 +83,15 @@ jobs:
               cp "$folder/$archive" "$folder/$archive.sha256" "$release/"
             done
           done
+          # The Linux .deb and .rpm packages, built and checked from the same archives.
+          for target in aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
+            folder="$downloads/space16x-cli-$target"
+            case "$target" in aarch64-*) deb=arm64 rpm=aarch64 ;; *) deb=amd64 rpm=x86_64 ;; esac
+            for package in "space16x_$deb.deb" "space16x-pro_$deb.deb" "space16x.$rpm.rpm" "space16x-pro.$rpm.rpm"; do
+              (cd "$folder" && sha256sum -c "$package.sha256")
+              cp "$folder/$package" "$folder/$package.sha256" "$release/"
+            done
+          done
           # Publish the installer with the release so users run the reviewed, tagged script.
           cp "$downloads/space16x-cli-installer/install.sh" "$release/install.sh"
           (cd "$release" && sha256sum install.sh > install.sh.sha256)
@@ -94,12 +103,17 @@ jobs:
           cp "$downloads/macos-app/$app" "$downloads/macos-app/$app.sha256" "$release/"
           read -r app_digest _ < "$release/$app.sha256"
           scripts/render-cask "$version" "$app_digest" > "$release/space16x.rb"
+          # The CLI formulas, from the archives' digests.
+          scripts/render-formula "$version" "$release" > "$release/space16x-cli.rb"
+          scripts/render-formula --pro "$version" "$release" > "$release/space16x-cli-pro.rb"
           echo "RELEASE_DIR=$release" >> "$GITHUB_ENV"
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             ${{ env.RELEASE_DIR }}/space16x-*.tar.gz
+            ${{ env.RELEASE_DIR }}/space16x*.deb
+            ${{ env.RELEASE_DIR }}/space16x*.rpm
             ${{ env.RELEASE_DIR }}/space16x-*-macos-universal.zip
             ${{ env.RELEASE_DIR }}/install.sh
       - name: Publish the verified release assets
@@ -112,17 +126,18 @@ jobs:
             --title "Space 16X $GITHUB_REF_NAME" \
             --notes-file "$RUNNER_TEMP/release-notes.md" \
             space16x-*.tar.gz space16x-*.tar.gz.sha256 \
+            space16x*.deb space16x*.deb.sha256 space16x*.rpm space16x*.rpm.sha256 \
             space16x-*-macos-universal.zip space16x-*-macos-universal.zip.sha256 \
-            space16x.rb install.sh install.sh.sha256
+            space16x.rb space16x-cli.rb space16x-cli-pro.rb install.sh install.sh.sha256
       - name: Update the Homebrew tap
         shell: bash
         env:
-          # A write deploy key for the tap repository only. Without it, publish space16x.rb by hand.
+          # A write deploy key for the tap repository only. Without it, publish the cask and formulas by hand.
           HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           TAP_REPO: engrmnaveed/homebrew-tap
         run: |
           if [[ -z "$HOMEBREW_TAP_DEPLOY_KEY" ]]; then
-            echo "::notice::HOMEBREW_TAP_DEPLOY_KEY is not set. Commit space16x.rb from the release to $TAP_REPO/Casks by hand."
+            echo "::notice::HOMEBREW_TAP_DEPLOY_KEY is not set. Commit space16x.rb from the release to $TAP_REPO/Casks, and space16x-cli.rb and space16x-cli-pro.rb to $TAP_REPO/Formula, by hand."
             exit 0
           fi
           umask 077
@@ -136,12 +151,13 @@ jobs:
 
           tap="$ssh_dir/tap"
           git clone --depth 1 "git@github.com:$TAP_REPO.git" "$tap"
-          mkdir -p "$tap/Casks"
+          mkdir -p "$tap/Casks" "$tap/Formula"
           cp "$RELEASE_DIR/space16x.rb" "$tap/Casks/space16x.rb"
+          cp "$RELEASE_DIR/space16x-cli.rb" "$RELEASE_DIR/space16x-cli-pro.rb" "$tap/Formula/"
           cd "$tap"
-          git add Casks/space16x.rb
+          git add Casks/space16x.rb Formula/space16x-cli.rb Formula/space16x-cli-pro.rb
           if git diff --cached --quiet; then
-            echo "The tap already has this cask."
+            echo "The tap already has this cask and these formulas."
             exit 0
           fi
           git -c user.name='github-actions[bot]' \

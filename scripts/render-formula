@@ -1,0 +1,67 @@
+#!/bin/sh
+# Print the Homebrew formula for a published Space 16X CLI release: space16x-cli
+# for Basic, or space16x-cli-pro with --pro. DIR holds the release's archive
+# checksum files, space16x[-pro]-TARGET.tar.gz.sha256, for all four targets.
+# --url-base replaces the release download URL, for a local test install.
+set -eu
+
+usage() {
+    echo "Usage: $0 [--pro] [--url-base URL] VERSION DIR" >&2
+    exit 1
+}
+edition=basic
+url_base=
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --pro) edition=pro; shift ;;
+        --url-base) [ "$#" -ge 2 ] || usage; url_base=$2; shift 2 ;;
+        -*) usage ;;
+        *) break ;;
+    esac
+done
+[ "$#" -eq 2 ] || usage
+version=${1#v}
+dir=$2
+
+printf '%s\n' "$version" | LC_ALL=C grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?$' ||
+    { echo "Use a release version such as 1.0.0." >&2; exit 1; }
+# grep works line by line. Check the entire value before substituting it.
+case "$version" in *[!A-Za-z0-9.-]*) echo "Invalid characters in VERSION." >&2; exit 1 ;; esac
+if [ -z "$url_base" ]; then
+    url_base='https://github.com/engrmnaveed/diskspace-16x/releases/download/v#{version}'
+fi
+case "$url_base" in
+    *[!A-Za-z0-9/:._~#{}-]*) echo "Invalid characters in the URL base." >&2; exit 1 ;;
+esac
+
+if [ "$edition" = pro ]; then
+    set -- -e "s/@CLASS@/Space16xCliPro/" \
+        -e "s/@DESC@/Disk space explorer for the terminal, Pro edition/" \
+        -e "s/@ARCHIVE@/space16x-pro/g" \
+        -e "s/@CONFLICT@/space16x-cli/" \
+        -e "s/@SUFFIX@/ (pro)/" \
+        -e "s/@EDITION@/pro/"
+    archive=space16x-pro
+else
+    set -- -e "s/@CLASS@/Space16xCli/" \
+        -e "s/@DESC@/Disk space explorer for the terminal/" \
+        -e "s/@ARCHIVE@/space16x/g" \
+        -e "s/@CONFLICT@/space16x-cli-pro/" \
+        -e "s/@SUFFIX@//" \
+        -e "s/@EDITION@/basic/"
+    archive=space16x
+fi
+
+for target in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
+    file="$dir/$archive-$target.tar.gz.sha256"
+    [ -f "$file" ] || { echo "Missing $file." >&2; exit 1; }
+    read -r digest _ < "$file"
+    case "$digest" in *[!0-9a-fA-F]*|'') echo "Use a 64-character SHA-256 digest in $file." >&2; exit 1 ;; esac
+    [ "${#digest}" -eq 64 ] || { echo "Use a 64-character SHA-256 digest in $file." >&2; exit 1; }
+    digest=$(printf '%s' "$digest" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+    key=$(printf '%s' "$target" | LC_ALL=C tr '[:lower:]-' '[:upper:]_')
+    set -- "$@" -e "s/@SHA256_$key@/$digest/"
+done
+
+template="$(dirname "$0")/../packaging/homebrew/space16x-cli.rb.in"
+sed "$@" -e "s/@VERSION@/$version/" -e "s|@URL_BASE@|$url_base|g" "$template"

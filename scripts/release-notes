@@ -18,5 +18,5 @@ else
   echo "scripts/release-notes: CHANGELOG.md has no section for $version" >&2
 fi
 cat <<'TEXT'
-Space 16X CLI archives for macOS and Linux in two free editions, Basic (space16x-TARGET) and Pro (space16x-pro-TARGET), and the universal Mac app, with SHA-256 files and GitHub build-provenance attestations. install.sh installs Basic, and install.sh --pro installs Pro. The Mac app is ad hoc signed and not notarized. Install it with Homebrew from the engrmnaveed/tap tap, or download the ZIP. See docs/install.md for installation, verification, first-launch approval, and removal.
+Space 16X CLI archives for macOS and Linux in two free editions, Basic (space16x-TARGET) and Pro (space16x-pro-TARGET), .deb and .rpm packages of both editions for Linux, and the universal Mac app, with SHA-256 files and GitHub build-provenance attestations. install.sh installs Basic, and install.sh --pro installs Pro. The engrmnaveed/tap Homebrew tap has the CLI formulas space16x-cli and space16x-cli-pro, and the space16x cask for the Mac app. The Mac app is ad hoc signed and not notarized. Install it with Homebrew or download the ZIP. See docs/install.md for installation, verification, first-launch approval, and removal.
 TEXT
