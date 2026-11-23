@@ -45,7 +45,7 @@ def build_capture(work):
     sources = work / "app"
     sources.mkdir()
     for path in sorted((ROOT / "Sources" / "SpaceApp").glob("*.swift")):
-        if path.name != "Space16XApp.swift":
+        if path.name != "DiskUse16xApp.swift":
             shutil.copy(path, sources / path.name)
     # The start screen lists made-up volumes, so this copy lets the capture set them.
     workspace = sources / "ScanWorkspace.swift"
