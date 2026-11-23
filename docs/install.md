@@ -241,6 +241,18 @@ Some folders remain protected even with Full Disk Access. System Integrity Prote
 
 Because the app is ad hoc signed rather than notarized, macOS may stop applying the setting after an update. If protected folders reappear after you upgrade, turn **Space 16X** off and on again in Full Disk Access.
 
+## Update Space 16X
+
+Space 16X never checks for updates on its own, and the app never connects to the network. To see whether a newer version is out, choose **Help → Check for Updates…** in the Mac app, which opens the newest release's page in your browser. Compare its version with **Space 16X → About Space 16X**, or with `space16x --version` in the terminal.
+
+- **CLI from the installer:** run the [one-liner](#install-the-cli-from-a-release) again, with `--pro` for Pro. It replaces the command with the newest release.
+- **CLI from Homebrew:** run `brew upgrade space16x-cli`, or `brew upgrade space16x-cli-pro` for Pro.
+- **Linux package:** download the new release's package and install it the same way, as [Install a Linux package](#install-a-linux-package) shows.
+- **Mac app from Homebrew:** run `brew upgrade --cask space16x`.
+- **Mac app from the ZIP:** quit Space 16X, then download, verify and expand the new ZIP as in [Install the release ZIP](#install-the-release-zip), and drag the new **Space 16X.app** into Applications to replace the old one.
+
+The new app is a new download that isn't notarized, so macOS may ask you to [allow the first launch](#allow-the-first-launch) again. If protected folders come back after an update, turn **Space 16X** off and on again in [Full Disk Access](#full-disk-access).
+
 ## Mac app keyboard shortcuts
 
 Focus the file table to use arrow keys for row selection. Core commands are available in the menu bar.
