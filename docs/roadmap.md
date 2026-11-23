@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — Roadmap complete: paused for owner review after v0.9.0. Milestones 1–7 shipped as v0.3.0–v0.9.0, and v0.9.1 fixed the table warning noted under M7.9. M7 (Complete and stable) fixed the owner's v0.8.0 QA findings (clone-aware duplicates, file mounts in `volumes`, Pro discoverability, release notes from the changelog) and finished what M6 left for later: an Exclusive column, Duplicates and Explain in the explorer, snapshot dates, footprint budgets, review suggestions, and the Mac's older-than filter and HTML report. Nothing comes after M7. Cross-platform work waits for the owner's feasibility review (see **Future**). Basic's published Linux x86-64 archive is 590,256 bytes in v0.9.1, against its 600 KB budget. The items still for the owner's eyes are under M7.9. Outside the roadmap, a user guide for people new to Space 16X is in `docs/guide/`, with screenshots, GIFs and two YouTube walkthroughs, rebuilt by `scripts/build-guide-media.py`.
+**Resume here** — Paused for owner review. Milestones 1–7 shipped as v0.3.0–v0.9.0, and v0.9.1 fixed the table warning noted under M7.9. **M8 (v1.0.0) Ready for the public** is drafted and adds no features. It waits for the owner's go-ahead and for decisions on M8.3 (notarization), M8.4 (CLI install channels) and M8.7 (Basic's size budget). Don't start M8 until the owner says go. Cross-platform work comes after v1.0.0 and waits for the owner's feasibility review (see **Future**). Basic's published Linux x86-64 archive is 590,256 bytes in v0.9.1, against its 600 KB budget. A user guide for people new to Space 16X is in `docs/guide/`, with screenshots, GIFs and two YouTube walkthroughs, rebuilt by `scripts/build-guide-media.py`.
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -105,8 +105,46 @@ The owner's v0.8.0 QA found that every Pro feature works but is easy to miss, an
   - **Outcome (2026-11-22):** `docs/qa.md` records the runtime pass, which found and fixed two layout bugs. **Still for the owner's eyes:** clicking the start screen's **Turn On in Settings…** and its × (relaunch to see it stay hidden); typing in the receipt sheet (a remembered budget filling in, and **Save…** disabled for an unreadable budget); saving through the HTML report and receipt save panels (the harness checked the panels and the files' contents, not a click on **Save**); a real Time Machine local snapshot in Explain Disk Space; the View menu's **Show Files Older Than** submenu; and the Move to Trash alert's look. The console warning about a reentrant table delegate when the age filter was cleared or the Exclusive sort reversed was fixed in v0.9.1.
 - [x] M7.10 Release v0.9.0
 
+### M8 (v1.0.0) Ready for the public [Basic + Pro]
+The features now cover every gap in §2, so M8 adds no new views. It checks what nobody has checked yet, makes Space 16X easy to install, update and trust, and promises a stable CLI. Items marked **Owner decides** wait for the owner's answer, recorded under the item as **Decision (date):** before work on it starts. The other items start when the owner says go.
+- [ ] M8.1 The owner's runtime checks from M7.9:
+  - the start screen's **Turn On in Settings…** and its × (relaunch to see it stay hidden);
+  - typing in the receipt sheet (a remembered budget filling in, and **Save…** disabled for an unreadable budget);
+  - clicking **Save** in the HTML report and receipt save panels;
+  - a real Time Machine local snapshot in Explain Disk Space;
+  - the View menu's **Show Files Older Than** submenu;
+  - the Move to Trash alert's look.
+
+  Record the results in `docs/qa.md` and fix what they find.
+- [ ] M8.2 Check the support claims nobody has tested:
+  - **macOS 14,** the stated minimum: run the release app in a macOS 14 virtual machine on Apple silicon, through the core rows of `docs/manual-qa.md`.
+  - **VoiceOver:** a pass over the main window, its sheets and Settings, adding any labels that are missing.
+  - **A physical Intel Mac** and **Linux on real hardware** (the Linux benchmark has only run in Docker on a Mac): run them if the owner has the hardware. Otherwise post them as contribution issues (M8.9).
+  - Record each result in `docs/qa.md`.
+- [ ] M8.3 Notarization. **Owner decides** whether to join the Apple Developer Program (about $99 a year).
+  - **If yes:** the owner stores the Developer ID and notarization credentials in the `release-signing` environment ([release procedure](release.md)). Each release publishes the notarized ZIP and cask. The guide and `docs/install.md` drop the **Open Anyway** steps and the note that Full Disk Access can reset after an update.
+  - **If no:** record why here, and keep ad hoc signing and today's first-launch steps.
+- [ ] M8.4 CLI install channels. **Owner decides** which to add. Each one gets install steps in `docs/install.md` and the guide, and a check in the release run.
+  - **Homebrew formulas** in the tap for the CLI on macOS and Linux, Basic and Pro, published by `publish-cli.yml` like the cask. Their names mustn't clash with the `space16x` cask.
+  - **crates.io,** so `cargo install space16x` builds Basic and `--features pro` builds Pro. The name was free on 2026-11-24. Publishing needs the owner's crates.io token as a release secret.
+  - **`.deb` and `.rpm` packages,** built from the static Linux binaries and attached to each release.
+- [ ] M8.5 Updates [Basic]:
+  - `docs/install.md` and the guide say how to update: run the installer one-liner again for the CLI, `brew upgrade --cask space16x` for the cask, or download the new ZIP.
+  - Mac: **Help → Check for Updates…** opens the GitHub Releases page in the browser. The app itself still never connects to the network.
+- [ ] M8.6 The 1.0 promise: `docs/cli.md` and `docs/cli-pro.md` say that within 1.x, the flags, exit codes, JSON schema 3, the export format and the history store change only by additions. A breaking change waits for 2.0 and a new `schemaVersion`.
+- [ ] M8.7 Basic's size budget. **Owner decides:** keep the 600 KB limit, which leaves Basic's Linux x86-64 archive about 9.7 KB to grow, or raise it. Record the answer in §4.
+- [ ] M8.8 Docs refresh:
+  - `PRD.md` for 1.0: its status line, its deferred list (duplicate hashing and background monitoring now ship in Pro), its public-release milestone, and the naming and launch decisions, which the owner confirms.
+  - Mark this file's **Context** and **What exists today** as the 2026-11-21 starting point.
+- [ ] M8.9 The GitHub page:
+  - The owner approves a new description, topics and a homepage that points at the user guide, and a session sets them with `gh`.
+  - The owner uploads a social preview image, which a session can prepare from `Branding/`.
+  - The owner turns on Dependabot alerts and private vulnerability reporting in the repository settings.
+  - Once the owner approves, post the three issues drafted in `docs/contribution-issues.md`, and any from M8.2, labelled **good first issue** or **help wanted**.
+- [ ] M8.10 QA, archive sizes and release v1.0.0. Refresh the promo only if M8 noticeably changes the UI.
+
 ### Future
-- **Cross-platform (owner to plan).** After v0.9.0, the owner will review whether the Rust core can carry a desktop app beyond macOS. Don't start this work until the owner has reviewed feasibility and approved a plan.
+- **Cross-platform (owner to plan).** After v1.0.0, the owner will review whether the Rust core can carry a desktop app beyond macOS. Don't start this work until the owner has reviewed feasibility and approved a plan. A plan's likely first step is splitting `cli/` into a scanner library and the `space16x` binary, so that another desktop app can reuse the Rust scanner.
 
 ## Working agreement
 
@@ -314,6 +352,7 @@ Effort: S is about 1 day, M is 2–4 days, L is 1–2 weeks. Each milestone is o
   - HTML report and terminal treemap.
   - Mac menu-bar monitor and alerts, Build Footprint receipts, multiple windows.
 - **M7 (v0.9) Complete and stable (M).** Fixes from the owner's v0.8.0 QA (clone-aware duplicates, Pro discoverability, release notes from the changelog), then what M6 cut: an exclusive-size column, duplicates and explain in the explorer, snapshot detail, footprint budgets, "review" cleanup suggestions, and Mac parity for age filters and the HTML report. *Items in Progress.*
+- **M8 (v1.0) Ready for the public (M).** No new features: the owner's runtime checks, the support claims nobody has tested, notarization, CLI install channels and updates, a stable 1.x contract, Basic's size budget, a docs refresh and the GitHub page. *Items in Progress.*
 
 ## 6. Milestone 1 (v0.3.0) in detail: Focus [Basic]
 
