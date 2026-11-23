@@ -1,6 +1,6 @@
 # Find what's using space
 
-Space 16X ranks everything by the space it takes, so the answer is always near the top. This page shows how to read the results and dig in, in the Mac app and in the terminal.
+DiskUse16x ranks everything by the space it takes, so the answer is always near the top. This page shows how to read the results and dig in, in the Mac app and in the terminal.
 
 ## Read the list
 
@@ -15,9 +15,9 @@ Every folder you open shows its contents, biggest first.
 
 Some rows carry a state instead of a full size:
 
-- **Pending** or **Scanning**: Space 16X is still counting this folder. You can browse while it works. If you cancel a scan, unfinished folders say **Unscanned** in the app.
+- **Pending** or **Scanning**: DiskUse16x is still counting this folder. You can browse while it works. If you cancel a scan, unfinished folders say **Unscanned** in the app.
 - **Protected**: macOS or Linux doesn't let apps read this folder, so its contents aren't counted. See [Some folders say Protected](faq.md#some-folders-say-protected).
-- **Cloud only**: an iCloud or other cloud file that isn't downloaded. It counts as zero, and Space 16X never downloads it.
+- **Cloud only**: an iCloud or other cloud file that isn't downloaded. It counts as zero, and DiskUse16x never downloads it.
 - **Incomplete**: something inside couldn't be read. Open the scan details to see what.
 
 ## Dig into folders
@@ -38,7 +38,7 @@ Above the list, switch **Contents** between **List**, **Treemap** and **Donut**.
 
 ![The donut chart of a 2.44 GB home folder, with a legend listing Movies, Downloads, Desktop and the other folders with their shares.](images/mac-donut.png)
 
-✨ **Pro, free:** the terminal gets a treemap too. Press `m` in the explorer. See [Space 16X Pro](pro.md).
+✨ **Pro, free:** the terminal gets a treemap too. Press `m` in the explorer. See [DiskUse16x Pro](pro.md).
 
 ## Find the largest files
 
@@ -73,10 +73,10 @@ Sorting by **Items** finds folders full of tiny files, which slow down backups a
 
 ### Allocated size and apparent size
 
-Space 16X counts **allocated size** by default: the space a file really takes on the disk. A file's **apparent size** is its length, the number Finder shows first in Get Info. The two differ for some files, such as compressed files or disk images that reserve space they don't use yet.
+DiskUse16x counts **allocated size** by default: the space a file really takes on the disk. A file's **apparent size** is its length, the number Finder shows first in Get Info. The two differ for some files, such as compressed files or disk images that reserve space they don't use yet.
 
-- **Mac app:** choose **View → Size → Apparent Size**. Space 16X remembers your choice.
-- **Terminal:** press `a`, or add `--apparent` to `space16x scan`.
+- **Mac app:** choose **View → Size → Apparent Size**. DiskUse16x remembers your choice.
+- **Terminal:** press `a`, or add `--apparent` to `diskuse16x scan`.
 
 [Why sizes differ from Finder](faq.md#why-dont-the-sizes-match-finder) explains more.
 
@@ -84,14 +84,14 @@ Space 16X counts **allocated size** by default: the space a file really takes on
 
 Leave out folders such as `node_modules` or caches to make scans faster and the results cleaner. Skipped items aren't read or counted.
 
-- **Mac app:** open **Space 16X → Settings…** and type one pattern per line under **Exclude from scans**, such as `node_modules` or `*.log`. The next scan uses them.
-- **Terminal:** add `--exclude`, for example `space16x --exclude node_modules --exclude '*.log' ~/Projects`.
+- **Mac app:** open **DiskUse16x → Settings…** and type one pattern per line under **Exclude from scans**, such as `node_modules` or `*.log`. The next scan uses them.
+- **Terminal:** add `--exclude`, for example `diskuse16x --exclude node_modules --exclude '*.log' ~/Projects`.
 
 The [CLI reference](../cli.md#exclude-files-and-folders) explains the pattern rules.
 
 ### Scan details
 
-The scan details list what Space 16X skipped and why, and how it counts sizes.
+The scan details list what DiskUse16x skipped and why, and how it counts sizes.
 
 - **Mac app:** click **Scan Details** at the bottom of the sidebar, or press ⌘I.
 - **Terminal:** press `e`.

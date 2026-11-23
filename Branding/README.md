@@ -1,6 +1,6 @@
-# Space 16X identity
+# DiskUse16x identity
 
-Space 16X is the display name. Use `space16x` for the command and 16X Brains for the company credit.
+DiskUse16x is the display name. Use `diskuse16x` for the command and 16X Brains for the company credit.
 
 The app icon depicts a disk with three sections of different sizes. The wider aqua section identifies the largest share. The same mark appears in the project lockup.
 

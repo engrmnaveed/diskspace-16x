@@ -8,25 +8,25 @@ Prefer to watch? The **terminal walkthrough** video [is on YouTube](https://yout
 
 ## 1. Install
 
-Copy the one-line installer from [Install the CLI](../install.md#install-the-cli-from-a-release), paste it into your terminal, and press Return. It installs the `space16x` command for your user only, so it doesn't ask for an admin password.
+Copy the one-line installer from [Install the CLI](../install.md#install-the-cli-from-a-release), paste it into your terminal, and press Return. It installs the `diskuse16x` command for your user only, so it doesn't ask for an admin password. It also installs `du16x`, a shorter name for the same command, so you can type either one.
 
-Already use Homebrew? Run `brew install engrmnaveed/tap/space16x-cli` after the two setup lines in [Install the CLI with Homebrew](../install.md#install-the-cli-with-homebrew). On Debian, Ubuntu or Fedora, you can also [install a package](../install.md#install-a-linux-package).
+Already use Homebrew? Run `brew install engrmnaveed/tap/du16x` after the two setup lines in [Install the CLI with Homebrew](../install.md#install-the-cli-with-homebrew). On Debian, Ubuntu or Fedora, you can also [install a package](../install.md#install-a-linux-package).
 
 Check that it worked:
 
 ```sh
-space16x --version
+diskuse16x --version
 ```
 
 ## 2. Open the explorer
 
-Type `space16x` and the folder to check, then press Return. `~` means your home folder:
+Type `diskuse16x` and the folder to check, then press Return. `~` means your home folder:
 
 ```sh
-space16x ~
+diskuse16x ~
 ```
 
-Space 16X scans the folder and opens the explorer. The biggest items are at the top, and the bar on the right shows each item's share. Running `space16x` alone explores the folder you're in.
+DiskUse16x scans the folder and opens the explorer. The biggest items are at the top, and the bar on the right shows each item's share. Running `diskuse16x` alone explores the folder you're in.
 
 ![The explorer lists a home folder's contents, biggest first: Movies at 745 MB, then Downloads, Desktop and Library, with item counts and share bars.](images/terminal-folders.png)
 
@@ -55,17 +55,17 @@ The totals update right away. The space comes back when you empty the Trash. On 
 
 ## You're set
 
-That's the heart of Space 16X. Where to next:
+That's the heart of DiskUse16x. Where to next:
 
 - **[Find what's using space](find-what-uses-space.md)** has more ways to look, such as sorting and filtering.
 - **[Save, share and check servers](save-and-share.md)** shows how to scan a server and browse the result on your own computer.
-- **[Space 16X Pro](pro.md)**, free, adds cleanup suggestions, a duplicate finder and more.
+- **[DiskUse16x Pro](pro.md)**, free, adds cleanup suggestions, a duplicate finder and more.
 
 ## Go further
 
 - Press `/` and type part of a name to show only matching items. Esc clears the filter.
 - Press `s` to sort by size, item count or name.
 - Press `r` to rescan the open folder after you change files elsewhere.
-- Type `space16x scan` for a plain text report you can save or paste, or `space16x scan --top 10` for the 10 largest files.
-- On a shared server, `space16x --read-only` turns off Move to Trash.
+- Type `diskuse16x scan` for a plain text report you can save or paste, or `diskuse16x scan --top 10` for the 10 largest files.
+- On a shared server, `diskuse16x --read-only` turns off Move to Trash.
 - The [CLI reference](../cli.md) lists every key and option.

@@ -1,34 +1,34 @@
 <p align="center">
-  <img src="Branding/Lockup.png" width="540" alt="Space 16X by 16X Brains">
+  <img src="Branding/Lockup.png" width="540" alt="DiskUse16x by 16X Brains">
 </p>
 
-# Space 16X
+# DiskUse16x
 
-Find the file or folder using your disk space. Space 16X is a disk analyzer with a native macOS app and a Rust terminal explorer for macOS and Linux. Both rank by allocated size, scan read-only filesystem metadata, and work offline without an account. The only change Space 16X makes to your files is moving items you choose to the Trash, after you confirm.
+*Formerly Space 16X.* Find the file or folder using your disk space. DiskUse16x is a disk analyzer with a native macOS app and a Rust terminal explorer for macOS and Linux. Both rank by allocated size, scan read-only filesystem metadata, and work offline without an account. The only change DiskUse16x makes to your files is moving items you choose to the Trash, after you confirm.
 
-Space 16X is a project by Muhammad Naveed Akram, developed under the [16X Brains](https://16xbrains.com/) banner.
+DiskUse16x is a project by Muhammad Naveed Akram, developed under the [16X Brains](https://16xbrains.com/) banner.
 
 **New here? Read the [user guide](docs/guide/README.md).** It takes you from install to your first cleanup in about two minutes, in the Mac app or the terminal, in plain words.
 
-![Space 16X opens an interactive terminal explorer for drilling into folders and ranking files. The macOS app shows a treemap, donut chart, and Largest Files view.](Branding/Space16X-Demo.gif)
+![DiskUse16x opens an interactive terminal explorer for drilling into folders and ranking files. The macOS app shows a treemap, donut chart, and Largest Files view.](Branding/Space16X-Demo.gif)
 
 ## Editions
 
-Space 16X comes in two free, open-source editions built from this repository. **Basic** shows what is using your space and moves what you choose to the Trash, and stays light enough for remote servers. **Pro** adds deeper analysis.
+DiskUse16x comes in two free, open-source editions built from this repository. **Basic** shows what is using your space and moves what you choose to the Trash, and stays light enough for remote servers. **Pro** adds deeper analysis.
 
 | | Basic | Pro adds |
 |---|---|---|
 | **Browse** | Folder list, treemap and donut on the Mac, the terminal explorer, largest files, filter, sort, apparent size, excludes | Modified dates, file types, owners on shared servers (CLI), a treemap in the terminal |
 | **Free space** | Move to Trash after you confirm, rescan a folder | Cleanup suggestions, duplicates found when you ask, exclusive size that leaves out clones and hard links, Explain Disk Space for what a scan can't see |
-| **Keep and compare** | Export and open scans in ncdu's format, `space16x volumes` | Scan history, Compare, Build Footprint receipts, an HTML report |
+| **Keep and compare** | Export and open scans in ncdu's format, `diskuse16x volumes` | Scan history, Compare, Build Footprint receipts, an HTML report |
 | **Mac only** | | A menu-bar free-space monitor with low-space alerts, several windows |
 
 - **Mac app:** turn on **Settings → Pro features**. It's the same app, so nothing to install, and Pro stays out of the way while the switch is off.
-- **CLI:** add `--pro` to the [install command](#build-and-install). Pro installs the same `space16x` command over Basic, and installing without `--pro` switches back. `space16x --version` ends with `(pro)`, and the [Pro CLI reference](docs/cli-pro.md) lists its commands.
+- **CLI:** add `--pro` to the [install command](#build-and-install). Pro installs the same `diskuse16x` command over Basic, and installing without `--pro` switches back. `diskuse16x --version` ends with `(pro)`, and the [Pro CLI reference](docs/cli-pro.md) lists its commands.
 
 ## Analyze a folder on macOS
 
-1. Choose a folder or local drive, or drop it into the Space 16X window. The start screen lists your volumes with their free space, and clicking one scans it.
+1. Choose a folder or local drive, or drop it into the DiskUse16x window. The start screen lists your volumes with their free space, and clicking one scans it.
 2. Browse the folder list, treemap, or donut chart. Drill down with the breadcrumb or switch to **Largest Files**. Click a column header to sort by name, size, or item count.
 3. Press Space to preview a selected item with Quick Look, reveal it in Finder, or copy its path. To free space, select items and press ⌘⌫. After you confirm, they move to the Trash and the results update in place. Space is freed when you empty the Trash. After you change files elsewhere, **Scan → Rescan Folder** (⌥⌘R) updates just the open folder.
 4. To keep a scan, choose **File → Export Scan…**. **File → Open Scan…** browses it later, read-only, along with scans saved by the CLI, ncdu, or gdu.
@@ -39,21 +39,21 @@ The treemap shows the largest items with a positive size. Remaining bytes are gr
 
 ## Explore from the terminal
 
-Run `space16x` with no arguments to open the interactive explorer for your current folder.
+Run `diskuse16x` with no arguments to open the interactive explorer for your current folder.
 
 ```sh
-space16x
-space16x "$HOME/Downloads"
-space16x scan "/Volumes/Work" --depth 2
-space16x scan "$HOME/Downloads" --top 20
-space16x scan --top 10 --json > report.json
-space16x --exclude node_modules --exclude '*.log' ~/Projects
-space16x scan /mnt/archive --threads 1
-ssh -C server space16x scan / --export - | space16x --import -
-space16x volumes
+diskuse16x
+diskuse16x "$HOME/Downloads"
+diskuse16x scan "/Volumes/Work" --depth 2
+diskuse16x scan "$HOME/Downloads" --top 20
+diskuse16x scan --top 10 --json > report.json
+diskuse16x --exclude node_modules --exclude '*.log' ~/Projects
+diskuse16x scan /mnt/archive --threads 1
+ssh -C server diskuse16x scan / --export - | diskuse16x --import -
+diskuse16x volumes
 ```
 
-Use the arrow keys and Enter to drill into a folder, `/` to filter, `f` for the largest files, `s` to sort by size, item count, or name, `a` for apparent sizes, `r` to rescan the open folder, and `?` for help. Press Space to mark items and `d` to move them to the Trash after you confirm. Space is freed when you empty the Trash. Pass `--read-only` to turn this off. The `scan` command provides plain text and JSON for scripts. Scans read metadata on up to 8 threads. Pass `--threads 1` on hard disks and network filesystems. `scan --export` saves a scan in ncdu's JSON format, and `--import` browses a saved scan read-only, including one from ncdu or gdu, so you can scan a server and browse it locally. `space16x volumes` shows the size, free space and inode use of each disk.
+Use the arrow keys and Enter to drill into a folder, `/` to filter, `f` for the largest files, `s` to sort by size, item count, or name, `a` for apparent sizes, `r` to rescan the open folder, and `?` for help. Press Space to mark items and `d` to move them to the Trash after you confirm. Space is freed when you empty the Trash. Pass `--read-only` to turn this off. The `scan` command provides plain text and JSON for scripts. Scans read metadata on up to 8 threads. Pass `--threads 1` on hard disks and network filesystems. `scan --export` saves a scan in ncdu's JSON format, and `--import` browses a saved scan read-only, including one from ncdu or gdu, so you can scan a server and browse it locally. `diskuse16x volumes` shows the size, free space and inode use of each disk.
 
 Exit code `0` means the scan completed, `2` means it returned partial results, and `1` means the scan could not start or complete. A partial JSON report carries its issues and totals on standard output. See the [CLI reference](docs/cli.md) and [example report](docs/example-report.json).
 
@@ -63,7 +63,7 @@ The candidate CLI targets are Apple silicon and Intel on macOS 14 or later, plus
 
 ```sh
 (cd cli && cargo install --locked --path . --root "$HOME/.local")
-"$HOME/.local/bin/space16x" --help
+"$HOME/.local/bin/diskuse16x" --help
 ```
 
 Build and open the native app on macOS with Swift 6 or later.
@@ -75,7 +75,7 @@ open "$(scripts/package-macos.sh)"
 Releases from 0.2.2 include the universal Mac app. Install it with Homebrew. Homebrew 6 and later require you to trust the tap first.
 
 ```sh
-brew tap engrmnaveed/tap && brew trust engrmnaveed/tap && brew install --cask engrmnaveed/tap/space16x
+brew tap engrmnaveed/tap && brew trust engrmnaveed/tap && brew install --cask engrmnaveed/tap/diskuse16x
 ```
 
 The app is free and open source, and it is not notarized by Apple, so macOS blocks the first launch. In the warning, click **Done**, not **Move to Trash**. Then open **System Settings → Privacy & Security**, scroll to **Security**, and click **Open Anyway**. See [Allow the first launch](docs/install.md#allow-the-first-launch) for every step. The [installation guide](docs/install.md#install-the-mac-app) also covers the direct download, verification, and removal.
@@ -83,22 +83,22 @@ The app is free and open source, and it is not notarized by Apple, so macOS bloc
 Install a checksummed CLI build from GitHub without sudo. Paste either line in Bash or Zsh.
 
 ```sh
-space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+diskuse16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
 ```
 
 ```sh
-space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+diskuse16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
 ```
 
-Add `--pro` after `sh -s --` to install [Space 16X Pro](#editions), a free edition with more analysis, such as `space16x diff`, `space16x duplicates`, `scan --cleanup` and `space16x explain`. The [Pro CLI reference](docs/cli-pro.md) documents them. It replaces Basic, and installing without `--pro` switches back.
+Add `--pro` after `sh -s --` to install [DiskUse16x Pro](#editions), a free edition with more analysis, such as `diskuse16x diff`, `diskuse16x duplicates`, `scan --cleanup` and `diskuse16x explain`. The [Pro CLI reference](docs/cli-pro.md) documents them. It replaces Basic, and installing without `--pro` switches back.
 
 To uninstall and clean up this shell's PATH, run the same installer with `--uninstall`.
 
 ```sh
-space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
+diskuse16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
 ```
 
-From 1.0.0, the CLI also installs with Homebrew on macOS and Linux, as `space16x-cli` or `space16x-cli-pro` from the same tap, and Linux releases include `.deb` and `.rpm` packages. See [Install the CLI with Homebrew](docs/install.md#install-the-cli-with-homebrew) and [Install a Linux package](docs/install.md#install-a-linux-package).
+From 1.0.0, the CLI also installs with Homebrew on macOS and Linux, as `du16x` or `du16x-pro` from the same tap, and Linux releases include `.deb` and `.rpm` packages. See [Install the CLI with Homebrew](docs/install.md#install-the-cli-with-homebrew) and [Install a Linux package](docs/install.md#install-a-linux-package).
 
 See the [installation guide](docs/install.md) for Wget removal, Fish commands, version pinning, Pro, and platform support.
 
@@ -121,4 +121,4 @@ Start with the [contributor guide](CONTRIBUTING.md) for the package layout, test
 
 ## License
 
-Space 16X is licensed under the [MIT License](LICENSE).
+DiskUse16x is licensed under the [MIT License](LICENSE).

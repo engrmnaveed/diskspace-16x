@@ -4,13 +4,13 @@ Find what's using space on your Mac in about two minutes. You need macOS 14 (Son
 
 Prefer to watch? The **Mac app walkthrough** video [is on YouTube](https://youtu.be/34wE80c-4d0).
 
-## 1. Install and open Space 16X
+## 1. Install and open DiskUse16x
 
 Install the app with Homebrew or download it from GitHub. [Install the Mac app](../install.md#install-the-mac-app) has both ways.
 
-Space 16X is free and isn't notarized by Apple, so macOS asks you to approve it the first time:
+DiskUse16x is free and isn't notarized by Apple, so macOS asks you to approve it the first time:
 
-1. Open Space 16X. When macOS warns you, click **Done**. Don't click **Move to Trash**.
+1. Open DiskUse16x. When macOS warns you, click **Done**. Don't click **Move to Trash**.
 2. Open **System Settings → Privacy & Security**, scroll down to **Security**, and click **Open Anyway**.
 3. Confirm with your password or Touch ID.
 
@@ -55,7 +55,7 @@ Click **Largest Files** in the sidebar. It lists the 100 biggest files anywhere 
 
 Click an item you don't need. To pick several, hold ⌘ and click each one. Then press ⌘⌫ or click **Move to Trash** at the bottom of the window.
 
-Space 16X asks you to confirm and shows how much space the items use. After you click **Move to Trash**, they go to the Trash and the totals update right away.
+DiskUse16x asks you to confirm and shows how much space the items use. After you click **Move to Trash**, they go to the Trash and the totals update right away.
 
 ![Two selected files and the confirmation: Move 2 items to the Trash? 450.0 MB of allocated space. Space is freed when you empty the Trash.](images/mac-move-to-trash.png)
 
@@ -63,7 +63,7 @@ The space comes back when you empty the Trash. Until then, everything is still i
 
 ## You're set
 
-That's the heart of Space 16X. Where to next:
+That's the heart of DiskUse16x. Where to next:
 
 - **[Find what's using space](find-what-uses-space.md)** has more ways to look, such as sorting and apparent size.
 - **[Clean up safely](clean-up.md)** explains what you can move and how to rescan.
@@ -73,5 +73,5 @@ That's the heart of Space 16X. Where to next:
 
 - Press Space to preview the selected file with Quick Look, as in Finder.
 - Right-click an item for **Reveal in Finder**, **Copy Path**, **Rescan Folder** and **Move to Trash…**.
-- Some folders say **Protected**? Give Space 16X [Full Disk Access](faq.md#some-folders-say-protected).
+- Some folders say **Protected**? Give DiskUse16x [Full Disk Access](faq.md#some-folders-say-protected).
 - Every menu command has a shortcut. See the [keyboard shortcuts](../install.md#mac-app-keyboard-shortcuts).

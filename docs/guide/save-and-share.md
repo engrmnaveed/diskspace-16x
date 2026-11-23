@@ -8,7 +8,7 @@ Keep a scan to look at later, open it on another computer, or check a server's d
 - **Terminal:** add `--export` and a file name to a scan:
 
   ```sh
-  space16x scan ~ --export home.json
+  diskuse16x scan ~ --export home.json
   ```
 
 A saved scan is a single `.json` file with the name and size of every item. It doesn't include the files themselves.
@@ -16,18 +16,18 @@ A saved scan is a single `.json` file with the name and size of every item. It d
 ## Open a saved scan
 
 - **Mac app:** choose **File → Open Scan…** (⇧⌘O), click **Open a Saved Scan…** on the start screen, or drop the `.json` file into the window.
-- **Terminal:** run `space16x --import home.json`.
+- **Terminal:** run `diskuse16x --import home.json`.
 
 You can browse a saved scan like a fresh one. It's read-only: Move to Trash, Rescan and Reveal in Finder are off, because the files may be on another computer or may have changed since. The sidebar says **Saved scan, read-only** in the app, and the explorer's heading says **imported**.
 
-Space 16X also opens scans saved by two other disk tools, ncdu and gdu, and they open Space 16X's.
+DiskUse16x also opens scans saved by two other disk tools, ncdu and gdu, and they open DiskUse16x's.
 
 ## Check a server from your computer
 
-`ssh` is the standard way to run a command on another computer, such as a server, from your own terminal. With `space16x` installed on both computers, one line scans the server and opens the result in the explorer on yours:
+`ssh` is the standard way to run a command on another computer, such as a server, from your own terminal. With `diskuse16x` installed on both computers, one line scans the server and opens the result in the explorer on yours:
 
 ```sh
-ssh -C server space16x scan / --export - | space16x --import -
+ssh -C server diskuse16x scan / --export - | diskuse16x --import -
 ```
 
 Replace `server` with the name you use for `ssh`, and `/` with the folder to scan. The scan runs on the server, and only the list of names and sizes travels to your computer. You browse it read-only, as with any saved scan.
@@ -37,8 +37,8 @@ Replace `server` with the name you use for `ssh`, and `/` with the folder to sca
 To check a server later, save the scan to a file instead:
 
 ```sh
-ssh -C server space16x scan /srv --export - > srv.json
-space16x --import srv.json
+ssh -C server diskuse16x scan /srv --export - > srv.json
+diskuse16x --import srv.json
 ```
 
 ## See which disk is filling up
@@ -46,7 +46,7 @@ space16x --import srv.json
 Before you scan, find the disk that needs it.
 
 - **Mac app:** the start screen lists your volumes with their free space. Click one to scan it.
-- **Terminal:** run `space16x volumes`:
+- **Terminal:** run `diskuse16x volumes`:
 
   ```text
         Size       Used       Free  Use%  Inodes  Type    Mounted on
@@ -58,16 +58,16 @@ Before you scan, find the disk that needs it.
 
 ## Get a text report
 
-`space16x scan` prints a plain report you can paste into a message, save, or use in a script.
+`diskuse16x scan` prints a plain report you can paste into a message, save, or use in a script.
 
 ```sh
-space16x scan ~/Downloads             # the folder's contents, biggest first
-space16x scan ~ --top 10              # the 10 largest files
-space16x scan /Volumes/Work --depth 2 # two levels deep
-space16x scan ~ --json > report.json  # for scripts
+diskuse16x scan ~/Downloads             # the folder's contents, biggest first
+diskuse16x scan ~ --top 10              # the 10 largest files
+diskuse16x scan /Volumes/Work --depth 2 # two levels deep
+diskuse16x scan ~ --json > report.json  # for scripts
 ```
 
-![The output of space16x scan ~ --top 5: the five largest files with their sizes, then the total.](images/terminal-scan-top.png)
+![The output of diskuse16x scan ~ --top 5: the five largest files with their sizes, then the total.](images/terminal-scan-top.png)
 
 The [CLI reference](../cli.md#generate-a-report) lists every option.
 
@@ -78,4 +78,4 @@ Saved scans and reports list the full path of every item, which can include name
 ## Go further
 
 - On a hard disk or a network drive, add `--threads 1` to scan more gently. See [Threads](../cli.md#threads).
-- ✨ **Pro, free:** compare two scans to see what grew, keep a scan history, and share a scan as a web page. See [Space 16X Pro](pro.md#compare-scans-and-keep-a-history).
+- ✨ **Pro, free:** compare two scans to see what grew, keep a scan history, and share a scan as a web page. See [DiskUse16x Pro](pro.md#compare-scans-and-keep-a-history).

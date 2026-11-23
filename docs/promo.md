@@ -1,6 +1,6 @@
 # Promotional video
 
-The Space 16X promo is a 29-second vertical Short. It opens with “What’s eating your disk space?”, launches the interactive terminal explorer by typing `space16x`, and shows folder navigation, file ranking, Move to Trash, Pro's cleanup suggestions with an Xcode archive to review, a server's scan piped into the explorer, the Mac app's charts, and Pro's clone-aware duplicate finder. The README uses a six-second loop with the terminal explorer and desktop side by side.
+The DiskUse16x promo is a 29-second vertical Short. It opens with “What’s eating your disk space?”, launches the interactive terminal explorer by typing `diskuse16x`, and shows folder navigation, file ranking, Move to Trash, Pro's cleanup suggestions with an Xcode archive to review, a server's scan piped into the explorer, the Mac app's charts, and Pro's clone-aware duplicate finder. The README uses a six-second loop with the terminal explorer and desktop side by side.
 
 ## Build locally
 
@@ -12,24 +12,24 @@ python3 -m venv .build/promo-venv
 .build/promo-venv/bin/python scripts/build-promo.py
 ```
 
-For subsequent builds, run just the last command. The script builds the Pro edition of the Rust CLI with the pinned toolchain and starts it with no arguments in a pseudo-terminal. It renders the real terminal screens with [pyte](https://pypi.org/project/pyte/0.8.2/), records a plain-text CLI report, and captures the shipping SwiftUI views in an offscreen window. Both scanners read the same synthetic folder. The import scene pipes that folder's export, with its root renamed to `/srv`, into `space16x --import -`. The folder holds a Cargo `target` folder and a `node_modules` folder, which the cleanup report lists, an Xcode archive, which it lists to review, and one video saved twice plus an APFS clone of it (`cp -c`), which the Duplicates scene finds after clicking **Find Duplicates** and marks as a clone that frees nothing. The fixture's files get modification dates from today back to last year, which the Modified column shows. FFmpeg adds the motion, cuts, and original synthesized music. Once dependencies are installed, rendering runs offline and needs no screen-recording permissions.
+For subsequent builds, run just the last command. The script builds the Pro edition of the Rust CLI with the pinned toolchain and starts it with no arguments in a pseudo-terminal. It renders the real terminal screens with [pyte](https://pypi.org/project/pyte/0.8.2/), records a plain-text CLI report, and captures the shipping SwiftUI views in an offscreen window. Both scanners read the same synthetic folder. The import scene pipes that folder's export, with its root renamed to `/srv`, into `diskuse16x --import -`. The folder holds a Cargo `target` folder and a `node_modules` folder, which the cleanup report lists, an Xcode archive, which it lists to review, and one video saved twice plus an APFS clone of it (`cp -c`), which the Duplicates scene finds after clicking **Find Duplicates** and marks as a clone that frees nothing. The fixture's files get modification dates from today back to last year, which the Modified column shows. FFmpeg adds the motion, cuts, and original synthesized music. Once dependencies are installed, rendering runs offline and needs no screen-recording permissions.
 
 | Output | Use |
 | --- | --- |
-| `dist/promo/space16x-short.mp4` | YouTube upload at 1080 × 1920, 30 fps, H.264/AAC |
-| `dist/promo/space16x-preview.gif` | Looping GitHub README preview at 900 × 500 |
+| `dist/promo/diskuse16x-short.mp4` | YouTube upload at 1080 × 1920, 30 fps, H.264/AAC |
+| `dist/promo/diskuse16x-preview.gif` | Looping GitHub README preview at 900 × 500 |
 
-Pass `--cli path/to/space16x` to reuse a built binary or `--output path/to/folder` to place the exports elsewhere.
+Pass `--cli path/to/diskuse16x` to reuse a built binary or `--output path/to/folder` to place the exports elsewhere.
 
 | Time | On screen |
 | --- | --- |
 | 0–2.5 s | Disk-space question and a preview of both interfaces |
-| 2.5–6 s | Type `space16x` and see the interactive folder list |
+| 2.5–6 s | Type `diskuse16x` and see the interactive folder list |
 | 6–8 s | Press Enter to open Exports |
 | 8–10.5 s | Press `f` to rank the largest files |
 | 10.5–13 s | Mark two files with Space and press `d` for the Move to Trash prompt |
 | 13–15 s | Pro's cleanup suggestions with `scan --cleanup`: Rust build output and Node packages, then an Xcode archive to review |
-| 15–18 s | Pipe a server's saved scan from `ssh` into `space16x --import -`, which opens it read-only |
+| 15–18 s | Pipe a server's saved scan from `ssh` into `diskuse16x --import -`, which opens it read-only |
 | 18–23 s | Mac app treemap and donut chart |
 | 23–26 s | Pro's Duplicates: a video saved twice and a clone of it, marked "Clone, frees nothing", after **Find Duplicates** |
 | 26–29 s | Free and open-source call to action with the GitHub handle |
@@ -43,13 +43,13 @@ The [Promo video workflow](../.github/workflows/promo.yml) renders changes to th
 ## Publish or refresh
 
 1. Watch the Short at phone size and check the command, chart labels, call to action, and soundtrack.
-2. In **YouTube Studio → Customization → Profile → Links**, add **Space 16X on GitHub** pointing to `https://github.com/engrmnaveed/diskspace-16x`. The channel profile link is clickable. The same URL in a Shorts description or comment appears as text. [YouTube link rules](https://support.google.com/youtube/answer/13748639) · [Set up profile links](https://support.google.com/youtubecreatorstudio/answer/2657964)
-3. Upload `space16x-short.mp4` in YouTube Studio. [YouTube upload guide](https://support.google.com/youtube/answer/12779649)
+2. In **YouTube Studio → Customization → Profile → Links**, add **DiskUse16x on GitHub** pointing to `https://github.com/engrmnaveed/diskspace-16x`. The channel profile link is clickable. The same URL in a Shorts description or comment appears as text. [YouTube link rules](https://support.google.com/youtube/answer/13748639) · [Set up profile links](https://support.google.com/youtubecreatorstudio/answer/2657964)
+3. Upload `diskuse16x-short.mp4` in YouTube Studio. [YouTube upload guide](https://support.google.com/youtube/answer/12779649)
 4. Copy the regenerated GIF to `Branding/Space16X-Demo.gif`. Once the Short is live, wrap the README’s Markdown image in a link to the Short. [GitHub Markdown images and links](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#images)
 
-**Suggested title**  What’s eating your disk space? | Space 16X
+**Suggested title**  What’s eating your disk space? | DiskUse16x
 
-**Suggested description**  Find the files and folders taking up space. Space 16X is a free, open-source disk analyzer with a native Mac app and an interactive CLI for macOS and Linux. Get it through the GitHub link on our profile.
+**Suggested description**  Find the files and folders taking up space. DiskUse16x is a free, open-source disk analyzer with a native Mac app and an interactive CLI for macOS and Linux. Get it through the GitHub link on our profile.
 
 ## Capture options for future clips
 
@@ -69,9 +69,9 @@ It builds both CLI editions into `cli/target/guide-basic` and `cli/target/guide-
 | --- | --- |
 | `docs/guide/images/*.png` | Screenshots, about 1,040 pixels wide, in the light appearance. Commit them. |
 | `docs/guide/images/*.gif` | Short loops beside the guide's sections, each well under 1 MB. Commit them. |
-| `dist/guide/space16x-mac-walkthrough.mp4`, `dist/guide/space16x-terminal-walkthrough.mp4` | Walkthroughs at 1920 × 1080, 30 fps, H.264/AAC, with captions and quiet synthesized music. Upload them to YouTube. |
-| `dist/guide/space16x-*-youtube.txt` | Each video's title, description, chapter timestamps and tags. |
-| `dist/guide/space16x-*-thumbnail.jpg` | Each video's 1280 × 720 YouTube thumbnail. |
+| `dist/guide/diskuse16x-mac-walkthrough.mp4`, `dist/guide/diskuse16x-terminal-walkthrough.mp4` | Walkthroughs at 1920 × 1080, 30 fps, H.264/AAC, with captions and quiet synthesized music. Upload them to YouTube. |
+| `dist/guide/diskuse16x-*-youtube.txt` | Each video's title, description, chapter timestamps and tags. |
+| `dist/guide/diskuse16x-*-thumbnail.jpg` | Each video's 1280 × 720 YouTube thumbnail. |
 
 The pieces live in [`scripts/guide/`](../scripts/guide/): `fixture.py` makes the folder, `terminal.py` and `storyboard.py` capture the explorer and lay out every screenshot, GIF and video scene, `GuideCapture.swift` drives the app's views, and `GuideRender.swift` draws the windows, captions and terminal screens. When the UI changes, rerun the script and commit the new images. Change what a scene shows in `storyboard.py`. The script stops with a clear message when an expected screen doesn't appear or a YouTube chapter would last less than 10 seconds. These files are outside the promo workflow's paths, so changing them doesn't render a new Short.
 
