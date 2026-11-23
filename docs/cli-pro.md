@@ -2,6 +2,10 @@
 
 Space 16X Pro is a free edition of the CLI with more analysis. It has every Basic command and option in the [CLI reference](cli.md), which also defines the exit codes and JSON schema 3 that these commands follow, and adds the commands below. Install it with `install.sh --pro`, as the [installation guide](install.md#install-space-16x-pro) shows. JSON reports from Pro say `"edition": "pro"`, and a Basic build answers these commands and options with a one-line hint to install Pro.
 
+## Stability in 1.x
+
+The [1.x promise](cli.md#stability-in-1x) covers Pro too. Within 1.x, Pro's commands, options, JSON fields and exit codes, including `3` for `--budget`, change only by additions. The scan history keeps its place, `$XDG_STATE_HOME/space16x/history`, its kept scans stay `scan --export` files, and `index.jsonl` keeps its fields, so every later 1.x release lists, opens and compares scans that an earlier one saved. A change that would break a script waits for 2.0.
+
 ## Compare scans with diff
 
 ```text
