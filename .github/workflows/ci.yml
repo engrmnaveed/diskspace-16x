@@ -50,11 +50,11 @@ jobs:
           archive="$(scripts/archive-macos.sh "$app")"
           (cd dist && shasum -a 256 -c "$(basename "$archive").sha256")
           read -r digest _ < "$archive.sha256"
-          brew tap-new --no-git local/space16x-ci
-          tap="$(brew --repository local/space16x-ci)"
+          brew tap-new --no-git local/diskuse16x-ci
+          tap="$(brew --repository local/diskuse16x-ci)"
           mkdir -p "$tap/Casks"
-          scripts/render-cask "$(cat scripts/release-version)" "$digest" > "$tap/Casks/space16x.rb"
-          brew style local/space16x-ci/space16x
+          scripts/render-cask "$(cat scripts/release-version)" "$digest" > "$tap/Casks/diskuse16x.rb"
+          brew style local/diskuse16x-ci/diskuse16x
 
   dependencies:
     name: Rust dependency policy

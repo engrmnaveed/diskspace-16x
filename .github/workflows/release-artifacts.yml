@@ -62,7 +62,7 @@ jobs:
           : "${APPLE_API_ISSUER:?Missing notary API issuer ID.}"
 
           umask 077
-          signing_dir="$(mktemp -d "$RUNNER_TEMP/space16x-signing.XXXXXX")"
+          signing_dir="$(mktemp -d "$RUNNER_TEMP/diskuse16x-signing.XXXXXX")"
           keychain="$signing_dir/release.keychain-db"
           cleanup() {
             security delete-keychain "$keychain" 2>/dev/null || true
@@ -85,11 +85,11 @@ jobs:
           unset MACOS_CERTIFICATE_PASSWORD
           security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
           security list-keychains -d user -s "$keychain"
-          scripts/notarize-macos.sh "dist/Space 16X.app"
-          (cd dist && shasum -a 256 -c space16x-*.zip.sha256)
+          scripts/notarize-macos.sh "dist/DiskUse16x.app"
+          (cd dist && shasum -a 256 -c diskuse16x-*.zip.sha256)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: space16x-macos-universal
+          name: diskuse16x-macos-universal
           path: |
             dist/*.zip
             dist/*.zip.sha256

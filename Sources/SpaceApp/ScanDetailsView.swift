@@ -41,7 +41,7 @@ struct ScanDetailsView: View {
                 Text("How sizes are counted")
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
-                Text("Folder totals sum regular files in the scan. Space 16X skips symbolic links and other devices, and counts each hard-linked file once.")
+                Text("Folder totals sum regular files in the scan. DiskUse16x skips symbolic links and other devices, and counts each hard-linked file once.")
                 Text("Allocated size is what the filesystem reports. APFS clones can share blocks and snapshots can retain them, so totals can differ from volume usage or from the space recovered after deletion. Apparent size, under View → Size, adds up file lengths instead, which differ for sparse, compressed, and small files.")
                 Text("Cloud-only entries are shown as references. They contribute no bytes, and cloud-only folders stay unexpanded.")
                 if report.excludedCount > 0 {
@@ -144,7 +144,7 @@ struct ScanDetailsView: View {
             switch workspace.accessAdvice {
             case .grant:
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text("Full Disk Access lets Space 16X read folders that privacy settings protect, such as other apps' data. Turn it on, then scan again. If items are still skipped, quit and reopen Space 16X.")
+                    Text("Full Disk Access lets DiskUse16x read folders that privacy settings protect, such as other apps' data. Turn it on, then scan again. If items are still skipped, quit and reopen DiskUse16x.")
                     Spacer(minLength: 0)
                     Button("Allow Full Disk Access…", action: FullDiskAccess.openSettings)
                 }

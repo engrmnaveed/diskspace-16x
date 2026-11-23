@@ -1,6 +1,6 @@
 import Foundation
 
-/// Why Space 16X keeps an item out of the Trash. The rules match the CLI explorer's.
+/// Why DiskUse16x keeps an item out of the Trash. The rules match the CLI explorer's.
 public enum TrashBlocker: Sendable, Equatable {
     case cloudOnly
     case pending
@@ -12,7 +12,7 @@ public enum TrashBlocker: Sendable, Equatable {
         switch self {
         case .cloudOnly: "is cloud-only. Remove it in Finder or its cloud app."
         case .pending: "wasn't scanned, so its size is unknown."
-        case .protected: "is protected, so Space 16X couldn't see all of it."
+        case .protected: "is protected, so DiskUse16x couldn't see all of it."
         case .incomplete: "had read errors, so its size is uncertain."
         }
     }

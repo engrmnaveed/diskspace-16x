@@ -69,7 +69,7 @@ final class HTMLReportTests: XCTestCase {
     /// The Rust CLI's `--older-than` tests check the same rule.
     func testKeepsOnlyOldFilesAndTheirFolders() async throws {
         let manager = FileManager.default
-        let root = manager.temporaryDirectory.appendingPathComponent("space16x-older-\(UUID().uuidString)")
+        let root = manager.temporaryDirectory.appendingPathComponent("diskuse16x-older-\(UUID().uuidString)")
         defer { try? manager.removeItem(at: root) }
         for folder in ["mixed", "new"] {
             try manager.createDirectory(at: root.appendingPathComponent(folder), withIntermediateDirectories: true)

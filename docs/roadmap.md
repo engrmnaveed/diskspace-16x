@@ -159,7 +159,7 @@ The features now cover every gap in §2, so M8 adds no new views. It checks what
   - **Docs and media:** every doc and the guide; the guide's screenshots, GIFs and both walkthrough videos; the promo and its GIF; and the lockup, all regenerated with the new name. The owner uploads the new walkthroughs. Branding stays code-drawn (`Branding/generate.swift`). The owner's Gemini in Claude's Chrome session is available if an illustrated asset is wanted.
   - **Internal names stay:** the Swift targets (`SpaceCore`, `SpacePro`, `SpaceApp`), Rust module paths, the roadmap lock and the history of this file.
   - **PRs, in order:** the CLI, installer and packaging; the Mac app and cask; the docs and guide text; the media; the tap's rename map and README; the repository rename and URLs; then re-pin the install one-liners.
-  - **Progress:** the CLI, installer, packaging, both CLI references and the shared export format are renamed (`feature/m8-rename-cli`). The installer's migration was checked against a real pre-rename install for bash, zsh and fish. Next: the Mac app and cask.
+  - **Progress:** the CLI, installer, packaging, both CLI references and the shared export format are renamed (`feature/m8-rename-cli`). The installer's migration was checked against a real pre-rename install for bash, zsh and fish. The Mac app and cask are renamed too (`feature/m8-rename-mac`): it imports Space 16X's settings once (checked with the owner's real preferences) and keeps an existing `Space 16X/History`, and the publish job retires `Casks/space16x.rb` with a `cask_renames.json` entry. Next: the docs and guide text.
 - [ ] M8.11 QA, archive sizes and release v1.0.0. M8.10 noticeably changes the UI, so it refreshes the promo.
 
 ### Future

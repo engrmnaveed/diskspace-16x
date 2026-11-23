@@ -15,12 +15,12 @@ var targets: [Target] = [
 ]
 
 #if os(macOS)
-products.append(.executable(name: "Space16XApp", targets: ["SpaceApp"]))
+products.append(.executable(name: "DiskUse16xApp", targets: ["SpaceApp"]))
 targets.append(.executableTarget(name: "SpaceApp", dependencies: ["SpaceCore", "SpacePro"]))
 #endif
 
 let package = Package(
-    name: "Space16X",
+    name: "DiskUse16x",
     platforms: [.macOS(.v14)],
     products: products,
     targets: targets

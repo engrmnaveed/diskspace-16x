@@ -6,7 +6,7 @@ import XCTest
 final class ScanHistoryTests: XCTestCase {
     func testKeepsScansAndListsThemNewestFirst() async throws {
         let manager = FileManager.default
-        let base = manager.temporaryDirectory.appendingPathComponent("space16x-history-\(UUID().uuidString)")
+        let base = manager.temporaryDirectory.appendingPathComponent("diskuse16x-history-\(UUID().uuidString)")
         let data = base.appendingPathComponent("data")
         try manager.createDirectory(at: data, withIntermediateDirectories: true)
         defer { try? manager.removeItem(at: base) }
@@ -50,5 +50,19 @@ final class ScanHistoryTests: XCTestCase {
         XCTAssertEqual(ScanHistory.fileName(scope: "/srv/.cache", time: 0), "19700101T000000Z-cache")
         XCTAssertEqual(ScanHistory.fileName(scope: "/", time: 0), "19700101T000000Z-root")
         XCTAssertEqual(ScanHistory.fileName(scope: "/Volumes/Café", time: 0), "19700101T000000Z-Caf__")
+    }
+
+    func testKeepsUsingAHistoryFromBefore1_0() throws {
+        let manager = FileManager.default
+        let support = manager.temporaryDirectory.appendingPathComponent("diskuse16x-support-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: support) }
+        try manager.createDirectory(at: support, withIntermediateDirectories: true)
+        let current = support.appendingPathComponent("DiskUse16x/History", isDirectory: true)
+        let legacy = support.appendingPathComponent("Space 16X/History", isDirectory: true)
+        XCTAssertEqual(ScanHistory.location(in: support).path, current.path)
+        try manager.createDirectory(at: legacy, withIntermediateDirectories: true)
+        XCTAssertEqual(ScanHistory.location(in: support).path, legacy.path)
+        try manager.createDirectory(at: current, withIntermediateDirectories: true)
+        XCTAssertEqual(ScanHistory.location(in: support).path, current.path)
     }
 }

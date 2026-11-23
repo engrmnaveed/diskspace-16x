@@ -91,7 +91,7 @@ struct WorkspaceView: View {
             HStack(spacing: 9) {
                 SpaceMark(size: 32)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Space 16X")
+                    Text("DiskUse16x")
                         .font(.headline)
                     Text("16X Brains")
                         .font(.caption)
@@ -226,7 +226,7 @@ struct WorkspaceView: View {
             Button("Open a Saved Scan…", action: workspace.openScan)
                 .buttonStyle(.link)
                 .disabled(!workspace.canChooseFolder)
-                .help("Browse a scan exported by Space 16X, the CLI, ncdu, or gdu (⇧⌘O)")
+                .help("Browse a scan exported by DiskUse16x, the CLI, ncdu, or gdu (⇧⌘O)")
 
             if !workspace.volumes.isEmpty {
                 volumeList

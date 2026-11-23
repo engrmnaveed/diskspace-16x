@@ -1,7 +1,7 @@
 import Foundation
 import SpaceCore
 
-/// Pro: one self-contained HTML page to share a scan, as `space16x scan --html` writes it:
+/// Pro: one self-contained HTML page to share a scan, as `diskuse16x scan --html` writes it:
 /// a summary, a treemap of the largest items, the scan root's contents, the largest files
 /// and file types. The page has no scripts and loads nothing, and it follows the reader's
 /// light or dark appearance. Owners, which the CLI adds on shared servers, stay out: the
@@ -27,7 +27,7 @@ public enum HTMLReport {
         let measure = metric == .allocated ? "allocated" : "apparent"
         var html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
         html += "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-        html += "<title>\(escape(root.name)) · Space 16X</title><style>\(style)</style></head><body><main>"
+        html += "<title>\(escape(root.name)) · DiskUse16x</title><style>\(style)</style></head><body><main>"
         html += "<h1>\(escape(root.path))</h1>"
         let total = size(root.bytes(for: metric))
         let apparent = size(root.logicalBytes)
@@ -51,7 +51,7 @@ public enum HTMLReport {
         html += contents(children, metric: metric, total: root.bytes(for: metric))
         html += files(report, metric: metric)
         html += fileTypes(root, metric: metric)
-        html += "<footer>Made with Space 16X \(escape(version)) (Mac, Pro). Sizes use decimal units (1 KB = 1,000 bytes). "
+        html += "<footer>Made with DiskUse16x \(escape(version)) (Mac, Pro). Sizes use decimal units (1 KB = 1,000 bytes). "
         html += "Review the paths on this page before you share it.</footer></main></body></html>\n"
         return html
     }

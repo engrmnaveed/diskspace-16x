@@ -34,7 +34,7 @@ struct ReceiptSheet: View {
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(save)
                 Text(budgetIsValid
-                    ? "The receipt says whether the operation grew by more than this. Space 16X remembers it for the operation’s name."
+                    ? "The receipt says whether the operation grew by more than this. DiskUse16x remembers it for the operation’s name."
                     : "Enter a size such as 500 MB or 2 GB.")
                     .font(.callout)
                     .foregroundStyle(budgetIsValid ? Color.secondary : Color.orange)

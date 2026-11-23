@@ -7,7 +7,7 @@ import SwiftUI
 typealias ViewState<Value> = SwiftUI.State<Value>
 
 @main
-struct Space16XApp: App {
+struct DiskUse16xApp: App {
     @ViewState private var freeSpace = FreeSpaceMonitor()
     @AppStorage(ProFeatures.defaultsKey) private var proFeatures = false
     @AppStorage(LowSpaceAlert.monitorKey) private var showsFreeSpace = false
@@ -15,10 +15,15 @@ struct Space16XApp: App {
     init() {
         // New windows come from File → New Window in Pro, not from tabs.
         NSWindow.allowsAutomaticWindowTabbing = false
+        // Space 16X, the name before 1.0, kept its settings under another bundle ID.
+        LegacySettings.importOnce(
+            from: UserDefaults.standard.persistentDomain(forName: LegacySettings.domain),
+            into: .standard
+        )
     }
 
     var body: some Scene {
-        WindowGroup("Space 16X", id: "workspace") {
+        WindowGroup("DiskUse16x", id: "workspace") {
             WorkspaceWindow()
         }
         .defaultSize(width: 1040, height: 700)

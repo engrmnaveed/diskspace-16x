@@ -1,5 +1,5 @@
 #!/bin/sh
-# Print the Homebrew cask for a published Space 16X Mac app release.
+# Print the Homebrew cask for a published DiskUse16x Mac app release.
 set -eu
 
 if [ "$#" -ne 2 ]; then
@@ -17,5 +17,5 @@ case "$digest" in *[!0-9a-fA-F]*|'') echo "Use a 64-character SHA-256 digest." >
 [ "${#digest}" -eq 64 ] || { echo "Use a 64-character SHA-256 digest." >&2; exit 1; }
 digest=$(printf '%s' "$digest" | LC_ALL=C tr '[:upper:]' '[:lower:]')
 
-template="$(dirname "$0")/../packaging/homebrew/space16x.rb.in"
+template="$(dirname "$0")/../packaging/homebrew/diskuse16x.rb.in"
 sed -e "s/@VERSION@/$version/g" -e "s/@SHA256@/$digest/g" "$template"

@@ -33,7 +33,7 @@ public struct FolderChanges: Sendable {
 }
 
 /// A saved scan to compare the current results with. Items match by their names below
-/// each root, as in `space16x diff`, so the roots may be different folders.
+/// each root, as in `diskuse16x diff`, so the roots may be different folders.
 public struct ScanComparison: Sendable {
     /// The saved scan's file name.
     public let name: String

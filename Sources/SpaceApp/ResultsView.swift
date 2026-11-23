@@ -304,7 +304,7 @@ struct ResultsView: View {
             case .grant:
                 Button("Allow Full Disk Access…", action: FullDiskAccess.openSettings)
                     .buttonStyle(.borderless)
-                    .help("Open Privacy & Security settings to let Space 16X read privacy-protected folders")
+                    .help("Open Privacy & Security settings to let DiskUse16x read privacy-protected folders")
             case .rescan:
                 Button("Scan Again", action: workspace.rescan)
                     .buttonStyle(.borderless)
@@ -573,7 +573,7 @@ struct ResultsView: View {
                 if workspace.duplicateGroups == nil {
                     Text("Find files with the same contents")
                         .font(.headline)
-                    Text("Space 16X reads files of 1 MB or more that share a length with another file and compares their contents. Nothing is read until you start.")
+                    Text("DiskUse16x reads files of 1 MB or more that share a length with another file and compares their contents. Nothing is read until you start.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

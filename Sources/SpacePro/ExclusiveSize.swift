@@ -1,7 +1,7 @@
 import Foundation
 import SpaceCore
 
-/// Exclusive size, as `space16x scan --exclusive` measures it: the space that moving items
+/// Exclusive size, as `diskuse16x scan --exclusive` measures it: the space that moving items
 /// to the Trash and emptying it frees at least. Blocks a file shares with APFS clones
 /// don't count, and neither does a file with other hard links. It reads metadata only.
 public enum ExclusiveSize {

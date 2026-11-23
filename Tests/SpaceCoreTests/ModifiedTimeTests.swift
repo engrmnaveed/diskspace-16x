@@ -23,7 +23,7 @@ final class ModifiedTimeTests: XCTestCase {
             .deletingLastPathComponent()
             .appendingPathComponent("fixtures/modified-times.json")
         let table = try JSONDecoder().decode(Table.self, from: Data(contentsOf: fixture))
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("space16x-modified-\(UUID().uuidString)")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("diskuse16x-modified-\(UUID().uuidString)")
         let manager = FileManager.default
         try manager.createDirectory(at: root, withIntermediateDirectories: false)
         defer { try? manager.removeItem(at: root) }
