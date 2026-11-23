@@ -109,7 +109,7 @@ pub(super) fn run(
         let mut workers = Vec::with_capacity(threads);
         for _ in 0..threads {
             let spawned = thread::Builder::new()
-                .name("space16x-walk".into())
+                .name("diskuse16x-walk".into())
                 .spawn_scoped(threads_scope, || work(&shared, scope, previews));
             match spawned {
                 Ok(worker) => workers.push(worker),

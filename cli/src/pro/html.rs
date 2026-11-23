@@ -68,7 +68,7 @@ fn page(report: &Report, metric: Metric, excludes: &[String], older_than: Option
         html,
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
          <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
-         <title>{} · Space 16X</title><style>{STYLE}</style></head><body><main>\
+         <title>{} · DiskUse16x</title><style>{STYLE}</style></head><body><main>\
          <h1>{}</h1><p>{} {measure} · {} apparent · {} items · scanned {}</p>",
         escape(&root.name().to_string_lossy()),
         escape(&scope),
@@ -114,7 +114,7 @@ fn page(report: &Report, metric: Metric, excludes: &[String], older_than: Option
     write_owners(&mut html, root, metric);
     let _ = writeln!(
         html,
-        "<footer>Made with Space 16X {} (pro). Sizes use decimal units (1 KB = 1,000 bytes). \
+        "<footer>Made with DiskUse16x {} (pro). Sizes use decimal units (1 KB = 1,000 bytes). \
          Review the paths on this page before you share it.</footer></main></body></html>",
         env!("CARGO_PKG_VERSION")
     );

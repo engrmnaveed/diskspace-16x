@@ -33,17 +33,19 @@ class @CLASS@ < Formula
     end
   end
 
-  conflicts_with "@CONFLICT@", because: "both install the `space16x` command"
+  conflicts_with "@CONFLICT@", because: "both install the `diskuse16x` and `du16x` commands"
 
   def install
-    bin.install "space16x"
+    bin.install "diskuse16x"
+    bin.install_symlink "diskuse16x" => "du16x"
     doc.install Dir["*.md"], "example-report.json"
   end
 
   test do
-    assert_equal "space16x #{version}@SUFFIX@", shell_output("#{bin}/space16x --version").strip
-    (testpath/"folder/file").write "Space 16X"
-    report = JSON.parse(shell_output("#{bin}/space16x scan #{testpath}/folder --json"))
+    assert_equal "diskuse16x #{version}@SUFFIX@", shell_output("#{bin}/diskuse16x --version").strip
+    assert_equal "diskuse16x #{version}@SUFFIX@", shell_output("#{bin}/du16x --version").strip
+    (testpath/"folder/file").write "DiskUse16x"
+    report = JSON.parse(shell_output("#{bin}/diskuse16x scan #{testpath}/folder --json"))
     assert_equal "@EDITION@", report["edition"]
   end
 end

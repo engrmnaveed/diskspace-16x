@@ -209,7 +209,7 @@ def cli_path(parser, binary):
         [cargo, "build", "--release", "--locked", "--features", "pro", "--target-dir", target],
         cwd=ROOT / "cli", check=True,
     )
-    return target / "release" / "space16x"
+    return target / "release" / "diskuse16x"
 
 
 def main():

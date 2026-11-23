@@ -161,7 +161,7 @@ impl Pool {
         for _ in 0..WORKERS {
             let queue = Arc::clone(&queue);
             if thread::Builder::new()
-                .name("space16x-metadata".into())
+                .name("diskuse16x-metadata".into())
                 .spawn(move || {
                     loop {
                         let job = queue.lock().expect("provider job queue").recv();

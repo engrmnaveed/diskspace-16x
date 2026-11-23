@@ -1,5 +1,5 @@
 [package]
-name = "space16x"
+name = "diskuse16x"
 version = "0.9.1"
 edition = "2024"
 rust-version = "1.100"

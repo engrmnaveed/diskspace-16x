@@ -1,5 +1,5 @@
 //! A few Objective-C runtime calls, which replace a binding crate for the two Foundation
-//! methods Space 16X uses: the Trash and, in Pro, a volume's purgeable space.
+//! methods DiskUse16x uses: the Trash and, in Pro, a volume's purgeable space.
 
 use std::ffi::{CStr, c_char, c_void};
 

@@ -1,5 +1,7 @@
 #!/bin/sh
-# Install a checksummed Space 16X CLI release from a public GitHub repository.
+# Install a checksummed DiskUse16x CLI release from a public GitHub repository.
+# It installs the diskuse16x command and du16x, a link to it, and replaces an
+# installation of the earlier space16x command that this installer made.
 set -eu
 
 usage() {
@@ -9,14 +11,14 @@ Usage: install.sh [--pro] [--repo OWNER/REPO] [--version VERSION] [--bin-dir DIR
 
 Download the CLI for this OS and architecture, verify its SHA-256 checksum,
 and install it without sudo. The defaults are the latest release of
-engrmnaveed/diskspace-16x and $HOME/.local/share/space16x/bin.
---pro installs Space 16X Pro, which replaces Basic. Run without it to switch back.
+engrmnaveed/diskspace-16x and $HOME/.local/share/diskuse16x/bin.
+--pro installs DiskUse16x Pro, which replaces Basic. Run without it to switch back.
 --shell-path prints the updated PATH for the calling shell.
 USAGE
 }
 
 fail() {
-    printf 'space16x install: %s\n' "$*" >&2
+    printf 'diskuse16x install: %s\n' "$*" >&2
     exit 1
 }
 
@@ -49,7 +51,9 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "${HOME:-}" ] || fail "Set HOME before running the installer."
-state=$HOME/.local/share/space16x
+state=$HOME/.local/share/diskuse16x
+# Releases before 1.0 installed the space16x command from here.
+legacy_state=$HOME/.local/share/space16x
 receipt=$state/receipt
 profiles=$state/profiles
 created_dirs=$state/dirs
@@ -83,7 +87,7 @@ safe_path() {
 lock_installation() {
     [ ! -L "$state" ] || fail "The installer directory is a symbolic link: $state"
     mkdir -p "$state"
-    mkdir "$state/.lock" 2>/dev/null || fail "Another Space 16X installer is active."
+    mkdir "$state/.lock" 2>/dev/null || fail "Another DiskUse16x installer is active."
     locked=true
     for managed in "$receipt" "$profiles" "$created_dirs" "$state/env.sh" "$state/env.fish"; do
         [ ! -L "$managed" ] || fail "An installer state file is a symbolic link: $managed"
@@ -114,10 +118,13 @@ digest() {
     printf '%s\n' "${value%% *}"
 }
 
+# The line a shell profile gets: $1 is sh or fish, and $2 the state folder's name,
+# diskuse16x, or space16x for an installation made before 1.0.
 profile_line() {
+    case "$2" in space16x) label='Space 16X' ;; *) label=DiskUse16x ;; esac
     case "$1" in
-        fish) printf '%s\n' 'test -r "$HOME/.local/share/space16x/env.fish"; and source "$HOME/.local/share/space16x/env.fish" # Space 16X installer' ;;
-        *) printf '%s\n' '[ ! -r "$HOME/.local/share/space16x/env.sh" ] || . "$HOME/.local/share/space16x/env.sh" # Space 16X installer' ;;
+        fish) printf 'test -r "$HOME/.local/share/%s/env.fish"; and source "$HOME/.local/share/%s/env.fish" # %s installer\n' "$2" "$2" "$label" ;;
+        *) printf '[ ! -r "$HOME/.local/share/%s/env.sh" ] || . "$HOME/.local/share/%s/env.sh" # %s installer\n' "$2" "$2" "$label" ;;
     esac
 }
 
@@ -155,7 +162,7 @@ configure_profile() {
     ensure_directory "${2%/*}"
     profile=$(profile_target "$2") || fail "Cannot resolve shell profile: $2"
     safe_path "$profile"
-    line=$(profile_line "$profile_type")
+    line=$(profile_line "$profile_type" diskuse16x)
     prior=existing
     if [ -e "$profile" ]; then
         [ -f "$profile" ] && [ -w "$profile" ] || fail "Cannot update shell profile: $profile"
@@ -169,18 +176,19 @@ configure_profile() {
     printf '%s\n' "$line" >> "$profile"
 }
 
+# Removes the lines listed in the profiles file $1, for the state folder named $2.
 remove_profiles() {
-    [ -f "$profiles" ] || return 0
+    [ -f "$1" ] || return 0
     while IFS="$tab" read -r profile_type prior profile; do
         [ -f "$profile" ] && [ ! -L "$profile" ] || continue
-        line=$(profile_line "$profile_type")
+        line=$(profile_line "$profile_type" "$2")
         grep -Fqx "$line" "$profile" || continue
         trim=0
         if [ "$(last_byte "$profile")" != 10 ] ||
             { [ "$prior" = no-newline ] && [ "$(tail -n 1 "$profile")" = "$line" ]; }; then
             trim=1
         fi
-        edited=$(mktemp "${profile%/*}/.space16x-profile.XXXXXX")
+        edited=$(mktemp "${profile%/*}/.diskuse16x-profile.XXXXXX")
         if ! cp -p "$profile" "$edited" ||
             ! awk -v line="$line" -v trim="$trim" '
                 $0 == line { next }
@@ -197,11 +205,67 @@ remove_profiles() {
             rm -f "$edited"
             fail "Could not clean shell profile: $profile"
         fi
-    done < "$profiles"
+    done < "$1"
 }
 
+# Removes the directories listed in $1 that are empty now, newest first.
+remove_created_dirs() {
+    [ -f "$1" ] || return 0
+    awk '{ dirs[NR] = $0 } END { for (i = NR; i > 0; i--) print dirs[i] }' "$1" |
+        while IFS= read -r directory; do rmdir "$directory" 2>/dev/null || :; done
+}
+
+# Removes the du16x link in $1 if it is ours: a symbolic link to diskuse16x.
+remove_link() {
+    if [ -L "$1/du16x" ] && [ "$(readlink "$1/du16x")" = diskuse16x ]; then rm -f "$1/du16x"; fi
+}
+
+legacy_dir=
+legacy_path_added=false
+# Removes an installation of the space16x command made before 1.0, the way --uninstall
+# did: its executable only if it is unchanged, and only the profile lines it added.
+remove_legacy() {
+    old=${legacy_state:?}
+    [ -f "$old/receipt" ] && [ ! -L "$old" ] || return 0
+    mkdir "$old/.lock" 2>/dev/null || {
+        printf 'Kept the earlier space16x installation, because its installer is active.\n' >&2
+        return 0
+    }
+    for managed in "$old/receipt" "$old/profiles" "$old/dirs" "$old/env.sh" "$old/env.fish"; do
+        if [ -L "$managed" ]; then
+            rmdir "$old/.lock"
+            fail "An earlier installer state file is a symbolic link: $managed"
+        fi
+    done
+    legacy_digest=
+    { IFS= read -r legacy_dir && IFS= read -r legacy_digest && IFS= read -r legacy_path_added; } \
+        < "$old/receipt" || legacy_dir=
+    case "$legacy_dir:$legacy_path_added" in
+        /*:true|/*:false) safe_path "$legacy_dir" ;;
+        *) legacy_dir= legacy_path_added=false ;;
+    esac
+    if [ -n "$legacy_dir" ]; then
+        legacy_binary=$legacy_dir/space16x
+        if [ -f "$legacy_binary" ] && [ ! -L "$legacy_binary" ]; then
+            checksum_command
+            if [ "$(digest "$legacy_binary")" = "$legacy_digest" ]; then
+                rm -f "$legacy_binary"
+            else
+                printf 'Kept the replacement executable at %s\n' "$legacy_binary" >&2
+            fi
+        fi
+    fi
+    remove_profiles "$old/profiles" space16x
+    remove_created_dirs "$old/dirs"
+    rm -f "$old/receipt" "$old/profiles" "$old/dirs" "$old/env.sh" "$old/env.fish"
+    rmdir "$old/.lock"
+    rmdir "${old:?}/bin" "${old:?}" 2>/dev/null || :
+    printf 'Removed the earlier space16x command and its shell setup.\n' >&2
+}
+
+# Prints the path list $2 (by default PATH) without the directory $1.
 remove_from_path() {
-    remaining=$PATH:
+    remaining=${2-$PATH}:
     separator=
     while [ -n "$remaining" ]; do
         item=${remaining%%:*}
@@ -215,10 +279,13 @@ remove_from_path() {
 }
 
 safe_path "$state"
+safe_path "$legacy_state"
 if [ "$action" = uninstall ]; then
+    found=false
     if [ -f "$receipt" ]; then
+        found=true
         lock_installation
-        destination=$installed_dir/space16x
+        destination=$installed_dir/diskuse16x
         if [ -f "$destination" ] && [ ! -L "$destination" ]; then
             checksum_command
             if [ "$(digest "$destination")" = "$installed_digest" ]; then
@@ -227,18 +294,22 @@ if [ "$action" = uninstall ]; then
                 printf 'Kept the replacement executable at %s\n' "$destination" >&2
             fi
         fi
-        remove_profiles
-        if [ -f "$created_dirs" ]; then
-            awk '{ dirs[NR] = $0 } END { for (i = NR; i > 0; i--) print dirs[i] }' "$created_dirs" |
-                while IFS= read -r directory; do rmdir "$directory" 2>/dev/null || :; done
-        fi
+        remove_link "$installed_dir"
+        remove_profiles "$profiles" diskuse16x
+        remove_created_dirs "$created_dirs"
         rm -f "$receipt" "$profiles" "$created_dirs" "$state/env.sh" "$state/env.fish"
-        printf 'Removed the Space 16X installation and its shell setup.\n' >&2
-    else
-        printf 'No managed Space 16X installation was found.\n' >&2
+        printf 'Removed the DiskUse16x installation and its shell setup.\n' >&2
     fi
+    if [ -f "$legacy_state/receipt" ]; then
+        found=true
+        remove_legacy
+    fi
+    "$found" || printf 'No managed DiskUse16x installation was found.\n' >&2
     if "$print_path"; then
-        if "$path_added"; then remove_from_path "$installed_dir"; else printf '%s\n' "$PATH"; fi
+        remaining_path=$PATH
+        if "$path_added"; then remaining_path=$(remove_from_path "$installed_dir"); fi
+        if "$legacy_path_added"; then remaining_path=$(remove_from_path "$legacy_dir" "$remaining_path"); fi
+        printf '%s\n' "$remaining_path"
     fi
     exit 0
 fi
@@ -289,7 +360,7 @@ else
 fi
 
 checksum_command
-stage=$(mktemp -d "${TMPDIR:-/tmp}/space16x-install.XXXXXX")
+stage=$(mktemp -d "${TMPDIR:-/tmp}/diskuse16x-install.XXXXXX")
 
 download_wget() {
     request=$1
@@ -326,7 +397,7 @@ download() {
     esac
 }
 
-asset=space16x-$edition$target.tar.gz
+asset=diskuse16x-$edition$target.tar.gz
 base=https://github.com/$repo/releases/$release
 download "$base/$asset.sha256" "$stage/$asset.sha256" ||
     fail "Could not download $asset.sha256 from $base. Check that this release publishes the requested target."
@@ -345,25 +416,39 @@ expected=$(printf '%s' "$expected" | LC_ALL=C tr '[:upper:]' '[:lower:]')
 [ "$(digest "$stage/$asset")" = "$expected" ] || fail "SHA-256 checksum mismatch for $asset."
 
 # Stream only the executable into our staging directory, without unpacking paths.
-tar -xOzf "$stage/$asset" space16x > "$stage/space16x" ||
-    fail "The release archive does not contain a readable space16x executable."
-[ -s "$stage/space16x" ] || fail "The release executable is empty."
+tar -xOzf "$stage/$asset" diskuse16x > "$stage/diskuse16x" ||
+    fail "The release archive does not contain a readable diskuse16x executable."
+[ -s "$stage/diskuse16x" ] || fail "The release executable is empty."
 
 lock_installation
-if [ -z "$bin_dir" ]; then bin_dir=${installed_dir:-$state/bin}; fi
+# An earlier space16x installation in a folder the user chose keeps that folder.
+legacy_choice=
+if [ -z "$installed_dir" ] && [ -f "$legacy_state/receipt" ] && [ ! -L "$legacy_state/receipt" ] &&
+    IFS= read -r legacy_choice < "$legacy_state/receipt"; then
+    case "$legacy_choice" in
+        "$legacy_state/bin"|*:*|*"$tab"*) legacy_choice= ;;
+        /*) ;;
+        *) legacy_choice= ;;
+    esac
+fi
+if [ -z "$bin_dir" ]; then bin_dir=${installed_dir:-${legacy_choice:-$state/bin}}; fi
 case "$bin_dir" in /*) ;; *) bin_dir=$PWD/$bin_dir ;; esac
 safe_path "$bin_dir"
 ensure_directory "$bin_dir"
 bin_dir=$(cd "$bin_dir" && pwd -P)
 safe_path "$bin_dir"
 if [ -n "$installed_dir" ] && [ "$bin_dir" != "$installed_dir" ]; then
-    fail "Space 16X is installed in $installed_dir. Uninstall it before choosing a new directory."
+    fail "DiskUse16x is installed in $installed_dir. Uninstall it before choosing a new directory."
 fi
-destination=$bin_dir/space16x
+destination=$bin_dir/diskuse16x
 if [ -e "$destination" ] || [ -L "$destination" ]; then
     [ -f "$destination" ] && [ ! -L "$destination" ] &&
         [ "$bin_dir" = "$installed_dir" ] && [ "$(digest "$destination")" = "$installed_digest" ] ||
         fail "An unmanaged file already exists at $destination."
+fi
+if [ -e "$bin_dir/du16x" ] || [ -L "$bin_dir/du16x" ]; then
+    [ -L "$bin_dir/du16x" ] && [ "$(readlink "$bin_dir/du16x")" = diskuse16x ] ||
+        fail "An unmanaged file already exists at $bin_dir/du16x."
 fi
 
 new_path=$PATH
@@ -371,22 +456,26 @@ case ":$PATH:" in
     *":$bin_dir:"*) ;;
     *) new_path=$bin_dir${PATH:+:$PATH}; path_added=true ;;
 esac
-staged_binary=$(mktemp "$bin_dir/.space16x-install.XXXXXX")
-cp "$stage/space16x" "$staged_binary"
+staged_binary=$(mktemp "$bin_dir/.diskuse16x-install.XXXXXX")
+cp "$stage/diskuse16x" "$staged_binary"
 chmod 0755 "$staged_binary"
 new_digest=$(digest "$staged_binary")
 mv -f "$staged_binary" "$destination"
 staged_binary=
+[ -L "$bin_dir/du16x" ] || ln -s diskuse16x "$bin_dir/du16x"
 printf '%s\n%s\n%s\n' "$bin_dir" "$new_digest" "$path_added" > "$receipt"
+# The new command is in place, so remove an earlier space16x installation before the
+# shell profiles change: a profile only it created then goes, rather than staying empty.
+remove_legacy
 
 if "$path_added"; then
     cat > "$state/env.sh" <<'ENV'
-if IFS= read -r space16x_bin < "$HOME/.local/share/space16x/receipt"; then
+if IFS= read -r diskuse16x_bin < "$HOME/.local/share/diskuse16x/receipt"; then
     case ":$PATH:" in
-        *":$space16x_bin:"*) ;;
-        *) export PATH="$space16x_bin${PATH:+:$PATH}" ;;
+        *":$diskuse16x_bin:"*) ;;
+        *) export PATH="$diskuse16x_bin${PATH:+:$PATH}" ;;
     esac
-    unset space16x_bin
+    unset diskuse16x_bin
 fi
 ENV
     login_shell=${SHELL:-sh}
@@ -402,9 +491,9 @@ ENV
         zsh) configure_profile sh "${ZDOTDIR:-$HOME}/.zshrc" ;;
         fish)
             cat > "$state/env.fish" <<'ENV'
-if read -l space16x_bin < "$HOME/.local/share/space16x/receipt"
-    if not contains -- "$space16x_bin" $PATH
-        set -gx PATH "$space16x_bin" $PATH
+if read -l diskuse16x_bin < "$HOME/.local/share/diskuse16x/receipt"
+    if not contains -- "$diskuse16x_bin" $PATH
+        set -gx PATH "$diskuse16x_bin" $PATH
     end
 end
 ENV
@@ -414,8 +503,11 @@ ENV
     esac
 fi
 if [ -n "$edition" ]; then
-    printf 'Installed Space 16X Pro at %s\n' "$destination" >&2
+    printf 'Installed DiskUse16x Pro at %s, with du16x beside it\n' "$destination" >&2
 else
-    printf 'Installed %s\n' "$destination" >&2
+    printf 'Installed %s, with du16x beside it\n' "$destination" >&2
+fi
+if "$legacy_path_added" && [ "$legacy_dir" != "$bin_dir" ]; then
+    new_path=$(remove_from_path "$legacy_dir" "$new_path")
 fi
 if "$print_path"; then printf '%s\n' "$new_path"; fi

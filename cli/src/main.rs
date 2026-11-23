@@ -22,11 +22,11 @@ use std::sync::atomic::AtomicBool;
 use report::{Metric, Selection};
 
 const HELP: &str = "\
-Usage: space16x [--no-color] [--read-only] [--threads N] [EXCLUDES] [PATH]
-       space16x --import FILE|- [--no-color]
-       space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [--export FILE|-]
+Usage: diskuse16x [--no-color] [--read-only] [--threads N] [EXCLUDES] [PATH]
+       diskuse16x --import FILE|- [--no-color]
+       diskuse16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [--export FILE|-]
                      [--threads N] [EXCLUDES]
-       space16x volumes [--all] [--json]
+       diskuse16x volumes [--all] [--json]
 
 Open the disk explorer in an interactive terminal. PATH defaults to the current directory.
 In the explorer, Space marks items and d moves them to the Trash after you confirm.
@@ -41,9 +41,9 @@ command shows the size, used and free space, and inode use of each mounted volum
   --export FILE Also save the whole scan to FILE in ncdu's JSON format. With -, write
              only the export to standard output.
   --import FILE Browse a scan saved by --export, ncdu -o or gdu -o, read-only. With -,
-             read standard input: ssh HOST space16x scan / --export - | space16x --import -
+             read standard input: ssh HOST diskuse16x scan / --export - | diskuse16x --import -
   --no-color Show the explorer without colors, as does setting NO_COLOR
-  --read-only Turn off Move to Trash in the explorer, as does SPACE16X_READ_ONLY=1
+  --read-only Turn off Move to Trash in the explorer, as does DISKUSE16X_READ_ONLY=1
   --threads N Read metadata with N threads, from 1 to 64 (default: one per core, up
              to 8). Use 1 for hard disks and network filesystems.
   --         Treat the following argument as a path, even if it starts with a dash
@@ -62,15 +62,15 @@ Scan exit codes: 0 complete, 1 error, 2 partial.
 
 #[cfg(not(feature = "pro"))]
 const EDITION_HELP: &str = "
-This is Space 16X Basic. Space 16X Pro, also free, adds scan history and comparison,
+This is DiskUse16x Basic. DiskUse16x Pro, also free, adds scan history and comparison,
 modification dates, file types, owners, disk explanations, cleanup suggestions,
 duplicates and reports. Install it with install.sh --pro. See docs/install.md.
 ";
 
 #[cfg(feature = "pro")]
 const EDITION_HELP: &str = "
-This is Space 16X Pro. It adds:
-  space16x diff OLD NEW|PATH [--depth N | --top N] [--apparent] [--json] [--threads N]
+This is DiskUse16x Pro. It adds:
+  diskuse16x diff OLD NEW|PATH [--depth N | --top N] [--apparent] [--json] [--threads N]
                 [--budget SIZE]
              Compare a saved scan with another one, or with PATH scanned now using the
              saved scan's excludes. Lists what changed, or the N files that changed most.
@@ -98,20 +98,20 @@ This is Space 16X Pro. It adds:
              and simulator devices to review, which can't be recreated. u in the
              explorer lists them for Move to Trash. Nothing is removed without your
              confirmation.
-  space16x history save [PATH] [--threads N] [EXCLUDES]
+  diskuse16x history save [PATH] [--threads N] [EXCLUDES]
              Scan PATH and keep the scan in the history folder,
-             $XDG_STATE_HOME/space16x/history or ~/.local/state/space16x/history.
-  space16x history [PATH] [--json]
+             $XDG_STATE_HOME/diskuse16x/history or ~/.local/state/diskuse16x/history.
+  diskuse16x history [PATH] [--json]
              List the kept scans, newest first, of PATH or of every folder.
-  space16x history diff [PATH] [--since DAYS] [--depth N | --top N] [--apparent]
+  diskuse16x history diff [PATH] [--since DAYS] [--depth N | --top N] [--apparent]
                         [--json] [--threads N] [--budget SIZE]
              Compare PATH now with its newest kept scan, or the newest one at least
              DAYS days old.
-  space16x duplicates [PATH] [--min-size SIZE] [--json] [--threads N] [EXCLUDES]
+  diskuse16x duplicates [PATH] [--min-size SIZE] [--json] [--threads N] [EXCLUDES]
              List files with the same contents, of SIZE or more (default: 1M),
              grouped, with the space the extra copies use. Only this command reads
              file contents: it compares files of the same length.
-  space16x explain [PATH] [--json]
+  diskuse16x explain [PATH] [--json]
              Show the space on PATH's volume that a scan can't see: on macOS, the
              APFS container's volumes, purgeable space and local snapshots, and on
              Linux, space reserved for root and deleted files still held open.
@@ -121,10 +121,10 @@ as a treemap, X adds an Exclusive column, measured after the scan, D lists dupli
 files once Enter starts comparing them, and E explains the open folder's volume.
 ";
 
-/// Subcommands only Space 16X Pro has. Basic builds answer them with an install hint.
+/// Subcommands only DiskUse16x Pro has. Basic builds answer them with an install hint.
 const PRO_COMMANDS: &[&str] = &["diff", "history", "explain", "duplicates"];
 
-/// Options only Space 16X Pro's scan takes. Basic builds answer them with an install hint.
+/// Options only DiskUse16x Pro's scan takes. Basic builds answer them with an install hint.
 const PRO_SCAN_OPTIONS: &[&str] = &[
     "--older-than",
     "--types",
@@ -252,7 +252,7 @@ fn main() -> ExitCode {
     let command = match parse(env::args_os().skip(1)) {
         Ok(command) => command,
         Err(message) => {
-            eprintln!("space16x: {message}\nRun 'space16x --help' for usage.");
+            eprintln!("diskuse16x: {message}\nRun 'diskuse16x --help' for usage.");
             return ExitCode::FAILURE;
         }
     };
@@ -261,7 +261,7 @@ fn main() -> ExitCode {
         Err(error) if error.kind() == io::ErrorKind::Interrupted => ExitCode::from(130),
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("space16x: {}", report::terminal_text(&error.to_string()));
+            eprintln!("diskuse16x: {}", report::terminal_text(&error.to_string()));
             ExitCode::FAILURE
         }
     }
@@ -272,7 +272,7 @@ fn run(command: Command) -> io::Result<u8> {
         Command::Help => io::stdout().write_all([HELP, EDITION_HELP].concat().as_bytes())?,
         Command::Version => writeln!(
             io::stdout(),
-            "space16x {}{}",
+            "diskuse16x {}{}",
             env!("CARGO_PKG_VERSION"),
             if cfg!(feature = "pro") { " (pro)" } else { "" }
         )?,
@@ -281,7 +281,7 @@ fn run(command: Command) -> io::Result<u8> {
         #[cfg(not(feature = "pro"))]
         Command::ProOnly(name) => {
             eprintln!(
-                "space16x: {name} is in Space 16X Pro, a free edition. Install it with install.sh --pro: https://github.com/engrmnaveed/diskspace-16x/blob/main/docs/install.md#install-space-16x-pro"
+                "diskuse16x: {name} is in DiskUse16x Pro, a free edition. Install it with install.sh --pro: https://github.com/engrmnaveed/diskspace-16x/blob/main/docs/install.md#install-diskuse16x-pro"
             );
             return Ok(1);
         }
@@ -295,7 +295,7 @@ fn run(command: Command) -> io::Result<u8> {
                 volumes::write_plain(io::stdout().lock(), &list)?;
                 for (path, message) in &issues {
                     eprintln!(
-                        "space16x: {}: {}",
+                        "diskuse16x: {}: {}",
                         report::terminal_path(path),
                         report::terminal_text(message)
                     );
@@ -489,7 +489,7 @@ fn scan_error(path: &Path, error: io::Error) -> io::Error {
 fn report_excluded(count: u64, patterns: usize) {
     if count > 0 {
         eprintln!(
-            "space16x: excluded {count} {} matching {patterns} {}",
+            "diskuse16x: excluded {count} {} matching {patterns} {}",
             if count == 1 { "path" } else { "paths" },
             if patterns == 1 { "pattern" } else { "patterns" }
         );
@@ -509,7 +509,7 @@ fn report_issues(issues: &[scanner::Issue], local: bool) {
             continue;
         }
         eprintln!(
-            "space16x: {}: {}",
+            "diskuse16x: {}: {}",
             report::terminal_path(&issue.path),
             report::terminal_text(&issue.message)
         );
@@ -523,12 +523,12 @@ fn report_issues(issues: &[scanner::Issue], local: bool) {
         "the system"
     };
     eprintln!(
-        "space16x: skipped {protected} protected {} (permission denied or blocked by {os}); use --json to list them",
+        "diskuse16x: skipped {protected} protected {} (permission denied or blocked by {os}); use --json to list them",
         if protected == 1 { "path" } else { "paths" }
     );
     if local && privacy_refusals && !has_full_disk_access() {
         eprintln!(
-            "space16x: give your terminal app Full Disk Access in System Settings to include privacy-protected folders"
+            "diskuse16x: give your terminal app Full Disk Access in System Settings to include privacy-protected folders"
         );
     }
 }

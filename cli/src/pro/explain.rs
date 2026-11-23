@@ -1,4 +1,4 @@
-//! `space16x explain`: the space on a volume that a scan can't show, from system queries
+//! `diskuse16x explain`: the space on a volume that a scan can't show, from system queries
 //! and metadata alone. It reads no file contents and changes nothing.
 //!
 //! On macOS that is the other volumes of the APFS container, which share its space,
@@ -47,7 +47,7 @@ pub fn run(path: &Path, json: bool) -> io::Result<u8> {
         write_plain(stdout, &explanation)?;
         if explanation.hidden_processes > 0 {
             eprintln!(
-                "space16x: the open files of {} other users' processes are hidden; run as root to include them",
+                "diskuse16x: the open files of {} other users' processes are hidden; run as root to include them",
                 explanation.hidden_processes
             );
         }
@@ -725,7 +725,7 @@ mod tests {
     fn finds_a_deleted_file_this_process_holds_open() {
         use std::os::unix::fs::MetadataExt;
         let directory =
-            std::env::temp_dir().join(format!("space16x-explain-{}", std::process::id()));
+            std::env::temp_dir().join(format!("diskuse16x-explain-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("held.log");
         let mut file = std::fs::File::create(&path).unwrap();

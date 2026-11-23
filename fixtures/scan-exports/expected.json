@@ -64,6 +64,83 @@
       ]
     },
     {
+      "file": "diskuse16x.json",
+      "root": {
+        "path": "/Users/me",
+        "allocatedBytes": 12288,
+        "apparentBytes": 5001,
+        "itemCount": 7
+      },
+      "excludedCount": 3,
+      "excludes": [
+        "node_modules",
+        "*.log"
+      ],
+      "issues": [
+        {
+          "path": "/Users/me/gone",
+          "kind": "error"
+        },
+        {
+          "path": "/Users/me/locked",
+          "kind": "permissionDenied"
+        }
+      ],
+      "entries": [
+        {
+          "path": "/Users/me/Projects",
+          "allocatedBytes": 12288,
+          "apparentBytes": 5001,
+          "itemCount": 3
+        },
+        {
+          "path": "/Users/me/Projects/a.bin",
+          "allocatedBytes": 8192,
+          "apparentBytes": 5000,
+          "itemCount": 0
+        },
+        {
+          "path": "/Users/me/Projects/a-link.bin",
+          "allocatedBytes": 0,
+          "apparentBytes": 0,
+          "itemCount": 0,
+          "hardLinkAlias": true
+        },
+        {
+          "path": "/Users/me/Projects/tab\tdir",
+          "allocatedBytes": 4096,
+          "apparentBytes": 1,
+          "itemCount": 1
+        },
+        {
+          "path": "/Users/me/Projects/tab\tdir/q\"uote\\",
+          "allocatedBytes": 4096,
+          "apparentBytes": 1,
+          "itemCount": 0
+        },
+        {
+          "path": "/Users/me/iCloud",
+          "allocatedBytes": 0,
+          "apparentBytes": 0,
+          "itemCount": 0,
+          "cloudOnly": true
+        },
+        {
+          "path": "/Users/me/photo.heic",
+          "allocatedBytes": 0,
+          "apparentBytes": 0,
+          "itemCount": 0,
+          "cloudOnly": true
+        },
+        {
+          "path": "/Users/me/locked",
+          "allocatedBytes": 0,
+          "apparentBytes": 0,
+          "itemCount": 0
+        }
+      ]
+    },
+    {
       "file": "space16x.json",
       "root": {
         "path": "/Users/me",

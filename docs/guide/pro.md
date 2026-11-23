@@ -7,7 +7,7 @@ Pro adds deeper views to Space 16X. It's free, like Basic, with nothing to buy o
 ## Turn on Pro
 
 - **Mac app:** open **Space 16X → Settings…** and switch on **Turn on Pro features**. It's the same app, so there's nothing to install. The new views appear right away.
-- **Terminal:** run the installer again with `--pro` added, as [Install Space 16X Pro](../install.md#install-space-16x-pro) shows. Pro replaces Basic under the same `space16x` command, and `space16x --version` ends with `(pro)`. To switch back, run the installer without `--pro`.
+- **Terminal:** run the installer again with `--pro` added, as [Install Space 16X Pro](../install.md#install-diskuse16x-pro) shows. Pro replaces Basic under the same `space16x` command, and `space16x --version` ends with `(pro)`. To switch back, run the installer without `--pro`.
 
 ![Space 16X Settings, with exclude patterns, Turn on Pro features switched on, and the menu-bar free-space options.](images/mac-settings.png)
 

@@ -633,7 +633,7 @@ mod tests {
 
     #[test]
     fn lists_names_in_order_with_the_same_file_metadata_as_fstatat() -> io::Result<()> {
-        let root = std::env::temp_dir().join(format!("space16x-listing-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("diskuse16x-listing-{}", std::process::id()));
         fs::create_dir(&root)?;
         let result = (|| {
             fs::create_dir(root.join("folder"))?;

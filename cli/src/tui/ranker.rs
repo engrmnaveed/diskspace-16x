@@ -41,7 +41,7 @@ impl RankWorker {
         let work = Arc::new((Mutex::new(Work::default()), Condvar::new()));
         let background = Arc::clone(&work);
         let thread = thread::Builder::new()
-            .name("space16x-rank".into())
+            .name("diskuse16x-rank".into())
             .spawn(move || {
                 let (queue, changed) = &*background;
                 loop {

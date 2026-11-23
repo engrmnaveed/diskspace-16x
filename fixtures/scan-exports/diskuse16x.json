@@ -1,0 +1,12 @@
+[1,2,{"progname":"diskuse16x","progver":"1.0.0","timestamp":1700000000,"diskuse16x_excludedCount":3,"diskuse16x_excludes":["node_modules","*.log"],"diskuse16x_issues":[
+{"path":"/Users/me/gone","message":"Stat: No such file or directory (os error 2)","kind":"error"},
+{"path":"/Users/me/locked","message":"List: Permission denied (os error 13)","kind":"permissionDenied"}]},
+[{"name":"/Users/me"},
+[{"name":"Projects"},
+{"name":"a.bin","asize":5000,"dsize":8192},
+{"name":"a-link.bin","asize":0,"dsize":0,"diskuse16x_state":"hardLinkAlias"},
+[{"name":"tab\u0009dir"},
+{"name":"q\"uote\\","asize":1,"dsize":4096}]],
+[{"name":"iCloud","diskuse16x_state":"cloudOnly"}],
+{"name":"photo.heic","asize":0,"dsize":0,"diskuse16x_state":"cloudOnly"},
+[{"name":"locked","read_error":true,"diskuse16x_state":"protected"}]]]

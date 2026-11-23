@@ -1,24 +1,24 @@
-# Space 16X Pro CLI reference
+# DiskUse16x Pro CLI reference
 
-Space 16X Pro is a free edition of the CLI with more analysis. It has every Basic command and option in the [CLI reference](cli.md), which also defines the exit codes and JSON schema 3 that these commands follow, and adds the commands below. Install it with `install.sh --pro`, as the [installation guide](install.md#install-space-16x-pro) shows. JSON reports from Pro say `"edition": "pro"`, and a Basic build answers these commands and options with a one-line hint to install Pro.
+DiskUse16x Pro is a free edition of the CLI with more analysis. It has every Basic command and option in the [CLI reference](cli.md), which also defines the exit codes and JSON schema 3 that these commands follow, and adds the commands below. Install it with `install.sh --pro`, as the [installation guide](install.md#install-diskuse16x-pro) shows. JSON reports from Pro say `"edition": "pro"`, and a Basic build answers these commands and options with a one-line hint to install Pro.
 
 ## Stability in 1.x
 
-The [1.x promise](cli.md#stability-in-1x) covers Pro too. Within 1.x, Pro's commands, options, JSON fields and exit codes, including `3` for `--budget`, change only by additions. The scan history keeps its place, `$XDG_STATE_HOME/space16x/history`, its kept scans stay `scan --export` files, and `index.jsonl` keeps its fields, so every later 1.x release lists, opens and compares scans that an earlier one saved. A change that would break a script waits for 2.0.
+The [1.x promise](cli.md#stability-in-1x) covers Pro too. Within 1.x, Pro's commands, options, JSON fields and exit codes, including `3` for `--budget`, change only by additions. The scan history keeps its place, `$XDG_STATE_HOME/diskuse16x/history` (or the `space16x/history` folder beside it that a release before 1.0 made, while only that one exists), its kept scans stay `scan --export` files, and `index.jsonl` keeps its fields, so every later 1.x release lists, opens and compares scans that an earlier one saved. A change that would break a script waits for 2.0.
 
 ## Compare scans with diff
 
 ```text
-space16x diff OLD NEW|PATH [--depth N | --top N] [--apparent] [--json] [--threads N] [--budget SIZE]
+diskuse16x diff OLD NEW|PATH [--depth N | --top N] [--apparent] [--json] [--threads N] [--budget SIZE]
 ```
 
-`space16x diff` shows what grew or shrank. OLD is a saved scan: a `scan --export` file, an ncdu or gdu export, or `-` for standard input. NEW is another saved scan, or a folder to scan now. A folder scan uses OLD's exclude patterns and `--threads`, so both sides count the same things. Entries match by their path below each root, so the roots can differ, as for a server's export compared with a backup.
+`diskuse16x diff` shows what grew or shrank. OLD is a saved scan: a `scan --export` file, an ncdu or gdu export, or `-` for standard input. NEW is another saved scan, or a folder to scan now. A folder scan uses OLD's exclude patterns and `--threads`, so both sides count the same things. Entries match by their path below each root, so the roots can differ, as for a server's export compared with a backup.
 
 ```sh
-space16x scan ~ --export ~/home-monday.json
-space16x diff ~/home-monday.json ~
-space16x diff ~/home-monday.json ~ --top 10
-ssh server space16x scan /srv --export - | space16x diff - srv-last-week.json
+diskuse16x scan ~ --export ~/home-monday.json
+diskuse16x diff ~/home-monday.json ~
+diskuse16x diff ~/home-monday.json ~ --top 10
+ssh server diskuse16x scan /srv --export - | diskuse16x diff - srv-last-week.json
 ```
 
 ```text
@@ -36,7 +36,7 @@ ssh server space16x scan /srv --export - | space16x diff - srv-last-week.json
 | `--apparent` | Compare apparent sizes instead of allocated bytes. |
 | `--json` | Write schema 3 with `schemaVersion`, `edition`, `rankedBy`, `old` and `new` summaries (`scope`, `allocatedBytes`, `apparentBytes`, `itemCount`, `isPartial`), `changeBytes`, and either `depth` and `entries` or `topLimit` and `topFiles`. Each change has `path`, `kind`, `oldBytes`, `newBytes` (`null` when that scan doesn't have it), and a signed `changeBytes`. |
 | `--threads N` | Threads for scanning NEW when it's a folder. |
-| `--budget SIZE` | Say whether the total grew by more than SIZE, in bytes or a decimal unit such as `500M` or `2GB`, and exit with `3` when it did. A last line reads "Within the 500.0 MB budget, with 120.0 MB to spare." or "Over the 500.0 MB budget by 80.0 MB.", and JSON adds `budgetBytes` and `overBudget`. A build or CI step can fail on it: `space16x history diff . --budget 500M`. |
+| `--budget SIZE` | Say whether the total grew by more than SIZE, in bytes or a decimal unit such as `500M` or `2GB`, and exit with `3` when it did. A last line reads "Within the 500.0 MB budget, with 120.0 MB to spare." or "Over the 500.0 MB budget by 80.0 MB.", and JSON adds `budgetBytes` and `overBudget`. A build or CI step can fail on it: `diskuse16x history diff . --budget 500M`. |
 
 Entries only one scan has are marked `[added]` or `[removed]`. The exit code is `0`, `2` when either scan is partial, `3` with `--budget` when the total grew by more than the budget, even if a scan is partial, and `1` for errors. Version 0.9.0 added `--budget` and exit code `3`.
 
@@ -48,20 +48,20 @@ Pro reads each file's modification time with the same metadata call that reads i
 - JSON reports add `newestModified` to the root, each entry and each top file, in Unix seconds.
 
 ```text
-space16x scan [PATH] --older-than DAYS [--depth N | --top N] [--json] ...
+diskuse16x scan [PATH] --older-than DAYS [--depth N | --top N] [--json] ...
 ```
 
-`--older-than DAYS` counts only files last modified more than DAYS days ago, and the folders that hold them. Sizes, item counts, rankings and top files then describe that older data alone, so `space16x scan ~ --older-than 365` shows where the files you haven't touched in a year are. Folders without such files are left out, except folders that couldn't be read completely, which stay so their state still shows. Text reports add a line on standard error with the cutoff date, and JSON reports add `olderThanDays`. `--export` still saves the whole scan. Times before 1970 count as 1970. The Mac app's **View → Show Files Older Than** applies the same rule with presets from 30 days to 2 years.
+`--older-than DAYS` counts only files last modified more than DAYS days ago, and the folders that hold them. Sizes, item counts, rankings and top files then describe that older data alone, so `diskuse16x scan ~ --older-than 365` shows where the files you haven't touched in a year are. Folders without such files are left out, except folders that couldn't be read completely, which stay so their state still shows. Text reports add a line on standard error with the cutoff date, and JSON reports add `olderThanDays`. `--export` still saves the whole scan. Times before 1970 count as 1970. The Mac app's **View → Show Files Older Than** applies the same rule with presets from 30 days to 2 years.
 
 ```sh
-space16x scan ~/Projects --older-than 180
-space16x scan /srv --older-than 365 --top 20 --json
+diskuse16x scan ~/Projects --older-than 180
+diskuse16x scan /srv --older-than 365 --top 20 --json
 ```
 
 ## File types
 
 ```text
-space16x scan [PATH] --types N [--apparent] [--older-than DAYS] [--json] ...
+diskuse16x scan [PATH] --types N [--apparent] [--older-than DAYS] [--json] ...
 ```
 
 `--types N` lists the N file types that use the most space in the scan, with their size and file count, in place of entries. The rest are summed in one line, and the last line is the scan's total. Press `t` in the explorer for the same list for the open folder, ranked by the current size, and `t` or Esc to close it.
@@ -82,7 +82,7 @@ JSON reports put `typeLimit`, `typeCount` (the number of distinct types in the s
 ## Owners
 
 ```text
-space16x scan [PATH] --by-owner [--apparent] [--older-than DAYS] [--json] ...
+diskuse16x scan [PATH] --by-owner [--apparent] [--older-than DAYS] [--json] ...
 ```
 
 `--by-owner` lists the space and the files and folders each user owns, largest first, in place of entries, which shows who fills a shared server. Run it as a user who can read the folders, such as root, to count everyone's files.
@@ -102,10 +102,10 @@ JSON reports put `owners` in place of `depth` and `entries`. Each owner has `own
 ## HTML report
 
 ```text
-space16x scan [PATH] --html FILE|- [--apparent] [--older-than DAYS] ...
+diskuse16x scan [PATH] --html FILE|- [--apparent] [--older-than DAYS] ...
 ```
 
-`--html FILE` also writes the scan as one self-contained HTML page that you can open in any browser or send to someone: the totals, a treemap of the 30 largest items, the scan root's contents with their share, the 25 largest files, the largest file types and, when more than one user owns items, the owners. The page has no scripts and loads nothing from the network, and it follows the reader's light or dark appearance. It's written after the usual text or JSON report, which still goes to standard output, as with `--export FILE`. `--html -` writes only the page to standard output, so `ssh server space16x scan /srv --html - > srv.html` reports on a server, and it takes no other report options such as `--json`, `--depth` or `--types`. `--apparent` ranks the page by apparent size, and `--older-than` limits it to older files. Space 16X writes only the file you name. The page shows full paths, so review it before you share it. The Mac app's **File → Export HTML Report…** writes the same page, without owners, and `fixtures/html-report` checks that both have the same structure.
+`--html FILE` also writes the scan as one self-contained HTML page that you can open in any browser or send to someone: the totals, a treemap of the 30 largest items, the scan root's contents with their share, the 25 largest files, the largest file types and, when more than one user owns items, the owners. The page has no scripts and loads nothing from the network, and it follows the reader's light or dark appearance. It's written after the usual text or JSON report, which still goes to standard output, as with `--export FILE`. `--html -` writes only the page to standard output, so `ssh server diskuse16x scan /srv --html - > srv.html` reports on a server, and it takes no other report options such as `--json`, `--depth` or `--types`. `--apparent` ranks the page by apparent size, and `--older-than` limits it to older files. DiskUse16x writes only the file you name. The page shows full paths, so review it before you share it. The Mac app's **File → Export HTML Report…** writes the same page, without owners, and `fixtures/html-report` checks that both have the same structure.
 
 ## Treemap in the explorer
 
@@ -114,10 +114,10 @@ Press `m` in the explorer to draw the open folder's contents as a treemap, with 
 ## Duplicates
 
 ```text
-space16x duplicates [PATH] [--min-size SIZE] [--json] [--threads N] [EXCLUDES]
+diskuse16x duplicates [PATH] [--min-size SIZE] [--json] [--threads N] [EXCLUDES]
 ```
 
-`space16x duplicates` lists files with the same contents, grouped, with the space the extra copies use. It's the one command that reads file contents, and only because you ran it: scans and every other command read metadata alone. It scans PATH, groups files of at least SIZE bytes (default `1M`) by length, and reads only files that share a length with another, first their first 64 KB and then the whole file when those match. Contents are compared with SipHash under random keys chosen for each run, so a false match is about as likely as 1 in 2^64 for each pair of files and can't be engineered.
+`diskuse16x duplicates` lists files with the same contents, grouped, with the space the extra copies use. It's the one command that reads file contents, and only because you ran it: scans and every other command read metadata alone. It scans PATH, groups files of at least SIZE bytes (default `1M`) by length, and reads only files that share a length with another, first their first 64 KB and then the whole file when those match. Contents are compared with SipHash under random keys chosen for each run, so a false match is about as likely as 1 in 2^64 for each pair of files and can't be engineered.
 
 ```text
      Extra        Size  Copies  Files
@@ -137,7 +137,7 @@ In the explorer, press `D` for the **Duplicates** view of the whole scan. It rea
 ## Exclusive size
 
 ```text
-space16x scan [PATH] --exclusive [--depth N | --top N] [--json] ...
+diskuse16x scan [PATH] --exclusive [--depth N | --top N] [--json] ...
 ```
 
 `--exclusive` adds each entry's **exclusive size**: the space that moving it to the Trash and emptying it frees at least. Allocated sizes count every file's blocks, but some of those blocks may stay in use after you delete the file:
@@ -162,10 +162,10 @@ In the explorer, press `X` to add an **Exclusive** column beside the size, and `
 ## Cleanup suggestions
 
 ```text
-space16x scan [PATH] --cleanup [--apparent] [--older-than DAYS] [--json] ...
+diskuse16x scan [PATH] --cleanup [--apparent] [--older-than DAYS] [--json] ...
 ```
 
-`--cleanup` lists folders that tools recreate when they need them, in place of entries, largest first, with the total. Press `u` in the explorer for the same list across the scan, where Space marks folders and `d` moves them to the Trash after you confirm, as anywhere in the explorer. Enter jumps to a folder, and `u` or Esc returns to the folders. Space 16X only suggests: it never removes anything without that confirmation, and Move to Trash keeps items until you empty the Trash.
+`--cleanup` lists folders that tools recreate when they need them, in place of entries, largest first, with the total. Press `u` in the explorer for the same list across the scan, where Space marks folders and `d` moves them to the Trash after you confirm, as anywhere in the explorer. Enter jumps to a folder, and `u` or Esc returns to the folders. DiskUse16x only suggests: it never removes anything without that confirmation, and Move to Trash keeps items until you empty the Trash.
 
 ```text
       Size  Suggestion            Path
@@ -198,19 +198,19 @@ JSON reports put `cleanupBytes` and `suggestions` in place of `depth` and `entri
 ## Scan history
 
 ```text
-space16x history save [PATH] [--threads N] [EXCLUDES]
-space16x history [list] [PATH] [--json]
-space16x history diff [PATH] [--since DAYS] [--depth N | --top N] [--apparent] [--json] [--threads N]
+diskuse16x history save [PATH] [--threads N] [EXCLUDES]
+diskuse16x history [list] [PATH] [--json]
+diskuse16x history diff [PATH] [--since DAYS] [--depth N | --top N] [--apparent] [--json] [--threads N]
                       [--budget SIZE]
 ```
 
 `history save` scans PATH and keeps the scan, so you can later see what grew since then. `history` lists the kept scans, newest first, of PATH or of every folder. `history diff` compares PATH now with its newest kept scan, using that scan's exclude patterns, and shows the same report as [`diff`](#compare-scans-with-diff). With `--since DAYS`, it uses the newest kept scan that is at least DAYS days old, which answers "what grew this week?":
 
 ```sh
-space16x history save /srv               # for example, daily from cron
-space16x history /srv
-space16x history diff /srv --since 7
-space16x history diff ~ --top 10
+diskuse16x history save /srv               # for example, daily from cron
+diskuse16x history /srv
+diskuse16x history diff /srv --since 7
+diskuse16x history diff ~ --top 10
 ```
 
 ```text
@@ -219,15 +219,15 @@ Saved                   Size      Items  Path
 2026-11-14 06:00   498.10 GB    1088120  /srv
 ```
 
-Only `history save` writes anything. Kept scans are `scan --export` files, so `--import` and `diff` open them too, in `$XDG_STATE_HOME/space16x/history`, or `~/.local/state/space16x/history` when `XDG_STATE_HOME` isn't set. The folder is readable only by you. `index.jsonl` there lists each scan with its totals, one JSON object per line. Each scan holds every path, so a large scan can take tens of megabytes. Space 16X never deletes them: remove old ones from the folder, or move them to the Trash with the explorer, when you no longer need them. `history list --json` writes `schemaVersion`, `edition`, `directory` and `scans`, each with `file`, `path`, `scope`, `savedAt` (Unix seconds), `allocatedBytes`, `apparentBytes`, `itemCount` and `isPartial`. `history save` exits like `scan`, and `history diff` like `diff`. Both exit with `1` when there is no matching kept scan.
+Only `history save` writes anything. Kept scans are `scan --export` files, so `--import` and `diff` open them too, in `$XDG_STATE_HOME/diskuse16x/history`, or `~/.local/state/diskuse16x/history` when `XDG_STATE_HOME` isn't set. If only a history from before 1.0 exists, in `space16x/history` beside it, DiskUse16x keeps using that one, so upgrading keeps every saved scan. The folder is readable only by you. `index.jsonl` there lists each scan with its totals, one JSON object per line. Each scan holds every path, so a large scan can take tens of megabytes. DiskUse16x never deletes them: remove old ones from the folder, or move them to the Trash with the explorer, when you no longer need them. `history list --json` writes `schemaVersion`, `edition`, `directory` and `scans`, each with `file`, `path`, `scope`, `savedAt` (Unix seconds), `allocatedBytes`, `apparentBytes`, `itemCount` and `isPartial`. `history save` exits like `scan`, and `history diff` like `diff`. Both exit with `1` when there is no matching kept scan.
 
 ## Explain my disk
 
 ```text
-space16x explain [PATH] [--json]
+diskuse16x explain [PATH] [--json]
 ```
 
-`space16x explain` shows the space on PATH's volume that a scan can't see, which is why a folder's scan rarely matches `df` or Finder. PATH defaults to the current directory. It reads system figures and metadata only, never file contents, and changes nothing. Press `E` in the explorer for the same report on the open folder's volume, and `E` or Esc to close it.
+`diskuse16x explain` shows the space on PATH's volume that a scan can't see, which is why a folder's scan rarely matches `df` or Finder. PATH defaults to the current directory. It reads system figures and metadata only, never file contents, and changes nothing. Press `E` in the explorer for the same report on the open folder's volume, and `E` or Esc to close it.
 
 On macOS, an APFS volume shares its container's space with the container's other volumes, so `explain` lists each mounted volume's own used space: the system volume, Preboot, Recovery, VM (which holds swap files) and your data. It also shows **purgeable** space, which macOS frees when an app needs it, such as caches, iCloud copies of downloaded files and local snapshots, and the Time Machine **local snapshots** that `tmutil listlocalsnapshots` lists, one line per snapshot with the date it was taken, oldest first. Each snapshot keeps the space of files deleted since it was taken until macOS removes it, after about 24 hours or sooner when space runs low, and that space is part of purgeable. macOS doesn't report each snapshot's size without root: `tmutil` and `diskutil apfs listSnapshots` give only names and dates, so `explain` lists what it can and never deletes a snapshot.
 

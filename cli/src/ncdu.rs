@@ -1,5 +1,5 @@
 //! Scans saved in the ncdu JSON export format (<https://dev.yorhel.nl/ncdu/jsonfmt>),
-//! which ncdu and gdu read and write too. Space 16X adds `space16x_*` keys, which other
+//! which ncdu and gdu read and write too. DiskUse16x adds `diskuse16x_*` keys, which other
 //! tools ignore, to keep entry states, issues and names that aren't UTF-8.
 
 use std::borrow::Cow;
@@ -26,20 +26,20 @@ pub fn write(
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |time| time.as_secs());
-    out.extend_from_slice(b"[1,2,{\"progname\":\"space16x\",\"progver\":\"");
+    out.extend_from_slice(b"[1,2,{\"progname\":\"diskuse16x\",\"progver\":\"");
     out.extend_from_slice(env!("CARGO_PKG_VERSION").as_bytes());
     out.extend_from_slice(b"\",\"timestamp\":");
     number(out, timestamp);
-    out.extend_from_slice(b",\"space16x_excludedCount\":");
+    out.extend_from_slice(b",\"diskuse16x_excludedCount\":");
     number(out, report.excluded_count);
-    out.extend_from_slice(b",\"space16x_excludes\":[");
+    out.extend_from_slice(b",\"diskuse16x_excludes\":[");
     for (index, pattern) in excludes.iter().enumerate() {
         if index > 0 {
             out.push(b',');
         }
         string(out, pattern);
     }
-    out.extend_from_slice(b"],\"space16x_issues\":[");
+    out.extend_from_slice(b"],\"diskuse16x_issues\":[");
     for (index, issue) in report.issues.iter().enumerate() {
         out.extend_from_slice(if index > 0 { b",\n{" } else { b"\n{" });
         name(
@@ -90,7 +90,7 @@ const CHUNK: usize = 64 * 1024;
 
 fn info(out: &mut Vec<u8>, entry: Entry<'_>, name_bytes: &[u8]) {
     out.push(b'{');
-    name(out, b"name", b"space16x_nameBytes", name_bytes);
+    name(out, b"name", b"diskuse16x_nameBytes", name_bytes);
     if entry.kind() == EntryKind::File {
         out.extend_from_slice(b",\"asize\":");
         number(out, entry.apparent_bytes());
@@ -108,7 +108,7 @@ fn info(out: &mut Vec<u8>, entry: Entry<'_>, name_bytes: &[u8]) {
         out.extend_from_slice(b",\"read_error\":true");
     }
     if !state.is_empty() {
-        out.extend_from_slice(b",\"space16x_state\":\"");
+        out.extend_from_slice(b",\"diskuse16x_state\":\"");
         out.extend_from_slice(state);
         out.push(b'"');
     }
@@ -179,9 +179,9 @@ pub struct Imported {
     pub excludes: Vec<String>,
 }
 
-/// Reads an ncdu JSON export from ncdu, gdu or Space 16X.
+/// Reads an ncdu JSON export from ncdu, gdu or DiskUse16x.
 ///
-/// Folder totals count their contents, as a Space 16X scan does, so a folder's own size
+/// Folder totals count their contents, as a DiskUse16x scan does, so a folder's own size
 /// in the file isn't added. Excluded, special and other-filesystem entries are left out,
 /// and a file with the same device and inode as an earlier one is a hard-link alias.
 pub fn read(input: &mut dyn FnMut(&mut [u8]) -> io::Result<usize>) -> io::Result<Imported> {
@@ -207,7 +207,7 @@ pub fn read(input: &mut dyn FnMut(&mut [u8]) -> io::Result<usize>) -> io::Result
     let major = parser.number()?;
     if major != 1 {
         return Err(invalid(format!(
-            "This ncdu export uses format version {major}, which Space 16X can't read."
+            "This ncdu export uses format version {major}, which DiskUse16x can't read."
         )));
     }
     parser.expect(b',')?;
@@ -220,13 +220,16 @@ pub fn read(input: &mut dyn FnMut(&mut [u8]) -> io::Result<usize>) -> io::Result
     parser.object(&mut |parser, key| {
         match key {
             b"progname" => program = parser.string()?,
-            b"space16x_excludedCount" => excluded_count = Some(parser.number()?),
-            b"space16x_excludes" => parser.array(&mut |parser| {
+            // Exports from before 1.0 use the earlier space16x_ prefix.
+            b"diskuse16x_excludedCount" | b"space16x_excludedCount" => {
+                excluded_count = Some(parser.number()?)
+            }
+            b"diskuse16x_excludes" | b"space16x_excludes" => parser.array(&mut |parser| {
                 let pattern = parser.string()?;
                 excludes.push(String::from_utf8_lossy(&pattern).into_owned());
                 Ok(())
             })?,
-            b"space16x_issues" => {
+            b"diskuse16x_issues" | b"space16x_issues" => {
                 let list = issues.insert(Vec::new());
                 parser.array(&mut |parser| {
                     list.push(parser.issue()?);
@@ -244,7 +247,7 @@ pub fn read(input: &mut dyn FnMut(&mut [u8]) -> io::Result<usize>) -> io::Result
     if root_path.as_os_str().is_empty() {
         return Err(parser.error("the scan root has no name"));
     }
-    // Space 16X exports list every issue, so only other tools' read errors become issues.
+    // DiskUse16x exports list every issue, so only other tools' read errors become issues.
     let issues_from_entries = issues.is_none();
     let mut issues = issues.unwrap_or_default();
     if issues_from_entries && root.read_error {
@@ -635,8 +638,10 @@ impl Parser<'_> {
                 b"read_error" => info.read_error = parser.boolean()?,
                 b"notreg" => info.special = parser.boolean()?,
                 b"excluded" => info.excluded = Some(parser.string()?),
-                b"space16x_nameBytes" => original_name = Some(parser.hex_bytes()?),
-                b"space16x_state" => {
+                b"diskuse16x_nameBytes" | b"space16x_nameBytes" => {
+                    original_name = Some(parser.hex_bytes()?)
+                }
+                b"diskuse16x_state" | b"space16x_state" => {
                     info.state = match parser.string()?.as_slice() {
                         b"cloudOnly" => Some(EntryState::CloudOnly),
                         b"hardLinkAlias" => Some(EntryState::HardLinkAlias),
@@ -775,17 +780,17 @@ mod tests {
         let output = export(&report, &excludes);
         let text = String::from_utf8(output.clone()).expect("exports are UTF-8");
         assert!(
-            text.starts_with("[1,2,{\"progname\":\"space16x\""),
+            text.starts_with("[1,2,{\"progname\":\"diskuse16x\""),
             "{text}"
         );
-        let lossy = "{\"name\":\"caf\u{fffd}.txt\",\"space16x_nameBytes\":\"636166e92e747874\",\"asize\":100,\"dsize\":100}";
+        let lossy = "{\"name\":\"caf\u{fffd}.txt\",\"diskuse16x_nameBytes\":\"636166e92e747874\",\"asize\":100,\"dsize\":100}";
         assert!(text.contains(lossy), "{text}");
         assert!(
             text.contains(r#"{"name":"tab\u0009here\u000a","asize":5000,"dsize":8192}"#),
             "{text}"
         );
         assert!(
-            text.contains(r#"{"name":"locked","read_error":true,"space16x_state":"protected"}"#),
+            text.contains(r#"{"name":"locked","read_error":true,"diskuse16x_state":"protected"}"#),
             "{text}"
         );
         let imported = import(&output).unwrap();
@@ -809,6 +814,7 @@ mod tests {
 
     #[test]
     fn reads_ncdu_and_gdu_exports() {
+        // space16x_excludes: the key's name before 1.0 still reads.
         let ncdu = b"[1,2,{\"progname\":\"ncdu\",\"progver\":\"1.19\",\"timestamp\":1700000000,\
             \"space16x_excludes\":[\"a\\/b\"]},\n\
             [{\"name\":\"/srv\",\"asize\":4096,\"dsize\":4096,\"dev\":2049,\"ino\":2},\n\
@@ -885,7 +891,7 @@ mod tests {
             value
         };
         let cases = expected["cases"].as_array().unwrap();
-        assert_eq!(cases.len(), 3);
+        assert_eq!(cases.len(), 4);
         for case in cases {
             let file = case["file"].as_str().unwrap();
             let imported = import(&std::fs::read(fixtures.join(file)).unwrap()).unwrap();

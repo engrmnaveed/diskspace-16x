@@ -1,4 +1,4 @@
-# cargo-deny policy for the Space 16X CLI. CI runs:
+# cargo-deny policy for the DiskUse16x CLI. CI runs:
 #   cargo deny --locked check advisories bans licenses sources
 
 [graph]

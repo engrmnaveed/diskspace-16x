@@ -1,7 +1,7 @@
 import Foundation
 
 /// A scan saved in ncdu's JSON export format (https://dev.yorhel.nl/ncdu/jsonfmt), which
-/// the Space 16X CLI, ncdu and gdu also read and write. Space 16X adds `space16x_*` keys,
+/// the DiskUse16x CLI, ncdu and gdu also read and write. DiskUse16x adds `diskuse16x_*` keys,
 /// which other tools ignore, to keep issues, excludes and entry states.
 public struct SavedScan: Sendable {
     public let report: ScanReport
@@ -19,7 +19,7 @@ public struct SavedScan: Sendable {
         public var errorDescription: String? { message }
     }
 
-    /// Reads an export from ncdu, gdu or Space 16X. Folder totals count their contents, as
+    /// Reads an export from ncdu, gdu or DiskUse16x. Folder totals count their contents, as
     /// a scan does, so a folder's own size in the file isn't added. Excluded, special and
     /// other-filesystem entries are left out, and a file with the same device and inode as
     /// an earlier one is a hard-link alias.
@@ -47,15 +47,15 @@ private struct ExportWriter {
 
     mutating func write(_ scan: SavedScan, version: String) {
         let report = scan.report
-        append("[1,2,{\"progname\":\"space16x\",\"progver\":")
+        append("[1,2,{\"progname\":\"diskuse16x\",\"progver\":")
         string(version)
         append(",\"timestamp\":\(UInt64(max(0, Date().timeIntervalSince1970)))")
-        append(",\"space16x_excludedCount\":\(report.excludedCount),\"space16x_excludes\":[")
+        append(",\"diskuse16x_excludedCount\":\(report.excludedCount),\"diskuse16x_excludes\":[")
         for (index, pattern) in scan.excludes.enumerated() {
             if index > 0 { append(",") }
             string(pattern)
         }
-        append("],\"space16x_issues\":[")
+        append("],\"diskuse16x_issues\":[")
         // An entry with an error reads as incomplete, and one only refused access as protected.
         var issueKinds: [String: ScanIssue.Kind] = [:]
         for (index, issue) in report.issues.enumerated() {
@@ -95,11 +95,11 @@ private struct ExportWriter {
         }
         let issue = issueKinds.isEmpty ? nil : issueKinds[entry.path]
         if let issue {
-            append(issue == .error ? ",\"read_error\":true" : ",\"read_error\":true,\"space16x_state\":\"protected\"")
+            append(issue == .error ? ",\"read_error\":true" : ",\"read_error\":true,\"diskuse16x_state\":\"protected\"")
         } else if entry.isCloudOnly {
-            append(",\"space16x_state\":\"cloudOnly\"")
+            append(",\"diskuse16x_state\":\"cloudOnly\"")
         } else if entry.isHardLinkAlias {
-            append(",\"space16x_state\":\"hardLinkAlias\"")
+            append(",\"diskuse16x_state\":\"hardLinkAlias\"")
         } else if entry.isPending {
             append(",\"read_error\":true")
         }
@@ -212,7 +212,7 @@ private struct ExportReader {
         index += 1
         let major = try number()
         guard major == 1 else {
-            throw SavedScan.ReadError(message: "This ncdu export uses format version \(major), which Space 16X can’t read.")
+            throw SavedScan.ReadError(message: "This ncdu export uses format version \(major), which DiskUse16x can’t read.")
         }
         try expect(0x2C)
         _ = try number()
@@ -226,11 +226,12 @@ private struct ExportReader {
             switch key {
             case "progname":
                 program = try reader.text()
-            case "space16x_excludedCount":
+            // Exports from before 1.0 use the earlier space16x_ prefix.
+            case "diskuse16x_excludedCount", "space16x_excludedCount":
                 excludedCount = try reader.number()
-            case "space16x_excludes":
+            case "diskuse16x_excludes", "space16x_excludes":
                 try reader.array { reader in excludes.append(try reader.text()) }
-            case "space16x_issues":
+            case "diskuse16x_issues", "space16x_issues":
                 var list: [ScanIssue] = []
                 try reader.array { reader in list.append(try reader.issue()) }
                 savedIssues = list
@@ -245,7 +246,7 @@ private struct ExportReader {
         while rootPath.count > 1, rootPath.hasSuffix("/") { rootPath.removeLast() }
         guard !rootPath.isEmpty else { throw error("the scan root has no name") }
 
-        // Space 16X exports list every issue, so only other tools' read errors become issues.
+        // DiskUse16x exports list every issue, so only other tools' read errors become issues.
         let issuesFromEntries = savedIssues == nil
         var issues = savedIssues ?? []
         if issuesFromEntries, rootInfo.readError { issues.append(Self.readError(rootPath)) }
@@ -541,7 +542,7 @@ private struct ExportReader {
             case "read_error": info.readError = try reader.boolean()
             case "notreg": info.isSpecial = try reader.boolean()
             case "excluded": info.excluded = try reader.string()
-            case "space16x_state": info.state = try reader.text()
+            case "diskuse16x_state", "space16x_state": info.state = try reader.text()
             default: try reader.skipValue()
             }
         }

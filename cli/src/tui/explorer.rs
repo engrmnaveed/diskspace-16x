@@ -174,7 +174,7 @@ pub(super) struct Explorer {
     pub(super) panel_offset: usize,
     pub(super) panel_items: usize,
     pub(super) panel_page: usize,
-    /// Set by `--read-only` or `SPACE16X_READ_ONLY`: marking and trashing are off.
+    /// Set by `--read-only` or `DISKUSE16X_READ_ONLY`: marking and trashing are off.
     pub(super) read_only: bool,
     /// Pro: the folder view draws its contents as a treemap instead of a list.
     #[cfg(feature = "pro")]
@@ -753,7 +753,7 @@ impl Explorer {
         let job = Arc::new(std::sync::OnceLock::new());
         let answer = Arc::clone(&job);
         let spawned = std::thread::Builder::new()
-            .name("space16x-explain".into())
+            .name("diskuse16x-explain".into())
             .spawn(move || {
                 let _ = answer.set(crate::pro::explain_lines(&path));
             });
@@ -1381,7 +1381,7 @@ fn kept_reason(state: EntryState, path: &Path) -> Option<String> {
     let reason = match state {
         EntryState::Local | EntryState::HardLinkAlias => return None,
         EntryState::CloudOnly => "is cloud-only. Remove it in Finder or its cloud app.",
-        EntryState::Protected => "is protected, so Space 16X couldn't see all of it.",
+        EntryState::Protected => "is protected, so DiskUse16x couldn't see all of it.",
         EntryState::Pending => "wasn't scanned, so its size is unknown.",
         EntryState::Incomplete => "had read errors, so its size is uncertain.",
     };
@@ -1899,7 +1899,7 @@ mod tests {
     #[test]
     fn d_lists_duplicates_after_enter_and_follows_the_trash() {
         let root =
-            std::env::temp_dir().join(format!("space16x-tui-duplicates-{}", std::process::id()));
+            std::env::temp_dir().join(format!("diskuse16x-tui-duplicates-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let same: Vec<u8> = (0..1_100_000_u32)

@@ -194,7 +194,7 @@ impl ScanOptions {
             } else {
                 exclusive::write_plain(stdout, report, selection, &measured)?;
                 eprintln!(
-                    "space16x: exclusive sizes leave out blocks shared with clones and files with other hard links, which emptying the Trash wouldn't free"
+                    "diskuse16x: exclusive sizes leave out blocks shared with clones and files with other hard links, which emptying the Trash wouldn't free"
                 );
             }
             return Ok(true);
@@ -213,7 +213,7 @@ impl ScanOptions {
             } else {
                 cleanup::write_plain(stdout, report, metric)?;
                 eprintln!(
-                    "space16x: tools recreate these folders when needed. Review them, then press u in the explorer to move them to the Trash."
+                    "diskuse16x: tools recreate these folders when needed. Review them, then press u in the explorer to move them to the Trash."
                 );
             }
             return Ok(true);
@@ -292,7 +292,7 @@ impl ScanOptions {
         if let Some(days) = self.older_than {
             let before = modified::cutoff(days, SystemTime::now());
             eprintln!(
-                "space16x: counted only files last modified more than {days} {} ago, before {}",
+                "diskuse16x: counted only files last modified more than {days} {} ago, before {}",
                 if days == 1 { "day" } else { "days" },
                 format_date(before)
             );
@@ -499,7 +499,7 @@ fn parse_diff(mut arguments: impl Iterator<Item = OsString>) -> Result<crate::Co
     }
     let [old, new]: [PathBuf; 2] = files
         .try_into()
-        .map_err(|_| "diff compares two scans: space16x diff OLD NEW|PATH.")?;
+        .map_err(|_| "diff compares two scans: diskuse16x diff OLD NEW|PATH.")?;
     if old == Path::new("-") && new == Path::new("-") {
         return Err("Only one scan can come from standard input.".into());
     }

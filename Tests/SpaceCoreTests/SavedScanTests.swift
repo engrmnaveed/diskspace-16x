@@ -54,7 +54,7 @@ final class SavedScanTests: XCTestCase {
         let table = try JSONDecoder().decode(
             Table.self, from: Data(contentsOf: Self.fixtures.appendingPathComponent("expected.json"))
         )
-        XCTAssertEqual(table.cases.count, 3)
+        XCTAssertEqual(table.cases.count, 4)
         for testCase in table.cases {
             let saved = try SavedScan(contentsOf: Self.fixtures.appendingPathComponent(testCase.file))
             let report = saved.report
@@ -70,7 +70,7 @@ final class SavedScanTests: XCTestCase {
     }
 
     func testRoundTripsAScan() async throws {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("space16x-saved-\(UUID().uuidString)")
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("diskuse16x-saved-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: folder) }
         let nested = folder.appendingPathComponent("Nested \"quoted\"\tfolder")
@@ -87,7 +87,7 @@ final class SavedScanTests: XCTestCase {
         let saved = SavedScan(report: report, excludes: ["*.log"])
         let data = saved.exportData(version: "1.2.3")
         let text = try XCTUnwrap(String(data: data, encoding: .utf8))
-        XCTAssertTrue(text.hasPrefix("[1,2,{\"progname\":\"space16x\",\"progver\":\"1.2.3\""), text)
+        XCTAssertTrue(text.hasPrefix("[1,2,{\"progname\":\"diskuse16x\",\"progver\":\"1.2.3\""), text)
         XCTAssertTrue(text.contains("{\"name\":\"Nested \\\"quoted\\\"\\u0009folder\"}"), text)
         XCTAssertNoThrow(try JSONSerialization.jsonObject(with: data))
 
@@ -123,8 +123,8 @@ final class SavedScanTests: XCTestCase {
         let saved = SavedScan(report: ScanReport(root: root, issues: issues, excludedCount: 2), excludes: [])
         let data = saved.exportData(version: "0")
         let text = try XCTUnwrap(String(data: data, encoding: .utf8))
-        XCTAssertTrue(text.contains("{\"name\":\"locked\",\"read_error\":true,\"space16x_state\":\"protected\"}"), text)
-        XCTAssertTrue(text.contains("{\"name\":\"alias\",\"asize\":0,\"dsize\":0,\"space16x_state\":\"hardLinkAlias\"}"), text)
+        XCTAssertTrue(text.contains("{\"name\":\"locked\",\"read_error\":true,\"diskuse16x_state\":\"protected\"}"), text)
+        XCTAssertTrue(text.contains("{\"name\":\"alias\",\"asize\":0,\"dsize\":0,\"diskuse16x_state\":\"hardLinkAlias\"}"), text)
 
         let opened = try SavedScan(data: data)
         XCTAssertEqual(opened.report.issues.map(\.path), issues.map(\.path))

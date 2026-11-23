@@ -588,7 +588,7 @@ impl TreeBuilder {
         if self.too_large {
             return Err(io::Error::new(
                 io::ErrorKind::OutOfMemory,
-                "The scan has more entries than Space 16X supports.",
+                "The scan has more entries than DiskUse16x supports.",
             ));
         }
         Ok(self.finish())

@@ -1,21 +1,23 @@
 # CLI reference
 
 ```text
-space16x [--no-color] [--read-only] [--threads N] [EXCLUDES] [PATH]
-space16x --import FILE|- [--no-color]
-space16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [--export FILE|-] [--threads N] [EXCLUDES]
-space16x volumes [--all] [--json]
-space16x --version
-space16x --help
+diskuse16x [--no-color] [--read-only] [--threads N] [EXCLUDES] [PATH]
+diskuse16x --import FILE|- [--no-color]
+diskuse16x scan [PATH] [--depth N | --top N] [--apparent] [--json] [--export FILE|-] [--threads N] [EXCLUDES]
+diskuse16x volumes [--all] [--json]
+diskuse16x --version
+diskuse16x --help
 ```
 
-Space 16X has two free editions built from the same source. **Basic** is the default and everything on this page except [Pro commands](#pro-commands). **Pro** adds those commands. Both install the same `space16x` command, so installing one replaces the other. `space16x --version` prints `space16x X.Y.Z`, or `space16x X.Y.Z (pro)` in Pro, and JSON reports set `edition` to match. In Basic, a Pro command or option prints a one-line hint to install Pro and exits with code `1`. See [Install Space 16X Pro](install.md#install-space-16x-pro).
+`du16x` is a short name for `diskuse16x`, installed beside it, and every command on this page works with either name. Releases before 1.0 called the command `space16x`.
+
+DiskUse16x has two free editions built from the same source. **Basic** is the default and everything on this page except [Pro commands](#pro-commands). **Pro** adds those commands. Both install the same `diskuse16x` command, so installing one replaces the other. `diskuse16x --version` prints `diskuse16x X.Y.Z`, or `diskuse16x X.Y.Z (pro)` in Pro, and JSON reports set `edition` to match. In Basic, a Pro command or option prints a one-line hint to install Pro and exits with code `1`. See [Install DiskUse16x Pro](install.md#install-diskuse16x-pro).
 
 **PATH** defaults to the current directory. The scan root must be a readable directory. Quote paths containing spaces. Use `--` to pass a path that begins with a dash.
 
 ## Explore a folder
 
-Run `space16x` or `space16x PATH` from an interactive terminal. Scan progress and the first levels of results appear as the scanner works. If either standard input or standard output is redirected, or `TERM=dumb` is set, the same command prints a one-level plain-text report.
+Run `diskuse16x` or `diskuse16x PATH` from an interactive terminal. Scan progress and the first levels of results appear as the scanner works. If either standard input or standard output is redirected, or `TERM=dumb` is set, the same command prints a one-level plain-text report.
 
 | Key | Action |
 | --- | --- |
@@ -38,7 +40,7 @@ Wide terminals show an **Items** column with the number of files and folders ins
 
 ## Move items to the Trash
 
-Moving items to the Trash is the only change Space 16X makes to your files. Press Space to mark items in any folder or in the largest-files view. The heading shows how many are marked and their allocated size. Press `d`, and the footer asks you to confirm the item count and size. Press `y` to move them, or any other key to keep them. With nothing marked, `d` offers the selected item.
+Moving items to the Trash is the only change DiskUse16x makes to your files. Press Space to mark items in any folder or in the largest-files view. The heading shows how many are marked and their allocated size. Press `d`, and the footer asks you to confirm the item count and size. Press `y` to move them, or any other key to keep them. With nothing marked, `d` offers the selected item.
 
 Moved items leave the results at once. Folder totals, rankings, and item counts update without a rescan. **Space is freed when you empty the Trash.** Moving a hard-linked file, an APFS clone, or a file that a snapshot keeps may free nothing, because another path or the snapshot still uses its blocks.
 
@@ -46,11 +48,11 @@ Moved items leave the results at once. Folder totals, rankings, and item counts 
 - On Linux, items go to the [FreeDesktop.org Trash](https://specifications.freedesktop.org/trash-spec/latest/) that desktop file managers use. Items on your home disk go to `~/.local/share/Trash`, or `$XDG_DATA_HOME/Trash`. Items on other disks go to `.Trash/UID` or `.Trash-UID` at the top of that disk. Restore them from a file manager's Trash or with a tool such as `gio trash --restore`.
 - Items are renamed within their own disk and never copied. If a disk has no Trash you can use, such as a read-only mount, the item stays where it is and the footer says why.
 
-The explorer doesn't move items while a scan is running, or items it couldn't fully read: cloud-only, protected, unscanned, or incomplete ones. Pass `--read-only`, or set `SPACE16X_READ_ONLY=1`, to turn marking and trashing off, for example on a shared server.
+The explorer doesn't move items while a scan is running, or items it couldn't fully read: cloud-only, protected, unscanned, or incomplete ones. Pass `--read-only`, or set `DISKUSE16X_READ_ONLY=1`, to turn marking and trashing off, for example on a shared server. The variable's name before 1.0, `SPACE16X_READ_ONLY`, still works when the new one isn't set.
 
 ## Rescan a folder
 
-After you delete or add files outside Space 16X, press `r` to scan the open folder again without rescanning everything. The new results replace that folder in place, and the totals, item counts, and states of the folders above it update. Exclude patterns still apply relative to the folder you first scanned. The footer reports the folder's new size and its earlier one. Press `c` to cancel a rescan and keep the earlier results. If the folder no longer exists, it leaves the results.
+After you delete or add files outside DiskUse16x, press `r` to scan the open folder again without rescanning everything. The new results replace that folder in place, and the totals, item counts, and states of the folders above it update. Exclude patterns still apply relative to the folder you first scanned. The footer reports the folder's new size and its earlier one. Press `c` to cancel a rescan and keep the earlier results. If the folder no longer exists, it leaves the results.
 
 A hard-linked file inside the folder that also has a link outside it may be counted on both sides after a folder rescan. A full rescan counts it once again.
 
@@ -59,8 +61,8 @@ A hard-linked file inside the folder that also has a link outside it may be coun
 Both the explorer and `scan` accept exclude patterns. A matching file or folder is skipped without reading its metadata or contents, so excluding a large tree such as `node_modules` also makes the scan faster.
 
 ```sh
-space16x --exclude node_modules --exclude '*.log' ~/Projects
-space16x scan / --exclude /proc --exclude /sys --exclude-from ~/.config/space16x-excludes
+diskuse16x --exclude node_modules --exclude '*.log' ~/Projects
+diskuse16x scan / --exclude /proc --exclude /sys --exclude-from ~/.config/diskuse16x-excludes
 ```
 
 | Option | Behavior |
@@ -83,10 +85,10 @@ Quote patterns so the shell doesn't expand them. Excluded entries are expected e
 ## Generate a report
 
 ```sh
-space16x scan "$HOME/Downloads"
-space16x scan "/Volumes/Work" --depth 2
-space16x scan --top 10 --json > report.json
-space16x scan /var/log --top 5 --apparent
+diskuse16x scan "$HOME/Downloads"
+diskuse16x scan "/Volumes/Work" --depth 2
+diskuse16x scan --top 10 --json > report.json
+diskuse16x scan /var/log --top 5 --apparent
 ```
 
 | Option | Behavior |
@@ -104,37 +106,39 @@ Use either `--depth` or `--top` once per command. Reports use allocated bytes un
 
 `scan --export FILE` saves the whole scan in [ncdu's JSON export format](https://dev.yorhel.nl/ncdu/jsonfmt) and still prints the usual report. `--export -` writes only the export to standard output, so it takes no `--json`, `--depth`, `--top` or `--apparent`. Issues and the excluded count still go to standard error, and the exit code is the scan's.
 
-`space16x --import FILE` opens a saved scan in the explorer, and `--import -` reads it from standard input. Together they scan a server and browse the result on your own computer, with nothing installed but `space16x`:
+`diskuse16x --import FILE` opens a saved scan in the explorer, and `--import -` reads it from standard input. Together they scan a server and browse the result on your own computer, with nothing installed but `diskuse16x`:
 
 ```sh
-ssh -C server space16x scan / --export - | space16x --import -
-space16x scan /var --export var.json
-space16x --import var.json
+ssh -C server diskuse16x scan / --export - | diskuse16x --import -
+diskuse16x scan /var --export var.json
+diskuse16x --import var.json
 ```
 
 An imported scan is read-only. Its files may be on another computer or may have changed, so the explorer turns off marking, Move to Trash and rescanning. The heading says **imported**. If standard output isn't a terminal, `--import` prints the one-level report instead, with exit code `2` when the saved scan was partial. `--import` takes no PATH, exclude patterns or `--threads`.
 
-ncdu and gdu open these exports (`ncdu -f FILE`, `gdu -f FILE`), and Space 16X opens theirs (`ncdu -o FILE`, `gdu -o FILE`). Their binary formats, such as ncdu 2's `-O`, aren't supported. Reading another tool's export follows Space 16X's rules:
+ncdu and gdu open these exports (`ncdu -f FILE`, `gdu -f FILE`), and DiskUse16x opens theirs (`ncdu -o FILE`, `gdu -o FILE`). Their binary formats, such as ncdu 2's `-O`, aren't supported. Reading another tool's export follows DiskUse16x's rules:
 
 - Folder sizes count their contents only, as a scan does, so a folder's own blocks in the file aren't added.
 - Symbolic links and other special files, entries on other filesystems, and excluded entries are left out. Entries excluded by a pattern count as excluded.
 - A file with the same device and inode as an earlier one is a hard link and counts once, at its first path. gdu marks only the second and later links to a file, so each file it marks counts as a hard link.
 - Entries with read errors are incomplete, and each one becomes an issue.
 
-Space 16X adds keys that start with `space16x_`, which other tools ignore:
+DiskUse16x adds keys that start with `diskuse16x_`, which other tools ignore:
 
 | Key | Where | Meaning |
 | --- | --- | --- |
-| `space16x_excludedCount`, `space16x_excludes` | Metadata | The excluded count and the patterns, as in JSON reports. |
-| `space16x_issues` | Metadata | Every issue, with `path`, `message`, `kind` (`permissionDenied`, `notPermitted` or `error`), and `pathBytes` for a path that isn't UTF-8. |
-| `space16x_state` | Entry | `cloudOnly`, `protected`, or `hardLinkAlias`. A hard-link alias has zero sizes. |
-| `space16x_nameBytes` | Entry | The original name in hexadecimal, when it isn't UTF-8. `name` then substitutes invalid sequences, so the file stays valid JSON. |
+| `diskuse16x_excludedCount`, `diskuse16x_excludes` | Metadata | The excluded count and the patterns, as in JSON reports. |
+| `diskuse16x_issues` | Metadata | Every issue, with `path`, `message`, `kind` (`permissionDenied`, `notPermitted` or `error`), and `pathBytes` for a path that isn't UTF-8. |
+| `diskuse16x_state` | Entry | `cloudOnly`, `protected`, or `hardLinkAlias`. A hard-link alias has zero sizes. |
+| `diskuse16x_nameBytes` | Entry | The original name in hexadecimal, when it isn't UTF-8. `name` then substitutes invalid sequences, so the file stays valid JSON. |
+
+Exports from releases before 1.0 use the same keys with a `space16x_` prefix, and DiskUse16x opens them too.
 
 Exports contain every path in the scan. Review them for personal paths before sharing.
 
 ## Check free space on each volume
 
-`space16x volumes` shows which disk is filling up before you scan one:
+`diskuse16x volumes` shows which disk is filling up before you scan one:
 
 ```text
       Size       Used       Free  Use%  Inodes  Type    Mounted on
@@ -153,7 +157,7 @@ By default the list leaves out memory filesystems such as `tmpfs`, snap images, 
 Scans read metadata on several threads: one per core, up to 8. On SSDs this makes large scans several times faster. Use `--threads 1` for hard disks and network filesystems, where parallel reads compete for the same disk or connection. Every thread count gives the same report, including which path counts a hard-linked file and the order of issues.
 
 ```sh
-space16x scan /mnt/archive --threads 1
+diskuse16x scan /mnt/archive --threads 1
 ```
 
 The scanner reads filesystem metadata, skips symbolic links and mounts on other devices, and counts each hard-linked file once. A later alias can appear as a zero-byte entry. In the top-files report only the counted path appears. Cloud-only entries detected on macOS contribute zero bytes, and their directory contents are left unexpanded.
@@ -167,13 +171,13 @@ From 1.0.0, every 1.x release keeps what scripts rely on, and changes it only by
 - **Commands and options** keep their names and meaning. New ones may appear.
 - **Exit codes** `0`, `1` and `2` keep their meanings. A new code appears only with a new option that asks for it.
 - **JSON schema 3** keeps every field's name, type and meaning. New fields may appear, so ignore fields you don't know.
-- **Exports** from `scan --export` stay ncdu's JSON format, and every later 1.x release opens them. New `space16x_` keys may appear.
+- **Exports** from `scan --export` stay ncdu's JSON format, and every later 1.x release opens them. New `diskuse16x_` keys may appear.
 
 A change that would break a script waits for 2.0, and a JSON change of that kind comes with a new `schemaVersion`. Text reports, messages and the explorer's screens are for people, and may change in any release. Scripts should read `--json`.
 
 ## Pro commands
 
-Space 16X Pro, a free edition, adds commands and scan options such as `diff`, `history`, `explain`, `duplicates`, `scan --cleanup` and `scan --html`. The [Pro CLI reference](cli-pro.md), included in the Pro archive, documents them. Basic answers them with a one-line hint to install Pro.
+DiskUse16x Pro, a free edition, adds commands and scan options such as `diff`, `history`, `explain`, `duplicates`, `scan --cleanup` and `scan --html`. The [Pro CLI reference](cli-pro.md), included in the Pro archive, documents them. Basic answers them with a one-line hint to install Pro.
 
 ## Scan exit codes
 
