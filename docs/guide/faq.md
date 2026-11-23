@@ -63,7 +63,7 @@ Yes. Basic and Pro are both free and open source. Pro adds views that use more m
 ## How do I uninstall Space 16X?
 
 - **Mac app:** if you installed with Homebrew, run `brew uninstall --cask space16x`. Otherwise, move **Space 16X** from Applications to the Trash.
-- **Terminal:** run the installer with `--uninstall`, as [Uninstall the managed CLI](../install.md#uninstall-the-managed-cli) shows.
+- **Terminal:** run the installer with `--uninstall`, as [Uninstall the managed CLI](../install.md#uninstall-the-managed-cli) shows. If you installed with Homebrew, run `brew uninstall space16x-cli`. For a Linux package, run `sudo apt remove space16x` or `sudo dnf remove space16x`. Add `-pro` to the name for Pro.
 
 ## Something's wrong, or I have an idea
 

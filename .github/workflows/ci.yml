@@ -92,11 +92,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Prepare musl build tools, and ncdu and gdu for export checks
+      - name: Prepare musl build tools, ncdu and gdu for export checks, and rpmbuild
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends binutils musl-tools ncdu gdu
+          sudo apt-get install -y --no-install-recommends binutils musl-tools ncdu gdu rpm
       - name: Check formatting, lint, and tests for both editions
         working-directory: cli
         run: |
@@ -131,6 +131,25 @@ jobs:
             python3 scripts/check-cli.py ".build/cli-qa-$edition/space16x"
             python3 scripts/check-tui.py ".build/cli-qa-$edition/space16x"
           done
+      - name: Build and check the .deb and .rpm packages
+        if: runner.os == 'Linux'
+        env:
+          CLI_TARGET: ${{ matrix.target }}
+        run: |
+          for archive in space16x space16x-pro; do
+            scripts/package-linux.sh "dist/$archive-$CLI_TARGET.tar.gz"
+          done
+          python3 scripts/check-linux-packages.py deb dist
+          python3 scripts/check-linux-packages.py rpm dist
+      - name: Check the Homebrew formulas
+        if: matrix.runner == 'macos-15' || matrix.runner == 'ubuntu-24.04'
+        env:
+          CLI_TARGET: ${{ matrix.target }}
+        run: |
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          fi
+          scripts/check-formula.sh "$CLI_TARGET"
       - name: Test installer platform routing and failure paths
         if: matrix.runner == 'ubuntu-24.04'
         run: python3 scripts/check-install.py
@@ -143,6 +162,10 @@ jobs:
             dist/space16x-${{ matrix.target }}.tar.gz.sha256
             dist/space16x-pro-${{ matrix.target }}.tar.gz
             dist/space16x-pro-${{ matrix.target }}.tar.gz.sha256
+            dist/space16x*.deb
+            dist/space16x*.deb.sha256
+            dist/space16x*.rpm
+            dist/space16x*.rpm.sha256
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: inputs.upload_cli && matrix.runner == 'ubuntu-24.04'

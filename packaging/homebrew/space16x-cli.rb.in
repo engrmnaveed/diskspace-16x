@@ -1,0 +1,49 @@
+class @CLASS@ < Formula
+  desc "@DESC@"
+  homepage "https://github.com/engrmnaveed/diskspace-16x"
+  version "@VERSION@"
+  license "MIT"
+
+  livecheck do
+    url :homepage
+    strategy :github_latest
+  end
+
+  on_macos do
+    depends_on macos: :sonoma
+
+    on_arm do
+      url "@URL_BASE@/@ARCHIVE@-aarch64-apple-darwin.tar.gz"
+      sha256 "@SHA256_AARCH64_APPLE_DARWIN@"
+    end
+    on_intel do
+      url "@URL_BASE@/@ARCHIVE@-x86_64-apple-darwin.tar.gz"
+      sha256 "@SHA256_X86_64_APPLE_DARWIN@"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "@URL_BASE@/@ARCHIVE@-aarch64-unknown-linux-musl.tar.gz"
+      sha256 "@SHA256_AARCH64_UNKNOWN_LINUX_MUSL@"
+    end
+    on_intel do
+      url "@URL_BASE@/@ARCHIVE@-x86_64-unknown-linux-musl.tar.gz"
+      sha256 "@SHA256_X86_64_UNKNOWN_LINUX_MUSL@"
+    end
+  end
+
+  conflicts_with "@CONFLICT@", because: "both install the `space16x` command"
+
+  def install
+    bin.install "space16x"
+    doc.install Dir["*.md"], "example-report.json"
+  end
+
+  test do
+    assert_equal "space16x #{version}@SUFFIX@", shell_output("#{bin}/space16x --version").strip
+    (testpath/"folder/file").write "Space 16X"
+    report = JSON.parse(shell_output("#{bin}/space16x scan #{testpath}/folder --json"))
+    assert_equal "@EDITION@", report["edition"]
+  end
+end

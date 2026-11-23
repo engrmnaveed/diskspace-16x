@@ -98,6 +98,8 @@ To uninstall and clean up this shell's PATH, run the same installer with `--unin
 space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
+From 1.0.0, the CLI also installs with Homebrew on macOS and Linux, as `space16x-cli` or `space16x-cli-pro` from the same tap, and Linux releases include `.deb` and `.rpm` packages. See [Install the CLI with Homebrew](docs/install.md#install-the-cli-with-homebrew) and [Install a Linux package](docs/install.md#install-a-linux-package).
+
 See the [installation guide](docs/install.md) for Wget removal, Fish commands, version pinning, Pro, and platform support.
 
 ## How totals are counted

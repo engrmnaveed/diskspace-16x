@@ -10,6 +10,8 @@ Prefer to watch? The **terminal walkthrough** video [is on YouTube](https://yout
 
 Copy the one-line installer from [Install the CLI](../install.md#install-the-cli-from-a-release), paste it into your terminal, and press Return. It installs the `space16x` command for your user only, so it doesn't ask for an admin password.
 
+Already use Homebrew? Run `brew install engrmnaveed/tap/space16x-cli` after the two setup lines in [Install the CLI with Homebrew](../install.md#install-the-cli-with-homebrew). On Debian, Ubuntu or Fedora, you can also [install a package](../install.md#install-a-linux-package).
+
 Check that it worked:
 
 ```sh
