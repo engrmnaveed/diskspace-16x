@@ -4,7 +4,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 ## Progress
 
-Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
+Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here** — **M8 (v1.0.0) Ready for the public** is under way: the owner said go on 2026-11-24 and decided M8.3 (no notarization), M8.4 (free channels only: Homebrew formulas and `.deb`/`.rpm`, crates.io only if the owner agrees) and M8.7 (not decided, so Basic stays within 600 KB). The decisions are recorded under each item. Next: the free install channels (M8.4), updates (M8.5) and the 1.x promise (M8.6), each as its own PR. A Mac app path in `install.sh` that avoids the **Open Anyway** step is proposed to the owner and waits for their answer. Milestones 1–7 shipped as v0.3.0–v0.9.0, and v0.9.1 fixed the table warning noted under M7.9. Cross-platform work comes after v1.0.0 and waits for the owner's feasibility review (see **Future**). Basic's published Linux x86-64 archive is 590,256 bytes in v0.9.1, against its 600 KB budget. A user guide for people new to Space 16X is in `docs/guide/`, with screenshots, GIFs and two YouTube walkthroughs, rebuilt by `scripts/build-guide-media.py`.
 
 **Resume here** — Paused for owner review. Milestones 1–7 shipped as v0.3.0–v0.9.0, and v0.9.1 fixed the table warning noted under M7.9. **M8 (v1.0.0) Ready for the public** is drafted and adds no features. It waits for the owner's go-ahead and for decisions on M8.3 (notarization), M8.4 (CLI install channels) and M8.7 (Basic's size budget). Don't start M8 until the owner says go. Cross-platform work comes after v1.0.0 and waits for the owner's feasibility review (see **Future**). Basic's published Linux x86-64 archive is 590,256 bytes in v0.9.1, against its 600 KB budget. A user guide for people new to Space 16X is in `docs/guide/`, with screenshots, GIFs and two YouTube walkthroughs, rebuilt by `scripts/build-guide-media.py`.
 
@@ -121,18 +121,24 @@ The features now cover every gap in §2, so M8 adds no new views. It checks what
   - **VoiceOver:** a pass over the main window, its sheets and Settings, adding any labels that are missing.
   - **A physical Intel Mac** and **Linux on real hardware** (the Linux benchmark has only run in Docker on a Mac): run them if the owner has the hardware. Otherwise post them as contribution issues (M8.9).
   - Record each result in `docs/qa.md`.
-- [ ] M8.3 Notarization. **Owner decides** whether to join the Apple Developer Program (about $99 a year).
+- [x] M8.3 Notarization. **Owner decides** whether to join the Apple Developer Program (about $99 a year).
   - **If yes:** the owner stores the Developer ID and notarization credentials in the `release-signing` environment ([release procedure](release.md)). Each release publishes the notarized ZIP and cask. The guide and `docs/install.md` drop the **Open Anyway** steps and the note that Full Disk Access can reset after an update.
   - **If no:** record why here, and keep ad hoc signing and today's first-launch steps.
+  - **Decision (2026-11-24): no.** The owner won't pay Apple's $99 a year while the tools have no traffic yet. Releases keep ad hoc signing, and distribution stays free. The first launch should have as little friction as possible, so the docs put the easiest path first. Sessions never touch signing credentials or secrets.
 - [ ] M8.4 CLI install channels. **Owner decides** which to add. Each one gets install steps in `docs/install.md` and the guide, and a check in the release run.
   - **Homebrew formulas** in the tap for the CLI on macOS and Linux, Basic and Pro, published by `publish-cli.yml` like the cask. Their names mustn't clash with the `space16x` cask.
   - **crates.io,** so `cargo install space16x` builds Basic and `--features pro` builds Pro. The name was free on 2026-11-24. Publishing needs the owner's crates.io token as a release secret.
   - **`.deb` and `.rpm` packages,** built from the static Linux binaries and attached to each release.
+  - **Decision (2026-11-24): only channels that cost nothing.**
+    - **Homebrew formulas:** yes, in `engrmnaveed/homebrew-tap`, for Basic and Pro on macOS and Linux. `publish-cli.yml` publishes them like the cask, with the existing deploy key. Their names mustn't clash with the `space16x` cask.
+    - **`.deb` and `.rpm`:** yes, built from the static Linux binaries and attached to each release.
+    - **crates.io:** free, but it needs the owner to create an account and a token. Ask the owner first, and leave it out if they don't want it.
 - [ ] M8.5 Updates [Basic]:
   - `docs/install.md` and the guide say how to update: run the installer one-liner again for the CLI, `brew upgrade --cask space16x` for the cask, or download the new ZIP.
   - Mac: **Help → Check for Updates…** opens the GitHub Releases page in the browser. The app itself still never connects to the network.
 - [ ] M8.6 The 1.0 promise: `docs/cli.md` and `docs/cli-pro.md` say that within 1.x, the flags, exit codes, JSON schema 3, the export format and the history store change only by additions. A breaking change waits for 2.0 and a new `schemaVersion`.
 - [ ] M8.7 Basic's size budget. **Owner decides:** keep the 600 KB limit, which leaves Basic's Linux x86-64 archive about 9.7 KB to grow, or raise it. Record the answer in §4.
+  - **Decision (2026-11-24): not decided.** The limit stays 600 KB. Nothing in M8 should grow the Basic binary. Flag it to the owner if something would.
 - [ ] M8.8 Docs refresh:
   - `PRD.md` for 1.0: its status line, its deferred list (duplicate hashing and background monitoring now ship in Pro), its public-release milestone, and the naming and launch decisions, which the owner confirms.
   - Mark this file's **Context** and **What exists today** as the 2026-11-21 starting point.
@@ -278,6 +284,7 @@ Only six relevant tools have **more than 10K stars**. gdu, dua, WinDirStat and t
 - **Installer:** `scripts/install.sh --pro` (Basic is the default) installs into the same path, so installing one edition replaces the other. `--uninstall` removes whichever is present. Re-pin the README one-liners and run `scripts/check-install.py`.
 - **Budgets enforced in CI:**
   - **Basic:** archive ≤ 600 KB, no new dependencies beyond the Trash backend, and per-node RSS no higher than after M3.
+    The owner left raising the limit undecided on 2026-11-24 (M8.7), so it stays 600 KB.
   - **Pro:** dependencies only after a `cargo deny` review.
 
 **Mac: recommend one app, "Space 16X", with Settings → Pro features (off by default).**
