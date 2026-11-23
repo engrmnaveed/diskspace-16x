@@ -9,13 +9,13 @@ from terminal import BACKSPACE, DOWN, ENTER, ESCAPE, Explorer, report, text_fram
 # Terminal frames ----------------------------------------------------------------------------
 
 COMMANDS = {
-    "brew": "brew install --cask engrmnaveed/tap/space16x",
-    "explore": "space16x ~",
-    "version": "space16x --version",
-    "top": "space16x scan ~ --top 5",
-    "ssh": "ssh -C server space16x scan /srv --export - | space16x --import -",
-    "cleanup": "space16x scan ~ --cleanup",
-    "diff": "space16x diff last-week.json ~ --budget 500M",
+    "brew": "brew install --cask engrmnaveed/tap/diskuse16x",
+    "explore": "diskuse16x ~",
+    "version": "diskuse16x --version",
+    "top": "diskuse16x scan ~ --top 5",
+    "ssh": "ssh -C server diskuse16x scan /srv --export - | diskuse16x --import -",
+    "cleanup": "diskuse16x scan ~ --cleanup",
+    "diff": "diskuse16x diff last-week.json ~ --budget 500M",
 }
 
 
@@ -86,7 +86,7 @@ def capture_terminal(basic, pro, home, work):
         if added is not None:
             added.unlink()
 
-    # A server's scan, as `ssh server space16x scan /srv --export -` would send it.
+    # A server's scan, as `ssh server diskuse16x scan /srv --export -` would send it.
     server = json.loads(subprocess.check_output([basic, "scan", home, "--export", "-"], stderr=subprocess.DEVNULL))
     server[3][0]["name"] = "/srv"
     saved = work / "server.json"
@@ -198,7 +198,7 @@ GIFS = {
         (("window", "largest"), "Largest Files: big files from anywhere", ["⌘", "2"], 2.8),
     ],
     "terminal-first-scan": lambda: [
-        *typed("explore", "Type space16x and a folder"),
+        *typed("explore", "Type diskuse16x and a folder"),
         (("terminal", "t-folders"), "The biggest items are at the top", [], 2.4),
         (("terminal", "t-down"), "Move the highlight", ["↓"], 1.4),
         (("terminal", "t-open"), "Open a folder", ["Enter"], 2.0),
@@ -266,7 +266,7 @@ def gif_frames(folder, terminal_rows=24):
 
 WIDTH, HEIGHT = 1920, 1080
 WHITE, MUTED, MINT = 0xF2FAFF, 0xADC7D8, 0x72F6DC
-REPO = "github.com/engrmnaveed/diskspace-16x"
+REPO = "github.com/engrmnaveed/diskuse16x"
 
 
 def scene(content, title, detail, keys=(), seconds=6.5):
@@ -283,7 +283,7 @@ def mac_video():
     return dict(
         name="mac",
         label="MAC APP",
-        title="Space 16X for Mac",
+        title="DiskUse16x for Mac",
         subtitle="Find what's using your disk space",
         chapters=[
             ("Install and open", "Free, offline, no account", [
@@ -356,7 +356,7 @@ def terminal_video():
     return dict(
         name="terminal",
         label="TERMINAL",
-        title="Space 16X in the terminal",
+        title="DiskUse16x in the terminal",
         subtitle="Explore your disk from the keyboard, on a Mac or Linux",
         chapters=[
             ("Install", "One line, no admin password", [
@@ -366,7 +366,7 @@ def terminal_video():
                       "Paste the installer from the install guide. No admin password needed.", seconds=4.5),
             ]),
             ("Explore a folder", "Biggest first", [
-                *typing_scenes("explore", "Open the explorer", "Type space16x and a folder. ~ is your home folder."),
+                *typing_scenes("explore", "Open the explorer", "Type diskuse16x and a folder. ~ is your home folder."),
                 scene(("terminal", "t-folders"), "Biggest first",
                       "The bar shows each item's share. Items counts what's inside."),
                 scene(("terminal", "t-down"), "Move", "↑ and ↓ move the highlight.", ["↓"], 3.0),
@@ -393,7 +393,7 @@ def terminal_video():
                       "After changes elsewhere, r rescans just the open folder.", ["r"], 5.0),
             ]),
             ("Reports and servers", "Scan anywhere, browse here", [
-                *typing_scenes("top", "Text reports", "space16x scan prints a report to paste or save.", hold=0.4),
+                *typing_scenes("top", "Text reports", "diskuse16x scan prints a report to paste or save.", hold=0.4),
                 scene(("terminal", "c-top"), "Text reports", "--top lists the largest files. --json suits scripts.",
                       seconds=5.0),
                 *typing_scenes("ssh", "Check a server", "Scan it over ssh, then browse the result on your computer.",
@@ -504,16 +504,16 @@ def timestamp(seconds):
 
 YOUTUBE = {
     "mac": dict(
-        title="Space 16X for Mac: find what's using your disk space (walkthrough)",
-        intro=("See what's filling your Mac's disk and free space safely with Space 16X, a free and open-source "
+        title="DiskUse16x for Mac: find what's using your disk space (walkthrough)",
+        intro=("See what's filling your Mac's disk and free space safely with DiskUse16x, a free and open-source "
                "disk space analyzer. This walkthrough covers scanning a disk or folder, the list, treemap and donut "
                "views, Largest Files, Move to Trash, rescanning and saved scans, then the free Pro views: cleanup "
                "suggestions, duplicates, exclusive size, Compare, Footprint receipts and Explain Disk Space."),
         tags="disk space analyzer, Mac, macOS, free up disk space, storage, treemap, duplicate finder, open source",
     ),
     "terminal": dict(
-        title="Space 16X in the terminal: a disk space explorer for macOS and Linux (walkthrough)",
-        intro=("Explore your disk from the keyboard with Space 16X, a free and open-source disk space analyzer for "
+        title="DiskUse16x in the terminal: a disk space explorer for macOS and Linux (walkthrough)",
+        intro=("Explore your disk from the keyboard with DiskUse16x, a free and open-source disk space analyzer for "
                "macOS and Linux. This walkthrough covers installing it with one line, the interactive explorer, the "
                "largest files, sorting and filtering, Move to Trash, rescanning, text reports and checking a server "
                "over ssh, then the free Pro views: cleanup suggestions, duplicates, the treemap, file types, "
@@ -532,9 +532,9 @@ def youtube_text(name, chapters, duration):
         "Captions are on screen, and there's no voice-over.", "",
         "Chapters:",
         *(f"{timestamp(start)} {title}" for start, title in chapters), "",
-        "Get Space 16X: https://github.com/engrmnaveed/diskspace-16x",
-        "User guide: https://github.com/engrmnaveed/diskspace-16x/blob/main/docs/guide/README.md",
-        "Install: https://github.com/engrmnaveed/diskspace-16x/blob/main/docs/install.md", "",
+        "Get DiskUse16x: https://github.com/engrmnaveed/diskuse16x",
+        "User guide: https://github.com/engrmnaveed/diskuse16x/blob/main/docs/guide/README.md",
+        "Install: https://github.com/engrmnaveed/diskuse16x/blob/main/docs/install.md", "",
         f"Tags: {info['tags']}", "",
         f"Length: {timestamp(duration)}",
     ]
@@ -554,7 +554,7 @@ def thumbnail(name, folder):
     content.update(x=620, y=100, w=620, h=580)
     layers = [
         dict(type="icon", x=60, y=58, w=56),
-        dict(type="text", text="SPACE 16X", x=130, y=70, size=30, weight="bold", color=MINT, mono=True),
+        dict(type="text", text="DiskUse16x", x=130, y=70, size=30, weight="bold", color=MINT, mono=True),
         *(dict(type="text", text=line, x=56, y=190 + index * 86, size=72, weight="heavy", color=WHITE)
           for index, line in enumerate(lines)),
         dict(type="text", text=subtitle, x=60, y=380, size=32, weight="semibold", color=MUTED),

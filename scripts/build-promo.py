@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the Space 16X Short and README preview locally on macOS."""
+"""Build the DiskUse16x Short and README preview locally on macOS."""
 
 import argparse
 import array
@@ -118,7 +118,7 @@ def capture(binary, work):
     executable = work / "capture"
     subprocess.run([
         *compiler, "-I", work, "-L", work, "-lSpaceCore", "-lSpacePro", "-o", executable,
-        *sorted(PROMO.glob("*.swift")), *(path for path in views if path.name != "Space16XApp.swift"),
+        *sorted(PROMO.glob("*.swift")), *(path for path in views if path.name != "DiskUse16xApp.swift"),
     ], check=True)
     subprocess.run([
         executable, projects, work, report_path, explorer_path, ROOT / "Branding" / "AppIcon.icns",
@@ -185,12 +185,12 @@ def encode(work):
         *ffmpeg, *inputs, "-i", audio, "-filter_complex", ";".join(filters),
         "-map", "[video]", "-map", f"{len(SHOTS)}:a", "-c:v", "libx264", "-preset", "fast",
         "-crf", "19", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
-        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", work / "space16x-short.mp4",
+        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", work / "diskuse16x-short.mp4",
     ], check=True)
     subprocess.run([
         *ffmpeg, "-framerate", "1/2", "-i", work / "preview-%d.png",
         "-filter_complex", "split[p][v];[p]palettegen[pal];[v][pal]paletteuse=dither=bayer",
-        "-loop", "0", "-final_delay", "200", work / "space16x-preview.gif",
+        "-loop", "0", "-final_delay", "200", work / "diskuse16x-preview.gif",
     ], check=True)
 
 
@@ -202,7 +202,7 @@ def cli_path(parser, binary):
         return binary
     cargo = shutil.which("cargo") or Path.home() / ".cargo" / "bin" / "cargo"
     if not os.access(cargo, os.X_OK):
-        parser.error("Install Rustup with Cargo or pass --cli PATH to a built Space 16X CLI.")
+        parser.error("Install Rustup with Cargo or pass --cli PATH to a built DiskUse16x CLI.")
     # The promo shows Pro's analysis, so it builds the Pro edition.
     target = ROOT / "cli" / "target" / "promo"
     subprocess.run(
@@ -214,7 +214,7 @@ def cli_path(parser, binary):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cli", type=Path, metavar="PATH", help="reuse a built Space 16X CLI")
+    parser.add_argument("--cli", type=Path, metavar="PATH", help="reuse a built DiskUse16x CLI")
     parser.add_argument("--output", type=Path, default=ROOT / "dist" / "promo", help="output directory")
     args = parser.parse_args()
     if platform.system() != "Darwin":
@@ -233,7 +233,7 @@ def main():
         capture(binary, work)
         print("Encoding the Short and README preview…", flush=True)
         encode(work)
-        for name in ("space16x-short.mp4", "space16x-preview.gif"):
+        for name in ("diskuse16x-short.mp4", "diskuse16x-preview.gif"):
             destination = args.output / name
             shutil.copyfile(work / name, destination)
             print(destination.resolve())

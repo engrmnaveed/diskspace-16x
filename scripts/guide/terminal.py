@@ -1,4 +1,4 @@
-"""Capture the real Space 16X explorer and reports for the user guide, in a light theme."""
+"""Capture the real DiskUse16x explorer and reports for the user guide, in a light theme."""
 
 import os
 import subprocess
@@ -134,7 +134,7 @@ def report(binary, root, arguments, cwd=None, env=None):
     result = subprocess.run([binary, *arguments], cwd=cwd, env=env, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if result.returncode not in (0, 2):
-        raise RuntimeError(f"space16x {' '.join(map(str, arguments))} failed:\n{result.stdout}")
+        raise RuntimeError(f"diskuse16x {' '.join(map(str, arguments))} failed:\n{result.stdout}")
     return result.stdout.rstrip("\n").split("\n")
 
 
@@ -178,7 +178,7 @@ class Explorer:
                         self.stream.feed(chunk)
                         quiet = time.monotonic() + 0.3
                 return
-        raise RuntimeError(f"Expected {markers!r} in the Space 16X explorer. Visible screen:\n{self._visible()}")
+        raise RuntimeError(f"Expected {markers!r} in the DiskUse16x explorer. Visible screen:\n{self._visible()}")
 
     def press(self, keys, *markers, absent=()):
         self.terminal.send(keys)
