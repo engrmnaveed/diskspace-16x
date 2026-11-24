@@ -1,6 +1,6 @@
 [package]
 name = "diskuse16x"
-version = "0.9.1"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.100"
 description = "A read-only disk space explorer for the terminal, on macOS and Linux"
