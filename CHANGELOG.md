@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Name the Settings switches, the free-space threshold menu and the Save Footprint Receipt fields for VoiceOver, which read them without a label before.
 - Install the CLI with Cargo: releases publish the `diskuse16x` crate to crates.io, so `cargo install diskuse16x` builds Basic and `--features pro` builds Pro. `cargo install --git https://github.com/engrmnaveed/diskuse16x diskuse16x --locked` builds the newest code.
 - Install the Mac app with one command: `install.sh --app` downloads the release ZIP with curl, checks its SHA-256 checksum and signature, and installs **DiskUse16x.app** into `~/Applications` without an admin password. curl adds no quarantine flag, so the app opens on its first launch without the **Open Anyway** step. Running it again updates the app, and `--uninstall --app` removes it.
 - Move the repository to `engrmnaveed/diskuse16x`. GitHub redirects the old address. The install one-liners now run the attested `install.sh` from the latest release instead of a pinned commit, so they always match that release's archives.

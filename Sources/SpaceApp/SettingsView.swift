@@ -43,14 +43,19 @@ struct SettingsView: View {
             }
 
             Section {
+                // A grouped form draws each label apart from its control and leaves the control
+                // unnamed in the accessibility tree, so name each one for VoiceOver.
                 Toggle("Turn on Pro features", isOn: $proFeatures)
+                    .accessibilityLabel("Turn on Pro features")
                 if proFeatures {
                     Toggle("Show free space in the menu bar", isOn: $showsFreeSpace)
+                        .accessibilityLabel("Show free space in the menu bar")
                     Picker("Notify when free space drops below", selection: $thresholdGB) {
                         ForEach(LowSpaceAlert.thresholdChoices, id: \.self) { gigabytes in
                             Text(gigabytes == 0 ? "Never" : "\(gigabytes) GB").tag(gigabytes)
                         }
                     }
+                    .accessibilityLabel("Notify when free space drops below")
                     .disabled(!showsFreeSpace)
                 }
             } header: {
