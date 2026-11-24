@@ -60,6 +60,15 @@ Files that live only in iCloud, or in another cloud service, aren't on your disk
 
 Yes. Basic and Pro are both free and open source. Pro adds views that use more memory or do more work, so Basic stays light enough for small servers. On the Mac, Pro is a switch in Settings. In the terminal, it's a separate install. See [Space 16X Pro](pro.md).
 
+## How do I update Space 16X?
+
+Space 16X never checks for updates by itself. In the Mac app, choose **Help → Check for Updates…** to open the newest release's page in your browser.
+
+- **Mac app:** if you installed with Homebrew, run `brew upgrade --cask space16x`. Otherwise, download the new ZIP and replace the app in Applications. macOS may ask you to approve the first launch again.
+- **Terminal:** run the one-line installer again. If you installed with Homebrew, run `brew upgrade space16x-cli`.
+
+[Update Space 16X](../install.md#update-space-16x) has every way.
+
 ## How do I uninstall Space 16X?
 
 - **Mac app:** if you installed with Homebrew, run `brew uninstall --cask space16x`. Otherwise, move **Space 16X** from Applications to the Trash.
