@@ -1,4 +1,26 @@
-# Space 16X verification
+# DiskUse16x verification
+
+Releases before 1.0 were named Space 16X.
+
+## 1.0.0 (in progress)
+
+- **First launch through `install.sh --app`** (macOS 27.2.1, Apple silicon): a freshly built universal app, never launched before, was packaged by `scripts/archive-macos.sh` and fetched with curl. It passed its SHA-256 check, expanded with `ditto` with no `com.apple.quarantine` attribute anywhere in the bundle, and passed `codesign --verify --strict` (ad hoc). `spctl --assess --type execute` rejects it, which is the verdict a browser download gets, so that copy would need **Open Anyway**. Opened with `open`, the curl copy launched, created its window and kept running for nearly three minutes, and the system log shows no Gatekeeper decision for it. To repeat with the published v1.0.0 ZIP through the real installer.
+- **Installer:** `scripts/check-install.py` covers `--app` with curl and wget: the latest version from GitHub's redirect, `--version`, replacing an earlier copy, refusing while the app runs, a checksum mismatch, a failed signature, a ZIP with another bundle ID, something else at `~/Applications/DiskUse16x.app`, `--uninstall --app`, and Linux. The rename's migration from a real pre-1.0 install was checked for bash, zsh and fish.
+- **Accessibility (M8.2), in progress:** with the owner's screen access, the accessibility tree of a fixture scan was read view by view on macOS 27.2.1. The start screen, the folder list, treemap, donut and Types, Largest Files, Cleanup, Duplicates (after **Find Duplicates**) and the Scan Details sheet name every control: sidebar items, view segments, rows, treemap tiles, donut legend rows, toolbar and selection-bar buttons, and **Done**. Charts that repeat what the list says, such as the donut ring and the share bars, are hidden or folded into a labelled row, as intended. In Settings, the two switches and the threshold menu carry no name of their own. SwiftUI links them to their visible labels, which VoiceOver normally reads, and the owner's check 8 below confirms it by ear. Still to read: the Explain Disk Space sheet, the Compare menu and the receipt sheet. The screen locked partway through.
+- **Sizes:** the rename grew Basic's Linux x86-64 archive by 980 bytes, from 590,257 to 591,237, still 8,763 bytes under its 600 KB budget. Most of it is `cli.md`'s 1.x promise and rename notes, plus the `du16x` link entry. The macOS Basic binary is the same size.
+
+### Owner checks (M8.1)
+
+Use the 1.0 release build of DiskUse16x. Tick each line, or write what went wrong next to it.
+
+1. [ ] **Start screen hint:** in **Settings**, turn **Pro features** off. On the start screen, click **Turn On in Settings…**: Settings opens at Pro features. Turn it off again, click the hint's **×**, quit and reopen: the hint stays hidden.
+2. [ ] **Receipt sheet:** with Pro on, scan a folder, **Compare…** with a saved scan, then **Save Footprint Receipt…**. Type an operation name you used before: its budget fills in. Type `abc` as the budget: **Save…** is disabled.
+3. [ ] **Save panels:** **File → Export HTML Report…** and the receipt's **Save…**. Click **Save** in each panel, then open both files.
+4. [ ] **Time Machine snapshot:** run `tmutil localsnapshot` in Terminal, then **Scan → Explain Disk Space**: the snapshot is listed with today's date.
+5. [ ] **Older-than menu:** **View → Show Files Older Than** lists Any Age, 30 and 90 days, 6 months, 1 and 2 years, and each one filters the list.
+6. [ ] **Move to Trash alert:** select two items and press ⌘⌫. The alert names the count and the size and looks right in light and dark mode. Click **Cancel**.
+7. [ ] **New in 1.0:** **Help → Check for Updates…** opens the newest release in your browser, and **Help → DiskUse16x Help** opens the user guide. Your Space 16X settings (Pro features, the menu-bar monitor) came across on the first launch. Turn on **DiskUse16x** in Full Disk Access.
+8. [ ] **VoiceOver in Settings:** turn on VoiceOver (⌘F5), open **Settings** and press Tab through it. Each switch and the threshold menu is announced with its label, such as "Turn on Pro features, switch". Turn VoiceOver off with ⌘F5.
 
 ## 0.9.1
 
