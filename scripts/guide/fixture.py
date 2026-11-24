@@ -1,7 +1,7 @@
 """A synthetic home folder for the user guide's screenshots and videos.
 
 Every file is generated, so no real user path, name or content appears in the media.
-Sizes are decimal megabytes, as Space 16X shows them, and ages are days since the file
+Sizes are decimal megabytes, as DiskUse16x shows them, and ages are days since the file
 last changed, which Pro's Modified column and older-files filter show.
 """
 

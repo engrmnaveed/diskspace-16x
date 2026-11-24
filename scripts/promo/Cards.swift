@@ -38,7 +38,7 @@ struct Cards {
         }
         for name in ["launch", "folders"] {
             try short(name, section: "CLI  /  macOS + LINUX", title: ["Open the", "disk explorer."],
-                      detail: "Type space16x in any folder.", progress: 2) { canvas in
+                      detail: "Type diskuse16x in any folder.", progress: 2) { canvas in
                 if name == "launch" {
                     command(on: canvas, top: 646)
                 } else {
@@ -60,7 +60,7 @@ struct Cards {
         }
         try short("report", section: "CLI  /  PRO", title: ["Clear what", "tools rebuild."],
                   detail: "Trash build output. Review archives.", progress: 2) { canvas in
-            terminal("$ space16x scan --cleanup", on: canvas, top: 646)
+            terminal("$ diskuse16x scan --cleanup", on: canvas, top: 646)
         }
         try short("carry", section: "CLI  /  macOS + LINUX", title: ["Scan a server.", "Browse it here."],
                   detail: "Pipe a saved scan into the explorer.", progress: 2) { canvas in
@@ -84,14 +84,14 @@ struct Cards {
             canvas.image(icon, in: CGRect(x: 231, y: 621, width: 588, height: 588))
             canvas.panel(CGRect(x: 74, y: 1216, width: 916, height: 144), fill: 0x102B3C, border: border)
             canvas.text("GitHub link on our profile", x: 102, y: 1241, size: 42, weight: .bold, ink: white)
-            canvas.text("engrmnaveed/diskspace-16x", x: 104, y: 1297, size: 32, ink: mint, mono: true)
+            canvas.text("engrmnaveed/diskuse16x", x: 104, y: 1297, size: 32, ink: mint, mono: true)
         }
 
         for (index, (terminal, screenshot)) in [("folders", "treemap"), ("drill", "donut"), ("rank", "list")].enumerated() {
             let canvas = PromoCanvas(width: 900, height: 500)
             canvas.background()
             canvas.image(icon, in: CGRect(x: 21, y: 14, width: 66, height: 66))
-            canvas.text("Space 16X", x: 96, y: 28, size: 31, weight: .bold, ink: white)
+            canvas.text("DiskUse16x", x: 96, y: 28, size: 31, weight: .bold, ink: white)
             canvas.text("Disk space analyzer", x: 96, y: 65, size: 19, ink: muted)
             canvas.text("CLI  /  macOS + LINUX", x: 32, y: 113, size: 15, weight: .semibold, ink: mint, mono: true)
             canvas.text("DESKTOP  /  macOS", x: 451, y: 113, size: 15, weight: .semibold, ink: mint, mono: true)
@@ -112,7 +112,7 @@ struct Cards {
         let canvas = PromoCanvas(width: 1080, height: 1920)
         canvas.background()
         canvas.image(icon, in: CGRect(x: 59, y: 142, width: 99, height: 99))
-        canvas.text("SPACE 16X", x: 164, y: 172, size: 32, weight: .bold, ink: white, mono: true)
+        canvas.text("DiskUse16x", x: 164, y: 172, size: 32, weight: .bold, ink: white, mono: true)
         canvas.text(section, x: 78, y: 295, size: 28, weight: .semibold, ink: mint, mono: true)
         for (index, line) in title.enumerated() {
             canvas.text(line, x: 72, y: 340 + CGFloat(index) * 104, size: 100, weight: .heavy, ink: white)
@@ -139,7 +139,7 @@ struct Cards {
         let height = 916 * CGFloat(image.height) / CGFloat(image.width)
         let frame = CGRect(x: 74, y: top, width: 916, height: height + 57)
         canvas.panel(frame, fill: 0x132D40)
-        canvas.text("Space 16X", x: 101, y: top + 11, size: 27, weight: .semibold, ink: white)
+        canvas.text("DiskUse16x", x: 101, y: top + 11, size: 27, weight: .semibold, ink: white)
         let imageRect = CGRect(x: 74, y: top + 57, width: 916, height: height)
         canvas.clipped(to: frame, radius: 28) { canvas.image(image, in: imageRect) }
         canvas.outline(frame, radius: 28, ink: border)
@@ -161,16 +161,16 @@ struct Cards {
 
     private func command(on canvas: PromoCanvas, top: CGFloat) {
         terminalWindow(CGRect(x: 74, y: top, width: 916, height: 226), on: canvas)
-        canvas.text("$ space16x", x: 102, y: top + 111,
+        canvas.text("$ diskuse16x", x: 102, y: top + 111,
                     size: 49, weight: .semibold, ink: mint, mono: true)
         canvas.panel(CGRect(x: 404, y: top + 121, width: 24, height: 42), fill: mint, radius: 2)
     }
 
     private func pipeline(on canvas: PromoCanvas, top: CGFloat) {
         terminalWindow(CGRect(x: 74, y: top, width: 916, height: 196), on: canvas)
-        canvas.text("$ ssh server space16x scan /srv \\", x: 102, y: top + 88,
+        canvas.text("$ ssh server diskuse16x scan /srv \\", x: 102, y: top + 88,
                     size: 33, weight: .semibold, ink: mint, mono: true)
-        canvas.text("    --export - | space16x --import -", x: 102, y: top + 136,
+        canvas.text("    --export - | diskuse16x --import -", x: 102, y: top + 136,
                     size: 33, weight: .semibold, ink: mint, mono: true)
     }
 

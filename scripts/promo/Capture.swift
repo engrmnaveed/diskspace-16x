@@ -31,7 +31,7 @@ struct Capture {
         var iconRect = CGRect(x: 0, y: 0, width: 1024, height: 1024)
         guard let icon = NSImage(contentsOfFile: arguments[5])?.cgImage(forProposedRect: &iconRect,
                                                                         context: nil, hints: nil) else {
-            throw CaptureError("Could not load the Space 16X icon.")
+            throw CaptureError("Could not load the DiskUse16x icon.")
         }
         NSApplication.shared.setActivationPolicy(.prohibited)
 
@@ -43,7 +43,7 @@ struct Capture {
             contentRect: host.frame, styleMask: [.titled, .closable, .resizable],
             backing: .buffered, defer: false
         )
-        window.title = "Space 16X"
+        window.title = "DiskUse16x"
         window.appearance = NSAppearance(named: .darkAqua)
         window.contentView = host
 

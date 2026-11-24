@@ -45,7 +45,7 @@ The [Promo video workflow](../.github/workflows/promo.yml) renders changes to th
 1. Watch the Short at phone size and check the command, chart labels, call to action, and soundtrack.
 2. In **YouTube Studio → Customization → Profile → Links**, add **DiskUse16x on GitHub** pointing to `https://github.com/engrmnaveed/diskspace-16x`. The channel profile link is clickable. The same URL in a Shorts description or comment appears as text. [YouTube link rules](https://support.google.com/youtube/answer/13748639) · [Set up profile links](https://support.google.com/youtubecreatorstudio/answer/2657964)
 3. Upload `diskuse16x-short.mp4` in YouTube Studio. [YouTube upload guide](https://support.google.com/youtube/answer/12779649)
-4. Copy the regenerated GIF to `Branding/Space16X-Demo.gif`. Once the Short is live, wrap the README’s Markdown image in a link to the Short. [GitHub Markdown images and links](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#images)
+4. Copy the regenerated GIF to `Branding/DiskUse16x-Demo.gif`. Once the Short is live, wrap the README’s Markdown image in a link to the Short. [GitHub Markdown images and links](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#images)
 
 **Suggested title**  What’s eating your disk space? | DiskUse16x
 

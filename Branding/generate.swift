@@ -136,9 +136,27 @@ private func drawLockup(_ context: CGContext) {
     drawIcon(context, size: 264)
     context.restoreGState()
 
-    drawText("Space 16X", size: 94, weight: .bold, color: 0xF2F8FF, at: CGPoint(x: 314, y: 168), in: context)
+    drawText("DiskUse16x", size: 94, weight: .bold, color: 0xF2F8FF, at: CGPoint(x: 314, y: 168), in: context)
     drawText("Disk space analyzer", size: 36, weight: .medium, color: 0xB9CCD9, at: CGPoint(x: 318, y: 108), in: context)
     drawText("16X BRAINS", size: 23, weight: .semibold, color: 0x76F9E0, at: CGPoint(x: 320, y: 63), in: context)
+}
+
+/// The repository's social preview, 1280 × 640, with the content clear of the edges
+/// that sites crop.
+private func drawSocialPreview(_ context: CGContext) {
+    gradient(
+        context, from: 0x12283B, to: 0x091420,
+        start: CGPoint(x: 0, y: 640), end: CGPoint(x: 1280, y: 0)
+    )
+    context.saveGState()
+    context.translateBy(x: 96, y: 178)
+    drawIcon(context, size: 300)
+    context.restoreGState()
+
+    drawText("DiskUse16x", size: 112, weight: .bold, color: 0xF2F8FF, at: CGPoint(x: 444, y: 352), in: context)
+    drawText("See what's using your disk space", size: 40, weight: .medium, color: 0xB9CCD9, at: CGPoint(x: 450, y: 282), in: context)
+    drawText("Mac app and terminal explorer · macOS and Linux", size: 28, weight: .regular, color: 0xB9CCD9, at: CGPoint(x: 451, y: 226), in: context)
+    drawText("FREE AND OPEN SOURCE  ·  16X BRAINS", size: 23, weight: .semibold, color: 0x76F9E0, at: CGPoint(x: 452, y: 174), in: context)
 }
 
 private func writePNG(
@@ -164,7 +182,7 @@ private func writePNG(
 
 private func buildAssets(in directory: URL) throws {
     let manager = FileManager.default
-    let work = manager.temporaryDirectory.appendingPathComponent("space16x-brand-\(UUID().uuidString)")
+    let work = manager.temporaryDirectory.appendingPathComponent("diskuse16x-brand-\(UUID().uuidString)")
     let iconset = work.appendingPathComponent("AppIcon.iconset")
     try manager.createDirectory(at: iconset, withIntermediateDirectories: true)
     defer { try? manager.removeItem(at: work) }
@@ -189,6 +207,7 @@ private func buildAssets(in directory: URL) throws {
     try Data(contentsOf: compiledIcon).write(to: destination, options: .atomic)
 
     try writePNG(width: 1200, height: 320, to: directory.appendingPathComponent("Lockup.png"), draw: drawLockup)
+    try writePNG(width: 1280, height: 640, to: directory.appendingPathComponent("SocialPreview.png"), draw: drawSocialPreview)
 }
 
 try buildAssets(in: URL(fileURLWithPath: #filePath).deletingLastPathComponent())

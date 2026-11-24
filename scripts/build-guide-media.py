@@ -24,7 +24,7 @@ FFMPEG = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
 
 
 def build_cli(parser, given, pro):
-    """Return a Space 16X CLI of the requested edition, building it if none was given."""
+    """Return a DiskUse16x CLI of the requested edition, building it if none was given."""
     if given is not None:
         binary = given.resolve()
         if not binary.is_file() or not os.access(binary, os.X_OK):
@@ -211,13 +211,13 @@ def main():
             print("Encoding the walkthrough videos…", flush=True)
             args.output.mkdir(parents=True, exist_ok=True)
             for name, plan in videos.items():
-                destination = args.output / f"space16x-{name}-walkthrough.mp4"
+                destination = args.output / f"diskuse16x-{name}-walkthrough.mp4"
                 duration = encode_video(plan["steps"], work, destination)
-                (args.output / f"space16x-{name}-youtube.txt").write_text(
+                (args.output / f"diskuse16x-{name}-youtube.txt").write_text(
                     storyboard.youtube_text(name, plan["chapters"], duration), encoding="utf-8",
                 )
                 print(f"{destination.resolve()}  {storyboard.timestamp(duration)}")
-                thumbnail = args.output / f"space16x-{name}-thumbnail.jpg"
+                thumbnail = args.output / f"diskuse16x-{name}-thumbnail.jpg"
                 subprocess.run([*FFMPEG, "-i", plan["thumbnail"], "-q:v", "2", thumbnail], check=True)
 
 

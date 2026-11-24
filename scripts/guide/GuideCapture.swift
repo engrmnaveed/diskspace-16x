@@ -39,7 +39,7 @@ struct GuideCapture {
             var iconRect = CGRect(x: 0, y: 0, width: 1024, height: 1024)
             guard let icon = NSImage(contentsOfFile: arguments[4]),
                   let iconImage = icon.cgImage(forProposedRect: &iconRect, context: nil, hints: nil)
-            else { throw GuideError("Could not load the Space 16X icon.") }
+            else { throw GuideError("Could not load the DiskUse16x icon.") }
             let capture = MacCapture(
                 home: URL(filePath: arguments[1], directoryHint: .isDirectory),
                 baseline: URL(filePath: arguments[2]), icon: icon
@@ -249,7 +249,7 @@ final class MacCapture {
         let settings = KeyWindow(contentRect: hosting.frame, styleMask: [.titled], backing: .buffered, defer: false)
         settings.appearance = NSAppearance(named: .aqua)
         settings.contentView = hosting
-        return try Chrome.plain(snapshot(hosting), title: "Space 16X Settings", scale: settings.backingScaleFactor)
+        return try Chrome.plain(snapshot(hosting), title: "DiskUse16x Settings", scale: settings.backingScaleFactor)
     }
 
     /// A sheet over its window, as macOS shows an alert or a sheet below the title bar.
@@ -300,7 +300,7 @@ enum Chrome {
         lights(on: canvas, y: toolbarHeight / 2 * scale, scale: scale)
         canvas.symbol("sidebar.left", center: CGPoint(x: 166 * scale, y: toolbarHeight / 2 * scale),
                       size: 15 * scale, color: 0x6E7378)
-        canvas.text("Space 16X", x: (sidebarWidth + 22) * scale, y: (toolbarHeight / 2 - 9) * scale,
+        canvas.text("DiskUse16x", x: (sidebarWidth + 22) * scale, y: (toolbarHeight / 2 - 9) * scale,
                     size: 15 * scale, weight: .bold, color: 0x262A2E)
         let right = CGFloat(content.width)
         canvas.symbol("arrow.clockwise", center: CGPoint(x: right - 76 * scale, y: toolbarHeight / 2 * scale),

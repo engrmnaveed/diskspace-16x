@@ -85,7 +85,7 @@ def wait_for(terminal, stream, screen, *markers):
             if all(marker in visible for marker in markers):
                 return
     visible = "\n".join(screen.display)
-    raise RuntimeError(f"Expected {markers!r} in Space 16X explorer. Visible screen:\n{visible}")
+    raise RuntimeError(f"Expected {markers!r} in DiskUse16x explorer. Visible screen:\n{visible}")
 
 
 def capture_explorer(binary, fixture, saved):

@@ -13,4 +13,4 @@ The app icon depicts a disk with three sections of different sizes. The wider aq
 
 The app uses the macOS system typeface and semantic text and background colors. Product labels distinguish views and states in addition to color.
 
-Run `swift Branding/generate.swift` on macOS to regenerate `AppIcon.icns` and `Lockup.png`. The icon contains native 1× and 2× renditions for Finder, the Dock, and the system app switcher. The PNG is the project lockup for documentation.
+Run `swift Branding/generate.swift` on macOS to regenerate `AppIcon.icns`, `Lockup.png` and `SocialPreview.png`. The icon contains native 1× and 2× renditions for Finder, the Dock, and the system app switcher. `Lockup.png` is the project lockup for documentation, and `SocialPreview.png` (1280 × 640) is the repository's social preview, which the owner uploads in **Settings → General → Social preview**.

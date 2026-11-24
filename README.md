@@ -10,7 +10,7 @@ DiskUse16x is a project by Muhammad Naveed Akram, developed under the [16X Brain
 
 **New here? Read the [user guide](docs/guide/README.md).** It takes you from install to your first cleanup in about two minutes, in the Mac app or the terminal, in plain words.
 
-![DiskUse16x opens an interactive terminal explorer for drilling into folders and ranking files. The macOS app shows a treemap, donut chart, and Largest Files view.](Branding/Space16X-Demo.gif)
+![DiskUse16x opens an interactive terminal explorer for drilling into folders and ranking files. The macOS app shows a treemap, donut chart, and Largest Files view.](Branding/DiskUse16x-Demo.gif)
 
 ## Editions
 
