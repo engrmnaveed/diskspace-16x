@@ -220,14 +220,14 @@ Upgrade with `brew upgrade --cask diskuse16x`. Remove the app with `brew uninsta
 
 ### Install the release ZIP
 
-Download `diskuse16x-<version>-macos-universal.zip` and its `.sha256` file from the [releases page](https://github.com/engrmnaveed/diskuse16x/releases). Verify the archive and expand it from the download directory. The commands below use version 0.9.1 as an example.
+Download `diskuse16x-<version>-macos-universal.zip` and its `.sha256` file from the [releases page](https://github.com/engrmnaveed/diskuse16x/releases). Verify the archive and expand it from the download directory. The commands below use version 1.0.0 as an example.
 
 ```sh
-shasum -a 256 -c diskuse16x-0.9.1-macos-universal.zip.sha256
-gh attestation verify diskuse16x-0.9.1-macos-universal.zip \
+shasum -a 256 -c diskuse16x-1.0.0-macos-universal.zip.sha256
+gh attestation verify diskuse16x-1.0.0-macos-universal.zip \
   --repo engrmnaveed/diskuse16x \
   --signer-workflow engrmnaveed/diskuse16x/.github/workflows/publish-cli.yml
-ditto -x -k diskuse16x-0.9.1-macos-universal.zip .
+ditto -x -k diskuse16x-1.0.0-macos-universal.zip .
 ```
 
 Move **DiskUse16x.app** to Applications in Finder.
