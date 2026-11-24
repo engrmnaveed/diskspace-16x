@@ -25,6 +25,8 @@ struct ReceiptSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             TextField("Operation", text: $label, prompt: Text("For example, first Xcode build"))
                 .textFieldStyle(.roundedBorder)
+                // With a prompt, SwiftUI shows no title and gives VoiceOver none either.
+                .accessibilityLabel("Operation name")
                 .onSubmit(save)
                 .onChange(of: label) { _, name in
                     if let remembered = Self.budgets[Self.key(name)] { budgetText = remembered }
@@ -32,6 +34,7 @@ struct ReceiptSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 TextField("Budget", text: $budgetText, prompt: Text("Optional budget, for example 500 MB"))
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Budget, optional")
                     .onSubmit(save)
                 Text(budgetIsValid
                     ? "The receipt says whether the operation grew by more than this. DiskUse16x remembers it for the operation’s name."
