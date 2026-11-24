@@ -8,7 +8,7 @@ final class ExclusiveSizeTests: XCTestCase {
     /// check the same rules.
     func testLeavesOutHardLinksAndClones() async throws {
         let manager = FileManager.default
-        let root = manager.temporaryDirectory.appendingPathComponent("space16x-exclusive-\(UUID().uuidString)")
+        let root = manager.temporaryDirectory.appendingPathComponent("diskuse16x-exclusive-\(UUID().uuidString)")
         defer { try? manager.removeItem(at: root) }
         for folder in ["own", "linked"] {
             try manager.createDirectory(at: root.appendingPathComponent(folder), withIntermediateDirectories: true)
@@ -38,7 +38,7 @@ final class ExclusiveSizeTests: XCTestCase {
     /// The CLI explorer's `x_measures_exclusive_sizes_after_the_scan` checks the same rules.
     func testMeasuresAWholeScanForTheColumn() async throws {
         let manager = FileManager.default
-        let root = manager.temporaryDirectory.appendingPathComponent("space16x-exclusive-sizes-\(UUID().uuidString)")
+        let root = manager.temporaryDirectory.appendingPathComponent("diskuse16x-exclusive-sizes-\(UUID().uuidString)")
         defer { try? manager.removeItem(at: root) }
         for folder in ["own", "linked"] {
             try manager.createDirectory(at: root.appendingPathComponent(folder), withIntermediateDirectories: true)

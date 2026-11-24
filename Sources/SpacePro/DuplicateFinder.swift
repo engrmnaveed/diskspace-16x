@@ -30,7 +30,7 @@ public struct DuplicateGroup: Identifiable, Sendable {
     }
 
     /// The space that moving every copy but one to the Trash and emptying it frees at least,
-    /// as `space16x duplicates` counts it. Each copy frees its exclusive bytes. The copy kept
+    /// as `diskuse16x duplicates` counts it. Each copy frees its exclusive bytes. The copy kept
     /// is the largest, or, when some copies share blocks, the clone that would free the
     /// most, since its blocks may be the ones the other clones share.
     public var extraBytes: UInt64 {
@@ -55,7 +55,7 @@ public struct DuplicateGroup: Identifiable, Sendable {
     }
 }
 
-/// Finds duplicate files in a finished scan, as `space16x duplicates` does. It is the one
+/// Finds duplicate files in a finished scan, as `diskuse16x duplicates` does. It is the one
 /// feature that reads file contents, and only when the user asks for it: it groups files
 /// by length and reads only files that share a length with another, first their first
 /// 64 KB, then whole files whose starts match. Contents are compared by `Hasher`, Swift's

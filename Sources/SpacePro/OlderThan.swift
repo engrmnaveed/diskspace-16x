@@ -1,7 +1,7 @@
 import Foundation
 import SpaceCore
 
-/// Pro: the files last modified more than some days ago, as `space16x scan --older-than`
+/// Pro: the files last modified more than some days ago, as `diskuse16x scan --older-than`
 /// counts them, for **View → Show Files Older Than**.
 public enum OlderThan {
     /// The presets the View menu offers, in days.

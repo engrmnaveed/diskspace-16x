@@ -2,7 +2,7 @@ import Foundation
 import SpaceCore
 
 /// One kept scan, as the history's `index.jsonl` records it. The CLI's
-/// `space16x history` writes the same records.
+/// `diskuse16x history` writes the same records.
 public struct SavedScanRecord: Codable, Sendable, Identifiable, Equatable {
     /// The export's file name in the history folder.
     public let file: String
@@ -29,10 +29,26 @@ public struct ScanHistory: Sendable {
         self.directory = directory
     }
 
-    /// `~/Library/Application Support/Space 16X/History`.
+    /// `~/Library/Application Support/DiskUse16x/History`, or the history a release before
+    /// 1.0 kept in `Space 16X/History` while only that one exists.
     public static var standard: ScanHistory {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return ScanHistory(directory: support.appendingPathComponent("Space 16X/History", isDirectory: true))
+        return ScanHistory(directory: location(in: support))
+    }
+
+    /// The history folder in `support`: `DiskUse16x/History`, unless only the folder that
+    /// Space 16X, this app's name before 1.0, made exists. Upgrading keeps every saved scan
+    /// without moving anything.
+    public static func location(in support: URL) -> URL {
+        let current = support.appendingPathComponent("DiskUse16x/History", isDirectory: true)
+        let legacy = support.appendingPathComponent("Space 16X/History", isDirectory: true)
+        let manager = FileManager.default
+        var isDirectory: ObjCBool = false
+        if !manager.fileExists(atPath: current.path),
+           manager.fileExists(atPath: legacy.path, isDirectory: &isDirectory), isDirectory.boolValue {
+            return legacy
+        }
+        return current
     }
 
     /// The export of `record`.

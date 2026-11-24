@@ -54,7 +54,7 @@ public enum FootprintReceipt {
     public static let budgetsKey = "footprintBudgets"
 
     /// Parses a budget such as `500 MB`, `2GB`, `1.5 G` or `750000`, in decimal units as
-    /// `space16x diff --budget` takes them. Nil for an empty or unreadable size.
+    /// `diskuse16x diff --budget` takes them. Nil for an empty or unreadable size.
     public static func parseBudget(_ text: String) -> UInt64? {
         let compact = text.uppercased().filter { !$0.isWhitespace }
         let number = compact.hasSuffix("B") ? String(compact.dropLast()) : compact
@@ -76,7 +76,7 @@ public enum FootprintReceipt {
         return bytes < 1.8e19 ? UInt64(bytes) : nil
     }
 
-    /// Whether growing by `delta` bytes exceeds `budget`, as `space16x diff --budget` decides.
+    /// Whether growing by `delta` bytes exceeds `budget`, as `diskuse16x diff --budget` decides.
     public static func isOverBudget(_ delta: Int64, budget: UInt64) -> Bool {
         delta > 0 && UInt64(delta) > budget
     }
@@ -147,7 +147,7 @@ public enum FootprintReceipt {
             "",
             "Paths are relative to the scanned folder. Other programs can change the same folders between the scans, so this receipt shows what changed between the scan times, not what one program did.",
             "",
-            "Made with Space 16X \(version).",
+            "Made with DiskUse16x \(version).",
             "",
         ]
         return lines.joined(separator: "\n")

@@ -78,7 +78,7 @@ final class FreeSpaceMonitor {
         guard alert.update(freeBytes: volume.availableBytes, thresholdGB: threshold), canNotify else { return }
         let content = UNMutableNotificationContent()
         content.title = "\(volume.name) is almost full"
-        content.body = "\(ScanFormat.size(volume.availableBytes)) free. Open Space 16X to see what's using the space."
+        content.body = "\(ScanFormat.size(volume.availableBytes)) free. Open DiskUse16x to see what's using the space."
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "low-space", content: content, trigger: nil)
         )
@@ -99,7 +99,7 @@ struct FreeSpaceMenu: View {
             Text("\(volume.name): \(ScanFormat.size(volume.availableBytes)) free of \(ScanFormat.size(volume.totalBytes))")
         }
         Divider()
-        Button("Open Space 16X") {
+        Button("Open DiskUse16x") {
             NSApp.activate()
             // Bring back a window that's open, or open one when all are closed.
             let windows = NSApp.windows.filter { $0.identifier?.rawValue.hasPrefix("workspace") == true && $0.isVisible }

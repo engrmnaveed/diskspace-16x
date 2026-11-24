@@ -347,7 +347,7 @@ final class ScanWorkspace {
         guard urls.count == 1, let url = urls.first else {
             notice = Notice(
                 title: "Choose one folder or drive",
-                message: "Space 16X scans one location at a time.",
+                message: "DiskUse16x scans one location at a time.",
                 isError: true
             )
             return false
@@ -373,7 +373,7 @@ final class ScanWorkspace {
         guard canChooseFolder else { return }
         let picker = NSOpenPanel()
         picker.title = "Open a Saved Scan"
-        picker.message = "Choose a scan exported by Space 16X, the space16x CLI, ncdu, or gdu."
+        picker.message = "Choose a scan exported by DiskUse16x, the diskuse16x CLI, ncdu, or gdu."
         picker.prompt = "Open"
         picker.allowedContentTypes = [.json]
         picker.allowsMultipleSelection = false
@@ -385,7 +385,7 @@ final class ScanWorkspace {
         }
     }
 
-    /// Opens a scan saved in ncdu's JSON format, by Space 16X or another tool.
+    /// Opens a scan saved in ncdu's JSON format, by DiskUse16x or another tool.
     func openScan(at url: URL) {
         guard canChooseFolder else { return }
         let name = url.lastPathComponent
@@ -422,7 +422,7 @@ final class ScanWorkspace {
         guard canCompare else { return }
         let picker = NSOpenPanel()
         picker.title = "Compare with a Saved Scan"
-        picker.message = "Choose an earlier scan of this folder, exported by Space 16X, the space16x CLI, ncdu, or gdu."
+        picker.message = "Choose an earlier scan of this folder, exported by DiskUse16x, the diskuse16x CLI, ncdu, or gdu."
         picker.prompt = "Compare"
         picker.allowedContentTypes = [.json]
         picker.allowsMultipleSelection = false
@@ -559,7 +559,7 @@ final class ScanWorkspace {
             case .success:
                 notice = Notice(
                     title: "Saved to History",
-                    message: "Compare… lists this scan. Saved scans are in ~/Library/Application Support/Space 16X/History."
+                    message: "Compare… lists this scan. Saved scans are in \((ScanHistory.standard.directory.path as NSString).abbreviatingWithTildeInPath)."
                 )
                 refreshSavedScans()
             case let .failure(error):
@@ -632,7 +632,7 @@ final class ScanWorkspace {
         let saved = SavedScan(report: unfilteredReport ?? report, excludes: reportExcludes)
         let panel = NSSavePanel()
         panel.title = "Export Scan"
-        panel.message = "Open it later with Open Scan…, space16x --import, ncdu -f, or gdu -f. It lists every path in the scan."
+        panel.message = "Open it later with Open Scan…, diskuse16x --import, ncdu -f, or gdu -f. It lists every path in the scan."
         panel.prompt = "Export"
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "\(report.root.path == "/" ? "Startup Disk" : report.root.name) scan.json"
@@ -662,7 +662,7 @@ final class ScanWorkspace {
     }
 
     /// Pro: saves one self-contained HTML page with the totals, a treemap, the scan root's
-    /// contents, the largest files and file types, as `space16x scan --html` writes it.
+    /// contents, the largest files and file types, as `diskuse16x scan --html` writes it.
     func exportHTMLReport() {
         guard canExport, ProFeatures.isEnabled, let report else { return }
         let panel = NSSavePanel()

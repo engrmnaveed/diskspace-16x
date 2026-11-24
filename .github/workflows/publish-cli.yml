@@ -45,10 +45,10 @@ jobs:
           (cd dist && shasum -a 256 -c "$(basename "$archive").sha256")
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: space16x-macos-app
+          name: diskuse16x-macos-app
           path: |
-            dist/space16x-*-macos-universal.zip
-            dist/space16x-*-macos-universal.zip.sha256
+            dist/diskuse16x-*-macos-universal.zip
+            dist/diskuse16x-*-macos-universal.zip.sha256
           if-no-files-found: error
 
   publish:
@@ -97,12 +97,12 @@ jobs:
           (cd "$release" && sha256sum install.sh > install.sh.sha256)
 
           version="$(cat scripts/release-version)"
-          app="space16x-$version-macos-universal.zip"
-          gh run download "$GITHUB_RUN_ID" --repo "$GH_REPO" --name space16x-macos-app --dir "$downloads/macos-app"
+          app="diskuse16x-$version-macos-universal.zip"
+          gh run download "$GITHUB_RUN_ID" --repo "$GH_REPO" --name diskuse16x-macos-app --dir "$downloads/macos-app"
           (cd "$downloads/macos-app" && sha256sum -c "$app.sha256")
           cp "$downloads/macos-app/$app" "$downloads/macos-app/$app.sha256" "$release/"
           read -r app_digest _ < "$release/$app.sha256"
-          scripts/render-cask "$version" "$app_digest" > "$release/space16x.rb"
+          scripts/render-cask "$version" "$app_digest" > "$release/diskuse16x.rb"
           # The CLI formulas, from the archives' digests.
           scripts/render-formula "$version" "$release" > "$release/du16x.rb"
           scripts/render-formula --pro "$version" "$release" > "$release/du16x-pro.rb"
@@ -114,7 +114,7 @@ jobs:
             ${{ env.RELEASE_DIR }}/diskuse16x-*.tar.gz
             ${{ env.RELEASE_DIR }}/diskuse16x*.deb
             ${{ env.RELEASE_DIR }}/diskuse16x*.rpm
-            ${{ env.RELEASE_DIR }}/space16x-*-macos-universal.zip
+            ${{ env.RELEASE_DIR }}/diskuse16x-*-macos-universal.zip
             ${{ env.RELEASE_DIR }}/install.sh
       - name: Publish the verified release assets
         shell: bash
@@ -127,8 +127,8 @@ jobs:
             --notes-file "$RUNNER_TEMP/release-notes.md" \
             diskuse16x-*.tar.gz diskuse16x-*.tar.gz.sha256 \
             diskuse16x*.deb diskuse16x*.deb.sha256 diskuse16x*.rpm diskuse16x*.rpm.sha256 \
-            space16x-*-macos-universal.zip space16x-*-macos-universal.zip.sha256 \
-            space16x.rb du16x.rb du16x-pro.rb install.sh install.sh.sha256
+            diskuse16x-*-macos-universal.zip diskuse16x-*-macos-universal.zip.sha256 \
+            diskuse16x.rb du16x.rb du16x-pro.rb install.sh install.sh.sha256
       - name: Update the Homebrew tap
         shell: bash
         env:
@@ -137,7 +137,7 @@ jobs:
           TAP_REPO: engrmnaveed/homebrew-tap
         run: |
           if [[ -z "$HOMEBREW_TAP_DEPLOY_KEY" ]]; then
-            echo "::notice::HOMEBREW_TAP_DEPLOY_KEY is not set. Commit space16x.rb from the release to $TAP_REPO/Casks, and du16x.rb and du16x-pro.rb to $TAP_REPO/Formula, by hand."
+            echo "::notice::HOMEBREW_TAP_DEPLOY_KEY is not set. Commit diskuse16x.rb from the release to $TAP_REPO/Casks, delete Casks/space16x.rb, map space16x to diskuse16x in cask_renames.json, and du16x.rb and du16x-pro.rb to $TAP_REPO/Formula, by hand."
             exit 0
           fi
           umask 077
@@ -152,10 +152,16 @@ jobs:
           tap="$ssh_dir/tap"
           git clone --depth 1 "git@github.com:$TAP_REPO.git" "$tap"
           mkdir -p "$tap/Casks" "$tap/Formula"
-          cp "$RELEASE_DIR/space16x.rb" "$tap/Casks/space16x.rb"
+          cp "$RELEASE_DIR/diskuse16x.rb" "$tap/Casks/diskuse16x.rb"
           cp "$RELEASE_DIR/du16x.rb" "$RELEASE_DIR/du16x-pro.rb" "$tap/Formula/"
           cd "$tap"
-          git add Casks/space16x.rb Formula/du16x.rb Formula/du16x-pro.rb
+          # Releases before 1.0 published the cask as space16x. The rename map moves its
+          # users to diskuse16x on their next brew upgrade.
+          if [[ -e Casks/space16x.rb ]]; then git rm -q Casks/space16x.rb; fi
+          if [[ ! -e cask_renames.json ]]; then
+            printf '{\n  "space16x": "diskuse16x"\n}\n' > cask_renames.json
+          fi
+          git add Casks/diskuse16x.rb Formula/du16x.rb Formula/du16x-pro.rb cask_renames.json
           if git diff --cached --quiet; then
             echo "The tap already has this cask and these formulas."
             exit 0

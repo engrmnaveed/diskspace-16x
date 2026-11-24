@@ -5,17 +5,17 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>Space 16X</string>
+    <string>DiskUse16x</string>
     <key>CFBundleExecutable</key>
-    <string>Space16X</string>
+    <string>DiskUse16x</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.16xbrains.space16x</string>
+    <string>com.16xbrains.diskuse16x</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Space 16X</string>
+    <string>DiskUse16x</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSApplicationCategoryType</key>

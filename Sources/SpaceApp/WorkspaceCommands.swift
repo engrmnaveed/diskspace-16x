@@ -15,7 +15,7 @@ extension FocusedValues {
     }
 }
 
-/// One Space 16X window with its own scan. Pro's **File → New Window** opens more.
+/// One DiskUse16x window with its own scan. Pro's **File → New Window** opens more.
 struct WorkspaceWindow: View {
     @ViewState private var workspace = ScanWorkspace()
 
@@ -151,8 +151,8 @@ struct WorkspaceCommands: Commands {
                 .disabled(!workspace.canBrowse)
         }
         CommandGroup(replacing: .help) {
-            Button("Space 16X Help") { NSWorkspace.shared.open(ProjectLinks.guide) }
-            // Opens the newest release's page. Space 16X never checks for updates itself.
+            Button("DiskUse16x Help") { NSWorkspace.shared.open(ProjectLinks.guide) }
+            // Opens the newest release's page. DiskUse16x never checks for updates itself.
             Button("Check for Updates…") { NSWorkspace.shared.open(ProjectLinks.latestRelease) }
         }
         CommandMenu("Browse") {

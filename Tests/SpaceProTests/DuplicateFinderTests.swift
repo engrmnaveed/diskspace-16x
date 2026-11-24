@@ -7,7 +7,7 @@ final class DuplicateFinderTests: XCTestCase {
     /// The Rust CLI's `groups_files_with_the_same_contents` builds the same folder.
     func testGroupsFilesWithTheSameContents() async throws {
         let manager = FileManager.default
-        let root = manager.temporaryDirectory.appendingPathComponent("space16x-duplicates-\(UUID().uuidString)")
+        let root = manager.temporaryDirectory.appendingPathComponent("diskuse16x-duplicates-\(UUID().uuidString)")
         defer { try? manager.removeItem(at: root) }
         try manager.createDirectory(at: root.appendingPathComponent("b"), withIntermediateDirectories: true)
         let big = Data((0..<200_000).map { UInt8($0 * 7 % 251) })
@@ -40,7 +40,7 @@ final class DuplicateFinderTests: XCTestCase {
     /// a separate copy b.bin, and c.bin, an APFS clone of a.bin.
     func testCountsOnlyWhatRemovingClonesFrees() async throws {
         let manager = FileManager.default
-        let root = manager.temporaryDirectory.appendingPathComponent("space16x-duplicate-clones-\(UUID().uuidString)")
+        let root = manager.temporaryDirectory.appendingPathComponent("diskuse16x-duplicate-clones-\(UUID().uuidString)")
         defer { try? manager.removeItem(at: root) }
         try manager.createDirectory(at: root, withIntermediateDirectories: true)
         let contents = Data((0..<300_000).map { UInt8($0 * 13 % 251) })

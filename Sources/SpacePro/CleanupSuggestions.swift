@@ -43,7 +43,7 @@ public struct CleanupSuggestion: Identifiable, Sendable {
 }
 
 /// Cleanup suggestions: folders such as `node_modules`, Cargo's `target` or Xcode's
-/// DerivedData, found by name in a finished scan, as `space16x scan --cleanup` and the CLI
+/// DerivedData, found by name in a finished scan, as `diskuse16x scan --cleanup` and the CLI
 /// explorer's `u` list them. It reads nothing new and removes nothing: the user picks
 /// folders and confirms Move to Trash.
 public enum CleanupSuggestions {

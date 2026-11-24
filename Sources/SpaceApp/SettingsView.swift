@@ -56,7 +56,7 @@ struct SettingsView: View {
             } header: {
                 Text("Pro features")
             } footer: {
-                Text("Space 16X Pro is free too. It adds **Compare** and a scan history, a **Modified** column, **Types**, **Cleanup** and **Duplicates**, **Explain Disk Space**, and a menu-bar free-space monitor that checks once a minute while it's shown. Pro features stay out of the way until you turn them on.")
+                Text("DiskUse16x Pro is free too. It adds **Compare** and a scan history, a **Modified** column, **Types**, **Cleanup** and **Duplicates**, **Explain Disk Space**, and a menu-bar free-space monitor that checks once a minute while it's shown. Pro features stay out of the way until you turn them on.")
                     .font(.callout)
             }
         }

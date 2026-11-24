@@ -107,7 +107,7 @@ final class RescanTests: XCTestCase {
     }
 
     private func withFixture(_ body: (URL) async throws -> Void) async throws {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("space16x-rescan-\(UUID().uuidString)")
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("diskuse16x-rescan-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: folder) }
         try await body(folder)

@@ -22,7 +22,7 @@ public struct FileTypeTotal: Identifiable, Sendable, Equatable {
     }
 }
 
-/// File types: the space each file extension uses, as in `space16x scan --types N` and
+/// File types: the space each file extension uses, as in `diskuse16x scan --types N` and
 /// the CLI explorer's `t` view. Types come from names alone.
 public enum FileTypes {
     /// The longest extension that counts as a type. Longer ones are usually part of a name.

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The space on a volume that a scan can't show, as `space16x explain` reports it: the
+/// The space on a volume that a scan can't show, as `diskuse16x explain` reports it: the
 /// other volumes of its APFS container, purgeable space and local snapshots. It comes
 /// from system queries and metadata only, and reads no file contents.
 public struct DiskExplanation: Identifiable, Sendable, Equatable {

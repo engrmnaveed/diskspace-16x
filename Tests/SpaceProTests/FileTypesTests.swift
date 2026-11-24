@@ -28,7 +28,7 @@ final class FileTypesTests: XCTestCase {
     }
 
     func testRanksTypesBySizeAndCountsHardLinksOnce() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("space16x-types-\(UUID().uuidString)")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("diskuse16x-types-\(UUID().uuidString)")
         let manager = FileManager.default
         try manager.createDirectory(at: root.appendingPathComponent("clips"), withIntermediateDirectories: true)
         defer { try? manager.removeItem(at: root) }

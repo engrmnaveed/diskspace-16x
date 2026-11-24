@@ -1,7 +1,7 @@
 import SpacePro
 import SwiftUI
 
-/// Pro: the space on a volume that a scan can't show, as `space16x explain` lists it.
+/// Pro: the space on a volume that a scan can't show, as `diskuse16x explain` lists it.
 struct ExplainDiskView: View {
     let explanation: DiskExplanation
     @Environment(\.dismiss) private var dismiss

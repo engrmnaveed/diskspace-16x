@@ -118,7 +118,7 @@ def capture(binary, work):
     executable = work / "capture"
     subprocess.run([
         *compiler, "-I", work, "-L", work, "-lSpaceCore", "-lSpacePro", "-o", executable,
-        *sorted(PROMO.glob("*.swift")), *(path for path in views if path.name != "Space16XApp.swift"),
+        *sorted(PROMO.glob("*.swift")), *(path for path in views if path.name != "DiskUse16xApp.swift"),
     ], check=True)
     subprocess.run([
         executable, projects, work, report_path, explorer_path, ROOT / "Branding" / "AppIcon.icns",

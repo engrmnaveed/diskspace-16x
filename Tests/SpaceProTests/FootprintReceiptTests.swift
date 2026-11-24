@@ -6,7 +6,7 @@ import XCTest
 final class FootprintReceiptTests: XCTestCase {
     func testListsWhatChangedBetweenTheScans() async throws {
         let manager = FileManager.default
-        let root = manager.temporaryDirectory.appendingPathComponent("space16x-receipt-\(UUID().uuidString)")
+        let root = manager.temporaryDirectory.appendingPathComponent("diskuse16x-receipt-\(UUID().uuidString)")
         defer { try? manager.removeItem(at: root) }
         try manager.createDirectory(at: root.appendingPathComponent("Build"), withIntermediateDirectories: true)
         try Data(count: 100_000).write(to: root.appendingPathComponent("Build/app.o"))
@@ -36,7 +36,7 @@ final class FootprintReceiptTests: XCTestCase {
         XCTAssertTrue(receipt.contains("| +200 KB | – | 200 KB | Build/App.dSYM |"))
         XCTAssertTrue(receipt.contains("And 1 smaller changes."))
         XCTAssertFalse(receipt.contains(root.path), "paths are relative")
-        XCTAssertTrue(receipt.contains("Made with Space 16X 0.8.0."))
+        XCTAssertTrue(receipt.contains("Made with DiskUse16x 0.8.0."))
     }
 
     func testParsesBudgetsAndChecksThemLikeTheCLI() {
@@ -56,7 +56,7 @@ final class FootprintReceiptTests: XCTestCase {
 
     func testSaysWhetherTheOperationStayedWithinItsBudget() async throws {
         let manager = FileManager.default
-        let root = manager.temporaryDirectory.appendingPathComponent("space16x-budget-\(UUID().uuidString)")
+        let root = manager.temporaryDirectory.appendingPathComponent("diskuse16x-budget-\(UUID().uuidString)")
         defer { try? manager.removeItem(at: root) }
         try manager.createDirectory(at: root, withIntermediateDirectories: true)
         let before = try await DiskScanner.scan(path: root.path)
