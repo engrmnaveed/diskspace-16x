@@ -35,7 +35,7 @@ The last step of **Publish release** runs `cargo publish --locked` from `cli/` w
 
 - **One-time setup:** sign in to [crates.io](https://crates.io/) with GitHub and verify an email address. Under **Account Settings → API Tokens**, create a token with the **publish-new** and **publish-update** scopes, limited to the crate `diskuse16x`. Store it as the `CARGO_REGISTRY_TOKEN` secret in the `release` environment. After the first publish, you can narrow the token to **publish-update**, or switch to crates.io's trusted publishing.
 - **Each release:** the step runs `scripts/publish-crate`, which publishes the tagged version once and skips a version crates.io already has. crates.io keeps every version for good: a broken one can only be yanked.
-- **A release published without the token:** add the secret, then run **Actions → Publish crate** with the release's tag, such as `v1.0.0`. It checks out that tag in the `release` environment and runs the same script, which fails clearly if the secret is still missing.
+- **A release published without the token:** add the secret, then run **Actions → Publish crate** with the release's tag, such as `v1.0.0`. It checks out that tag in the `release` environment and runs the same steps as the script, written into the workflow so that tags made before the script existed work too. It fails clearly if the secret is still missing.
 
 ### One-time repository settings
 

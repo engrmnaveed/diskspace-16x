@@ -1,8 +1,8 @@
 name: Publish crate
 
 # Publishes the diskuse16x crate for a release that is already tagged, for example
-# when the release ran before CARGO_REGISTRY_TOKEN was set. Publish release does
-# the same as its last step.
+# when the release ran before CARGO_REGISTRY_TOKEN was set or crates.io refused it.
+# Publish release does the same as its last step, through scripts/publish-crate.
 on:
   workflow_dispatch:
     inputs:
@@ -30,7 +30,19 @@ jobs:
           ref: refs/tags/${{ inputs.tag }}
           persist-credentials: false
       - name: Publish the crate to crates.io
+        # The steps of scripts/publish-crate, written out here: tags made before the
+        # script existed, such as v1.0.0, don't contain it.
+        working-directory: cli
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           TAG: ${{ inputs.tag }}
-        run: scripts/publish-crate --require "${TAG#v}"
+        run: |
+          version="${TAG#v}"
+          : "${CARGO_REGISTRY_TOKEN:?Add CARGO_REGISTRY_TOKEN to the release environment first.}"
+          [[ "$version" == "$(cat ../scripts/release-version)" ]] ||
+            { echo "The tag's checkout is version $(cat ../scripts/release-version), not $version." >&2; exit 1; }
+          if cargo info --registry crates-io "diskuse16x@$version" >/dev/null 2>&1; then
+            echo "crates.io already has diskuse16x $version."
+            exit 0
+          fi
+          cargo publish --locked
