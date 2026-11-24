@@ -116,16 +116,18 @@ The features now cover every gap in §2, so M8 adds no new views. It checks what
   - the Move to Trash alert's look.
 
   Record the results in `docs/qa.md` and fix what they find.
-- [ ] M8.2 Check the support claims nobody has tested:
+  - **Next step (owner):** the checklist under **1.0.0** in `docs/qa.md` lists these six checks plus the 1.0 additions (Help menu, settings import, Full Disk Access, VoiceOver in Settings), ready to tick on the 1.0 build.
+- [~] M8.2 Check the support claims nobody has tested:
   - **macOS 14,** the stated minimum: run the release app in a macOS 14 virtual machine on Apple silicon, through the core rows of `docs/manual-qa.md`.
   - **VoiceOver:** a pass over the main window, its sheets and Settings, adding any labels that are missing.
   - **A physical Intel Mac** and **Linux on real hardware** (the Linux benchmark has only run in Docker on a Mac): run them if the owner has the hardware. Otherwise post them as contribution issues (M8.9).
   - Record each result in `docs/qa.md`.
-  - *Asked the owner on 2026-11-24 whether to download a macOS 14 image (about 15 GB) and which hardware they have, not answered yet.*
+  - **Progress (2026-11-24):** the owner approved downloading a macOS 14 image. The Intel Mac and real Linux hardware checks are posted as #96 and #97, with macOS 14 also as #93 for real hardware. The accessibility pass covered every main view and Scan Details with no unnamed controls (`docs/qa.md`). The Settings switches rely on SwiftUI's linked labels, which the owner's M8.1 check 8 confirms by ear. Still to do: the Explain, Compare and receipt sheets, and the macOS 14 VM run.
 - [x] M8.3 Notarization. **Owner decides** whether to join the Apple Developer Program (about $99 a year).
   - **If yes:** the owner stores the Developer ID and notarization credentials in the `release-signing` environment ([release procedure](release.md)). Each release publishes the notarized ZIP and cask. The guide and `docs/install.md` drop the **Open Anyway** steps and the note that Full Disk Access can reset after an update.
   - **If no:** record why here, and keep ad hoc signing and today's first-launch steps.
   - **Decision (2026-11-24): no.** The owner won't pay Apple's $99 a year while the tools have no traffic yet. Releases keep ad hoc signing, and distribution stays free. The first launch should have as little friction as possible, so the docs put the easiest path first. Sessions never touch signing credentials or secrets.
+  - **Follow-up (2026-11-24):** with the owner's go-ahead, `install.sh --app` installs the Mac app into `~/Applications` from the release ZIP fetched with curl, which adds no quarantine flag, so the app opens without the **Open Anyway** step. Confirmed on a first launch on macOS 27.2.1 (`docs/qa.md`), to repeat with the published v1.0.0. The install guide, the README and the guide put it first.
 - [x] M8.4 CLI install channels. **Owner decides** which to add. Each one gets install steps in `docs/install.md` and the guide, and a check in the release run.
   - **Homebrew formulas** in the tap for the CLI on macOS and Linux, Basic and Pro, published by `publish-cli.yml` like the cask. Their names mustn't clash with the `space16x` cask.
   - **crates.io,** so `cargo install space16x` builds Basic and `--features pro` builds Pro. The name was free on 2026-11-24. Publishing needs the owner's crates.io token as a release secret.
