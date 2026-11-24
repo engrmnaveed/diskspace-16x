@@ -2,11 +2,17 @@ import Foundation
 import SpaceCore
 import XCTest
 
+/// Settings in memory, so the tests leave no preference files behind.
+private final class MemoryStore: SettingsStore {
+    var values: [String: Any] = [:]
+    func object(forKey defaultName: String) -> Any? { values[defaultName] }
+    func bool(forKey defaultName: String) -> Bool { values[defaultName] as? Bool ?? false }
+    func set(_ value: Any?, forKey defaultName: String) { values[defaultName] = value }
+}
+
 final class LegacySettingsTests: XCTestCase {
-    func testCopiesTheEarlierAppsSettingsOnce() throws {
-        let suite = "diskuse16x-legacy-settings-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+    func testCopiesTheEarlierAppsSettingsOnce() {
+        let defaults = MemoryStore()
         defaults.set("apparent", forKey: "sizeMetric")
         let old: [String: Any] = [
             "proFeatures": true, "excludePatterns": "node_modules", "sizeMetric": "allocated",
@@ -17,21 +23,24 @@ final class LegacySettingsTests: XCTestCase {
         // A setting already made in the new app wins, and other apps' keys stay out.
         XCTAssertEqual(Set(copied), ["proFeatures", "excludePatterns", "footprintBudgets"])
         XCTAssertTrue(defaults.bool(forKey: "proFeatures"))
-        XCTAssertEqual(defaults.string(forKey: "excludePatterns"), "node_modules")
-        XCTAssertEqual(defaults.string(forKey: "sizeMetric"), "apparent")
+        XCTAssertEqual(defaults.object(forKey: "excludePatterns") as? String, "node_modules")
+        XCTAssertEqual(defaults.object(forKey: "sizeMetric") as? String, "apparent")
         XCTAssertNil(defaults.object(forKey: "NSWindow Frame main"))
 
         // Only the first launch copies, so a later change in the old app stays there.
-        defaults.removeObject(forKey: "proFeatures")
+        defaults.set(nil, forKey: "proFeatures")
         XCTAssertEqual(LegacySettings.importOnce(from: old, into: defaults), [])
         XCTAssertNil(defaults.object(forKey: "proFeatures"))
     }
 
-    func testWithoutTheEarlierAppNothingIsCopied() throws {
-        let suite = "diskuse16x-legacy-settings-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+    func testWithoutTheEarlierAppNothingIsCopied() {
+        let defaults = MemoryStore()
         XCTAssertEqual(LegacySettings.importOnce(from: nil, into: defaults), [])
         XCTAssertTrue(defaults.bool(forKey: LegacySettings.importedKey))
+    }
+
+    func testUserDefaultsIsAStore() {
+        let store: SettingsStore = UserDefaults.standard
+        XCTAssertNotNil(store)
     }
 }

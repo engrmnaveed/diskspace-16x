@@ -18,7 +18,7 @@ struct DiskUse16xApp: App {
         // Space 16X, the name before 1.0, kept its settings under another bundle ID.
         LegacySettings.importOnce(
             from: UserDefaults.standard.persistentDomain(forName: LegacySettings.domain),
-            into: .standard
+            into: UserDefaults.standard
         )
     }
 
