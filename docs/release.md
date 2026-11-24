@@ -41,7 +41,7 @@ The last step of **Publish release** runs `cargo publish --locked` from `cli/` w
 
 These settings live on GitHub, not in the repository. Set them before the next tag:
 
-- **Environments → `release`:** add yourself, or the release owners, as required reviewers. Restrict deployments to tags matching `v*`. Without reviewers, a tag push publishes immediately.
+- **Environments → `release`:** add yourself, or the release owners, as required reviewers, and leave **Prevent self-review** off so you can approve runs you start. Under **Deployment branches and tags**, allow only tags matching `v*` and the branch `main`, which **Publish crate** runs from. Without reviewers, a tag push publishes immediately, and the environment's secrets (`HOMEBREW_TAP_DEPLOY_KEY`, `CARGO_REGISTRY_TOKEN`) are open to any workflow that names it.
 - **Rules → Rulesets:** protect tags matching `v*` from creation, update, and deletion by anyone outside the release owners. Protect `main` with required pull requests and the CI status checks.
 - **Settings → General → Releases:** enable immutable releases, so published assets and their tags can't be replaced.
 - **Security → Private vulnerability reporting** Enable it to accept reports through GitHub. [Security policy](../SECURITY.md)
