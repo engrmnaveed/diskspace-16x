@@ -1,0 +1,29 @@
+#!/bin/sh
+# Publish the diskuse16x crate at VERSION to crates.io from a checkout of its tag.
+# Reads the token from CARGO_REGISTRY_TOKEN. Without it, says so and stops; with
+# --require, that's an error. A version crates.io already has is left alone, so
+# a rerun is safe. crates.io keeps every version for good: a bad one can only be yanked.
+set -eu
+
+require=false
+if [ "${1:-}" = --require ]; then require=true; shift; fi
+[ "$#" -eq 1 ] || { echo "Usage: $0 [--require] VERSION" >&2; exit 1; }
+version=${1#v}
+cd "$(dirname "$0")/.."
+[ "$version" = "$(cat scripts/release-version)" ] ||
+    { echo "This checkout is version $(cat scripts/release-version), not $version." >&2; exit 1; }
+
+if [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
+    if "$require"; then
+        echo "Add CARGO_REGISTRY_TOKEN to the release environment first." >&2
+        exit 1
+    fi
+    echo "::notice::CARGO_REGISTRY_TOKEN is not set, so the crate wasn't published to crates.io."
+    exit 0
+fi
+cd cli
+if cargo info --registry crates-io "diskuse16x@$version" >/dev/null 2>&1; then
+    echo "crates.io already has diskuse16x $version."
+    exit 0
+fi
+cargo publish --locked
