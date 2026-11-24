@@ -1,6 +1,6 @@
 # Clean up safely
 
-Space 16X frees space one way only: it moves the items you choose to the Trash, after you confirm. Nothing is deleted for good until you empty the Trash yourself.
+DiskUse16x frees space one way only: it moves the items you choose to the Trash, after you confirm. Nothing is deleted for good until you empty the Trash yourself.
 
 ## Move items to the Trash in the Mac app
 
@@ -30,31 +30,31 @@ Sometimes emptying the Trash frees less than you expected:
 - **Hard links.** Some files appear in two places but are stored once. The space comes back only when every copy is gone.
 - **Snapshots.** Time Machine keeps recent local snapshots, which hold on to deleted files for about a day, or until macOS needs the space.
 
-✨ **Pro, free:** **Exclusive size** shows what removing each item frees at least, and **Explain Disk Space** shows snapshots and other space a scan can't see. See [Space 16X Pro](pro.md).
+✨ **Pro, free:** **Exclusive size** shows what removing each item frees at least, and **Explain Disk Space** shows snapshots and other space a scan can't see. See [DiskUse16x Pro](pro.md).
 
-## What Space 16X won't move
+## What DiskUse16x won't move
 
-To keep you safe, Space 16X doesn't offer to move:
+To keep you safe, DiskUse16x doesn't offer to move:
 
 - items it couldn't read completely, such as **Protected**, **Incomplete** or **Cloud only** ones
 - anything at all while a scan is still running
 - items in a saved scan you opened, because those files may be on another computer or may have changed
 
-In the terminal, `space16x --read-only` turns Move to Trash off completely, which is handy on a shared server.
+In the terminal, `diskuse16x --read-only` turns Move to Trash off completely, which is handy on a shared server.
 
 ## What's safe to remove?
 
-Space 16X shows you what's big. You decide what to remove. Some rules of thumb:
+DiskUse16x shows you what's big. You decide what to remove. Some rules of thumb:
 
 - **Usually safe:** old downloads, installers you've already used, video exports and copies of files you keep elsewhere.
 - **Think twice:** anything in **Library** or system folders. Apps keep settings and data there.
 - **If you don't know what it is, leave it.** Look it up first, or keep it.
 
-✨ **Pro, free:** **Cleanup suggestions** list folders that apps and developer tools recreate on their own, such as caches and build output, so you know they're safe to clear. See [Space 16X Pro](pro.md#cleanup-suggestions).
+✨ **Pro, free:** **Cleanup suggestions** list folders that apps and developer tools recreate on their own, such as caches and build output, so you know they're safe to clear. See [DiskUse16x Pro](pro.md#cleanup-suggestions).
 
 ## Rescan after changes
 
-When you delete or add files outside Space 16X, rescan just the folder you're in. It's much quicker than scanning everything again.
+When you delete or add files outside DiskUse16x, rescan just the folder you're in. It's much quicker than scanning everything again.
 
 - **Mac app:** choose **Scan → Rescan Folder** (⌥⌘R), or right-click a folder and choose **Rescan Folder**. **Scan → Scan Again** (⌘R) scans the whole location again.
 - **Terminal:** press `r`. The bottom line reports the folder's new size and its old one. Press `c` to cancel a rescan and keep the earlier results.

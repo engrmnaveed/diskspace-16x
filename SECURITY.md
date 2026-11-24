@@ -11,7 +11,7 @@ Report vulnerabilities privately. Open the repository's **Security** tab and cho
 Include:
 
 - the affected component: CLI, terminal explorer, Mac app, installer, or release workflow
-- the version (`space16x --version`, or the app's About window), your OS, and the filesystem
+- the version (`diskuse16x --version`, or the app's About window), your OS, and the filesystem
 - reproduction steps, using a synthetic fixture where possible
 - what you expected to happen, and what an attacker gains
 
@@ -21,12 +21,12 @@ Use the private report for follow-up. Let the maintainer know if you prefer to s
 
 ## Scope
 
-Space 16X scans filesystem metadata only. Its scanners never open file contents or write, and it never contacts the network. Only Space 16X Pro's duplicate finder reads file contents, when the user runs `space16x duplicates` or clicks **Find Duplicates**, to compare files of the same length. Its one change to your files is Move to Trash: after the user confirms, it moves the chosen items into the Trash on their own disk. It never copies them to another disk or deletes them permanently. Apart from that, it writes only an export or HTML report file the user names and, in Space 16X Pro, a scan the user saves to the history: `space16x history save` writes to `$XDG_STATE_HOME/space16x/history` (by default `~/.local/state/space16x/history`), and the Mac app's Save to History to `~/Library/Application Support/Space 16X/History`, readable only by that user. In-scope reports include:
+DiskUse16x scans filesystem metadata only. Its scanners never open file contents or write, and it never contacts the network. Only DiskUse16x Pro's duplicate finder reads file contents, when the user runs `diskuse16x duplicates` or clicks **Find Duplicates**, to compare files of the same length. Its one change to your files is Move to Trash: after the user confirms, it moves the chosen items into the Trash on their own disk. It never copies them to another disk or deletes them permanently. Apart from that, it writes only an export or HTML report file the user names and, in DiskUse16x Pro, a scan the user saves to the history: `diskuse16x history save` writes to `$XDG_STATE_HOME/diskuse16x/history` (by default `~/.local/state/diskuse16x/history`), and the Mac app's Save to History to `~/Library/Application Support/DiskUse16x/History`, readable only by that user. In-scope reports include:
 
 - scanner behavior that follows symlinks, crosses devices, or opens files contrary to [the CLI contract](docs/cli.md)
 - Move to Trash behavior that acts on items the user didn't confirm, deletes or copies instead of moving, follows a symbolic link to its target, or uses a Trash folder that another user controls
 - terminal or UI output that a crafted filename can use to spoof results or inject terminal escape sequences
-- importing a crafted scan file that crashes Space 16X, reads or changes local files, or offers to trash anything
+- importing a crafted scan file that crashes DiskUse16x, reads or changes local files, or offers to trash anything
 - installer behavior that writes outside its managed paths or accepts an unverified executable
 - weaknesses in the release, signing, or provenance workflows
 

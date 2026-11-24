@@ -1,4 +1,4 @@
-# Contributing to Space 16X
+# Contributing to DiskUse16x
 
 Open an issue with the exact command or app action, your OS and filesystem, and the results you expected. Use a small synthetic folder to reproduce scan issues. Remove local paths and names before sharing reports or screenshots.
 
@@ -19,8 +19,8 @@ Run the CLI checks from the repository root.
 ```sh
 (cd cli && cargo fmt --all --check && cargo clippy --locked --all-targets -- -D warnings)
 (cd cli && cargo test --locked && cargo build --locked)
-python3 scripts/check-cli.py cli/target/debug/space16x
-python3 scripts/check-tui.py cli/target/debug/space16x
+python3 scripts/check-cli.py cli/target/debug/diskuse16x
+python3 scripts/check-tui.py cli/target/debug/diskuse16x
 python3 scripts/check-install.py
 ```
 
@@ -32,7 +32,7 @@ On macOS, run `swift test` and `open "$(scripts/package-macos.sh)"`. Exercise fo
 
 ```sh
 (cd cli && cargo build --locked --release)
-python3 scripts/benchmark.py cli/target/release/space16x
+python3 scripts/benchmark.py cli/target/release/diskuse16x
 ```
 
 The benchmark creates 100,000 files with a 512-byte payload under 1,100 directories. It runs one warm-up and three timed CLI scans, verifies the allocated total against filesystem metadata, and reports wall time and peak resident memory. The fixture is temporary and requires a few hundred MiB of local disk space on filesystems with 4 KiB blocks. Use `--fixture-parent PATH` to compare filesystems, and `--files 1000000` for the large run, which needs a few GiB and several minutes. Record the toolchain version with the results.

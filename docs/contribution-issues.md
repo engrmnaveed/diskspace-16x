@@ -1,6 +1,6 @@
 # Contribution issue drafts
 
-## Verify Space 16X on macOS 14
+## Verify DiskUse16x on macOS 14
 
 Run the [manual macOS checks](manual-qa.md) on macOS 14. Use a synthetic fixture and the candidate universal build. Record the exact OS version and architecture, note any failing actions, and include a reproducible example for each failure. This helps establish the project's macOS support floor.
 
