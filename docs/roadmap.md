@@ -143,10 +143,11 @@ The features now cover every gap in §2, so M8 adds no new views. It checks what
   - **Outcome (2026-11-24):** a **Stability in 1.x** section in each reference. `docs/cli.md` ships in the Basic archive, so its section is short. Text reports and the explorer's screens stay free to change.
 - [ ] M8.7 Basic's size budget. **Owner decides:** keep the 600 KB limit, which leaves Basic's Linux x86-64 archive about 9.7 KB to grow, or raise it. Record the answer in §4.
   - **Decision (2026-11-24): not decided.** The limit stays 600 KB. Nothing in M8 should grow the Basic binary. Flag it to the owner if something would.
-- [ ] M8.8 Docs refresh:
+- [x] M8.8 Docs refresh:
   - `PRD.md` for 1.0: its status line, its deferred list (duplicate hashing and background monitoring now ship in Pro), its public-release milestone, and the naming and launch decisions, which the owner confirms.
   - Mark this file's **Context** and **What exists today** as the 2026-11-21 starting point.
   - **Decision (2026-11-24): the name changes to DiskUse16x** before 1.0, with the commands `diskuse16x` and `du16x`. See M8.10.
+  - **Outcome (2026-11-24):** `PRD.md` is updated for 1.0: its status, the shipped Pro features in place of the deferred list, the free channels, a 1.0 public-release milestone (ad hoc signed, attested, with update steps and the 1.x contract), and **Decisions for 1.0** with the name, notarization, channels and the size budget. **Context** and **What exists today** here are marked as the 2026-11-21 starting point.
 - [~] M8.9 The GitHub page:
   - The owner approves a new description, topics and a homepage that points at the user guide, and a session sets them with `gh`.
   - The owner uploads a social preview image, which a session can prepare from `Branding/`.
@@ -186,6 +187,8 @@ A scheduled task (`space16x-roadmap` in the Claude desktop app) starts a session
 4. Update **Resume here** whenever you stop partway through an item: the branch, what's done, and the next step. Commit and push that note.
 
 ## Context
+
+*This section and **What exists today** describe the starting point on 2026-11-21, at v0.2.4 under the name Space 16X. **Progress** above records what changed since.*
 
 Space 16X (v0.2.4) is a read-only disk analyzer with two products: a SwiftUI Mac app (`Sources/SpaceApp` + `Sources/SpaceCore`) and a Rust CLI/TUI (`cli/`) for macOS and Linux. The aim is to add the features users ask for most without losing what makes it good: a simple UI, robust performance, and a CLI light enough for remote servers.
 
