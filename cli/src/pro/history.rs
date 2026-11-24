@@ -1,8 +1,9 @@
-//! Scan history: `space16x history save` keeps a scan, `space16x history` lists the kept
-//! scans, and `space16x history diff` compares a folder with one of them.
+//! Scan history: `diskuse16x history save` keeps a scan, `diskuse16x history` lists the kept
+//! scans, and `diskuse16x history diff` compares a folder with one of them.
 //!
 //! Saved scans are ncdu JSON exports, the same as `scan --export`, in
-//! `$XDG_STATE_HOME/space16x/history` (by default `~/.local/state/space16x/history`).
+//! `$XDG_STATE_HOME/diskuse16x/history` (by default `~/.local/state/diskuse16x/history`).
+//! A history that a release before 1.0 kept in `space16x/history` stays in use there.
 //! `index.jsonl` there lists each one with its totals, one JSON object per line, so a
 //! listing doesn't read every scan. Nothing is written except by `history save`.
 
@@ -85,9 +86,25 @@ fn from_hex(hex: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-/// The history folder: `$XDG_STATE_HOME/space16x/history`, or
-/// `~/.local/state/space16x/history` when that isn't set to an absolute path.
+/// The history folder: `$XDG_STATE_HOME/diskuse16x/history`, or
+/// `~/.local/state/diskuse16x/history` when that isn't set to an absolute path. When
+/// only a history from before 1.0 exists, in `space16x/history` beside it, that one
+/// stays in use, so upgrading keeps every saved scan without moving anything.
 pub fn directory() -> io::Result<PathBuf> {
+    Ok(in_state(&state_directory()?))
+}
+
+fn in_state(state: &Path) -> PathBuf {
+    let current = state.join("diskuse16x/history");
+    let legacy = state.join("space16x/history");
+    if !current.exists() && legacy.is_dir() {
+        legacy
+    } else {
+        current
+    }
+}
+
+fn state_directory() -> io::Result<PathBuf> {
     let state = std::env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
         .filter(|path| path.is_absolute());
@@ -103,7 +120,7 @@ pub fn directory() -> io::Result<PathBuf> {
                 )
             })?,
     };
-    Ok(state.join("space16x/history"))
+    Ok(state)
 }
 
 pub fn run(command: HistoryCommand) -> io::Result<u8> {
@@ -139,14 +156,14 @@ pub fn run(command: HistoryCommand) -> io::Result<u8> {
                     io::Error::new(
                         io::ErrorKind::NotFound,
                         format!(
-                            "No saved scan of {}{older}. Save one with space16x history save.",
+                            "No saved scan of {}{older}. Save one with diskuse16x history save.",
                             terminal_path(&scope)
                         ),
                     )
                 })?;
             if !json {
                 eprintln!(
-                    "space16x: comparing with the scan saved {}",
+                    "diskuse16x: comparing with the scan saved {}",
                     format_time(saved.saved_at)
                 );
             }
@@ -376,7 +393,9 @@ fn list(path: Option<&Path>, json: bool) -> io::Result<u8> {
         let of = scope.map_or_else(String::new, |scope| {
             format!(" of {}", terminal_path(&scope))
         });
-        eprintln!("space16x: no saved scans{of} yet. Save one with space16x history save PATH.");
+        eprintln!(
+            "diskuse16x: no saved scans{of} yet. Save one with diskuse16x history save PATH."
+        );
         return Ok(0);
     }
     writeln!(out, "Saved                   Size      Items  Path")?;
@@ -394,7 +413,7 @@ fn list(path: Option<&Path>, json: bool) -> io::Result<u8> {
         writeln!(out, "{line}")?;
     }
     out.flush()?;
-    eprintln!("space16x: saved scans are in {}", terminal_path(&folder));
+    eprintln!("diskuse16x: saved scans are in {}", terminal_path(&folder));
     Ok(0)
 }
 
@@ -416,8 +435,23 @@ mod tests {
     }
 
     #[test]
+    fn keeps_using_a_history_from_before_1_0() {
+        let state =
+            std::env::temp_dir().join(format!("diskuse16x-history-state-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&state);
+        fs::create_dir_all(&state).unwrap();
+        assert_eq!(in_state(&state), state.join("diskuse16x/history"));
+        fs::create_dir_all(state.join("space16x/history")).unwrap();
+        assert_eq!(in_state(&state), state.join("space16x/history"));
+        fs::create_dir_all(state.join("diskuse16x/history")).unwrap();
+        assert_eq!(in_state(&state), state.join("diskuse16x/history"));
+        fs::remove_dir_all(&state).unwrap();
+    }
+
+    #[test]
     fn keeps_scans_and_indexes_them() {
-        let folder = std::env::temp_dir().join(format!("space16x-history-{}", std::process::id()));
+        let folder =
+            std::env::temp_dir().join(format!("diskuse16x-history-{}", std::process::id()));
         let _ = fs::remove_dir_all(&folder);
         let first = keep(
             &folder,

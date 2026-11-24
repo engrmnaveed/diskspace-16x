@@ -89,7 +89,7 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, explorer: &Explorer, tick: usi
     let brand = if area.width < 44 {
         " 16X "
     } else {
-        " SPACE 16X "
+        " DiskUse16x "
     };
     let status = match &explorer.status {
         Status::Scanning => {
@@ -1050,7 +1050,7 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, explorer: &mut Explorer) {
     } else if explorer.read_only {
         [
             ("Read-only", "Move to Trash is off"),
-            ("", "Unset SPACE16X_READ_ONLY or --read-only"),
+            ("", "Unset DISKUSE16X_READ_ONLY or --read-only"),
         ]
     } else {
         [

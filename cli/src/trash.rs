@@ -1,4 +1,4 @@
-//! Moves files and folders to the Trash, the only filesystem write in Space 16X. The
+//! Moves files and folders to the Trash, the only filesystem write in DiskUse16x. The
 //! explorer calls it only after the user confirms. The scanners never write.
 //!
 //! Each backend moves an item within its own disk and never copies it, so trashing is
@@ -19,11 +19,22 @@ use std::{
 };
 
 /// Set to `1` to turn trashing off in the explorer, as `--read-only` does.
-pub const READ_ONLY_VARIABLE: &str = "SPACE16X_READ_ONLY";
+pub const READ_ONLY_VARIABLE: &str = "DISKUSE16X_READ_ONLY";
 
-/// True when `SPACE16X_READ_ONLY` holds any value except an empty one or `0`.
+/// The variable's name before 1.0, still read when the new one isn't set.
+const LEGACY_READ_ONLY_VARIABLE: &str = "SPACE16X_READ_ONLY";
+
+/// True when `DISKUSE16X_READ_ONLY`, or else the earlier `SPACE16X_READ_ONLY`, holds any
+/// value except an empty one or `0`.
 pub fn read_only_requested() -> bool {
-    read_only_value(env::var_os(READ_ONLY_VARIABLE).as_deref())
+    read_only_from(
+        env::var_os(READ_ONLY_VARIABLE).as_deref(),
+        env::var_os(LEGACY_READ_ONLY_VARIABLE).as_deref(),
+    )
+}
+
+fn read_only_from(current: Option<&OsStr>, legacy: Option<&OsStr>) -> bool {
+    read_only_value(current.or(legacy))
 }
 
 fn read_only_value(value: Option<&OsStr>) -> bool {
@@ -53,7 +64,7 @@ mod tests {
     impl Scratch {
         pub(super) fn new() -> io::Result<Self> {
             let folder = env::temp_dir().join(format!(
-                "space16x-trash-test-{}-{}",
+                "diskuse16x-trash-test-{}-{}",
                 std::process::id(),
                 NEXT_FOLDER.fetch_add(1, Ordering::Relaxed)
             ));
@@ -79,6 +90,14 @@ mod tests {
         assert!(!read_only_value(Some(OsStr::new("0"))));
         assert!(read_only_value(Some(OsStr::new("1"))));
         assert!(read_only_value(Some(OsStr::new("yes"))));
+        // The earlier name still works, and the new one decides when both are set.
+        assert!(read_only_from(None, Some(OsStr::new("1"))));
+        assert!(!read_only_from(
+            Some(OsStr::new("0")),
+            Some(OsStr::new("1"))
+        ));
+        assert!(read_only_from(Some(OsStr::new("1")), None));
+        assert!(!read_only_from(None, None));
     }
 
     #[test]
@@ -94,7 +113,7 @@ mod tests {
     #[test]
     fn moves_a_file_to_the_user_trash() -> io::Result<()> {
         let scratch = Scratch::new()?;
-        let item = scratch.join("space16x trash test ✓.txt");
+        let item = scratch.join("diskuse16x trash test ✓.txt");
         fs::write(&item, b"synthetic")?;
         let trashed = move_to_trash(&item)?;
         assert!(fs::symlink_metadata(&item).is_err());

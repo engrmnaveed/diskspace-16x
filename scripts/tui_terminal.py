@@ -1,4 +1,4 @@
-"""Drive the Space 16X explorer through a pseudo-terminal."""
+"""Drive the DiskUse16x explorer through a pseudo-terminal."""
 
 import errno
 import fcntl

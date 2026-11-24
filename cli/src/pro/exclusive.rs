@@ -136,7 +136,7 @@ impl Measurement {
         let shared = Arc::clone(&job);
         let measured = Arc::clone(tree);
         std::thread::Builder::new()
-            .name("space16x-exclusive".into())
+            .name("diskuse16x-exclusive".into())
             .spawn(move || {
                 shared
                     .files
@@ -483,8 +483,10 @@ mod tests {
     }
 
     fn fixture(name: &str) -> std::path::PathBuf {
-        let root =
-            std::env::temp_dir().join(format!("space16x-exclusive-{name}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "diskuse16x-exclusive-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("own")).unwrap();
         std::fs::create_dir_all(root.join("linked")).unwrap();
@@ -569,7 +571,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn maps_a_files_extents() {
-        let path = std::env::temp_dir().join(format!("space16x-fiemap-{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("diskuse16x-fiemap-{}", std::process::id()));
         std::fs::write(&path, vec![3_u8; 1_000_000]).unwrap();
         let result = linux::shared_extent_bytes(&path);
         std::fs::remove_file(&path).unwrap();
@@ -583,7 +585,7 @@ mod tests {
     #[test]
     fn counts_unshared_trees_in_full() {
         let mut builder =
-            crate::scanner::TreeBuilder::new("/no/such/space16x".into(), EntryState::Local);
+            crate::scanner::TreeBuilder::new("/no/such/diskuse16x".into(), EntryState::Local);
         builder.file(b"gone.bin", 4096, 10, EntryState::Local);
         let report = Report {
             tree: Arc::new(builder.finish().0),

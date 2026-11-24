@@ -1,7 +1,7 @@
 #!/bin/sh
-# Print the Homebrew formula for a published Space 16X CLI release: space16x-cli
-# for Basic, or space16x-cli-pro with --pro. DIR holds the release's archive
-# checksum files, space16x[-pro]-TARGET.tar.gz.sha256, for all four targets.
+# Print the Homebrew formula for a published DiskUse16x CLI release: du16x for
+# Basic, or du16x-pro with --pro. Both install the diskuse16x and du16x commands. DIR holds the release's archive
+# checksum files, diskuse16x[-pro]-TARGET.tar.gz.sha256, for all four targets.
 # --url-base replaces the release download URL, for a local test install.
 set -eu
 
@@ -35,21 +35,21 @@ case "$url_base" in
 esac
 
 if [ "$edition" = pro ]; then
-    set -- -e "s/@CLASS@/Space16xCliPro/" \
+    set -- -e "s/@CLASS@/Du16xPro/" \
         -e "s/@DESC@/Disk space explorer for the terminal, Pro edition/" \
-        -e "s/@ARCHIVE@/space16x-pro/g" \
-        -e "s/@CONFLICT@/space16x-cli/" \
+        -e "s/@ARCHIVE@/diskuse16x-pro/g" \
+        -e "s/@CONFLICT@/du16x/" \
         -e "s/@SUFFIX@/ (pro)/" \
         -e "s/@EDITION@/pro/"
-    archive=space16x-pro
+    archive=diskuse16x-pro
 else
-    set -- -e "s/@CLASS@/Space16xCli/" \
+    set -- -e "s/@CLASS@/Du16x/" \
         -e "s/@DESC@/Disk space explorer for the terminal/" \
-        -e "s/@ARCHIVE@/space16x/g" \
-        -e "s/@CONFLICT@/space16x-cli-pro/" \
+        -e "s/@ARCHIVE@/diskuse16x/g" \
+        -e "s/@CONFLICT@/du16x-pro/" \
         -e "s/@SUFFIX@//" \
         -e "s/@EDITION@/basic/"
-    archive=space16x
+    archive=diskuse16x
 fi
 
 for target in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
@@ -63,5 +63,5 @@ for target in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-mus
     set -- "$@" -e "s/@SHA256_$key@/$digest/"
 done
 
-template="$(dirname "$0")/../packaging/homebrew/space16x-cli.rb.in"
+template="$(dirname "$0")/../packaging/homebrew/du16x.rb.in"
 sed "$@" -e "s/@VERSION@/$version/" -e "s|@URL_BASE@|$url_base|g" "$template"

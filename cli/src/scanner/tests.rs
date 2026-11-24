@@ -21,7 +21,7 @@ struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> io::Result<Self> {
         let folder = std::env::temp_dir().join(format!(
-            "space16x-rust-test-{}-{}",
+            "diskuse16x-rust-test-{}-{}",
             std::process::id(),
             NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
         ));

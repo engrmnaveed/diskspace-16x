@@ -33,7 +33,7 @@ def edition(binary):
     """`pro` or `basic`, from the version line, which must match scripts/release-version."""
     version = Path(__file__).with_name("release-version").read_text(encoding="utf-8").strip()
     reported = run(binary, "--version").stdout.strip()
-    assert reported in (f"space16x {version}", f"space16x {version} (pro)"), reported
+    assert reported in (f"diskuse16x {version}", f"diskuse16x {version} (pro)"), reported
     return "pro" if reported.endswith(" (pro)") else "basic"
 
 
@@ -45,13 +45,13 @@ def check(binary, root):
             ("duplicates", root),
         ):
             hint = run(binary, *command, status=1)
-            assert "Space 16X Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
+            assert "DiskUse16x Pro" in hint.stderr and "--pro" in hint.stderr and not hint.stdout
         for option in (
             ("--older-than", "30"), ("--types", "5"), ("--by-owner",), ("--cleanup",), ("--exclusive",),
             ("--html", root / "report.html"),
         ):
             hint = run(binary, "scan", root, *option, status=1)
-            assert "Space 16X Pro" in hint.stderr and not hint.stdout, hint.stderr
+            assert "DiskUse16x Pro" in hint.stderr and not hint.stdout, hint.stderr
         assert "install.sh --pro" in run(binary, "--help").stdout
 
     data = root / "Nested folder"
@@ -182,7 +182,7 @@ def check(binary, root):
         assert not unreadable.stdout and unreadable.stderr
         # A partial scan exports its issues, and the import is partial too.
         saved = run(binary, "scan", root, "--export", "-", status=2).stdout
-        issues = json.loads(saved)[2]["space16x_issues"]
+        issues = json.loads(saved)[2]["diskuse16x_issues"]
         assert [issue["path"] for issue in issues] == [str(blocked)], issues
         assert issues[0]["kind"] == "permissionDenied"
         imported = import_text(binary, saved, status=2)
@@ -216,7 +216,7 @@ def check_export_and_import(binary, root, first, alias, sparse):
         assert listing.stdout == run(binary, "scan", root).stdout
         saved = json.loads(export.read_text(encoding="utf-8"))
         assert saved[:2] == [1, 2], saved[:2]
-        assert saved[2]["progname"] == "space16x" and saved[2]["space16x_issues"] == []
+        assert saved[2]["progname"] == "diskuse16x" and saved[2]["diskuse16x_issues"] == []
         assert saved[3][0] == {"name": str(root)}
         folder = entries(saved[3])["Nested folder"]
         files = entries(folder)
@@ -224,7 +224,7 @@ def check_export_and_import(binary, root, first, alias, sparse):
             "name": first.name, "asize": 8192, "dsize": allocated_bytes(first),
         }
         assert files[alias.name] == {
-            "name": alias.name, "asize": 0, "dsize": 0, "space16x_state": "hardLinkAlias",
+            "name": alias.name, "asize": 0, "dsize": 0, "diskuse16x_state": "hardLinkAlias",
         }
         assert files[sparse.name]["asize"] == sparse.stat().st_size
         assert "symlink" not in entries(saved[3])
@@ -234,7 +234,7 @@ def check_export_and_import(binary, root, first, alias, sparse):
         assert run(binary, "--import", export).stdout == listing.stdout
         assert import_text(binary, streamed).stdout == listing.stdout
         excluded = run(binary, "scan", root, "--exclude", "*.dat", "--export", "-").stdout
-        assert json.loads(excluded)[2]["space16x_excludes"] == ["*.dat"]
+        assert json.loads(excluded)[2]["diskuse16x_excludes"] == ["*.dat"]
         assert "excluded 4 paths matching 1 pattern" in import_text(binary, excluded).stderr
 
         for arguments in (
@@ -282,7 +282,7 @@ def check_ncdu_and_gdu(binary, root):
             if tool == "ncdu":
                 reexport = json.loads(output)
                 assert entries(reexport[3]).keys() == {"Nested folder"}, reexport
-            print(f"{tool} opened the export, and Space 16X opened {tool}'s.")
+            print(f"{tool} opened the export, and DiskUse16x opened {tool}'s.")
     finally:
         export.unlink(missing_ok=True)
         theirs.unlink(missing_ok=True)
@@ -306,7 +306,7 @@ def check_volumes(binary):
 
 def check_diff(binary):
     """Pro: diff compares a saved scan with a folder or another saved scan."""
-    with tempfile.TemporaryDirectory(prefix="space16x-diff-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-diff-") as directory:
         base = Path(directory).resolve()
         root = base / "data"
         (root / "grow").mkdir(parents=True)
@@ -357,7 +357,7 @@ def check_diff(binary):
 
 def check_cleanup(binary):
     """Pro: --cleanup lists folders that tools recreate, found by name."""
-    with tempfile.TemporaryDirectory(prefix="space16x-cleanup-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-cleanup-") as directory:
         root = Path(directory).resolve()
         files = {
             "web/node_modules/pkg/index.js": 1_200_000,
@@ -392,7 +392,7 @@ def check_cleanup(binary):
 
 def check_exclusive(binary):
     """Pro: --exclusive leaves out hard-linked files and blocks shared with clones."""
-    with tempfile.TemporaryDirectory(prefix="space16x-exclusive-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-exclusive-") as directory:
         root = Path(directory).resolve()
         (root / "own").mkdir()
         (root / "linked").mkdir()
@@ -422,7 +422,7 @@ def check_exclusive(binary):
 
 def check_duplicates(binary):
     """Pro: duplicates groups files with the same contents, on request."""
-    with tempfile.TemporaryDirectory(prefix="space16x-duplicates-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-duplicates-") as directory:
         root = Path(directory).resolve()
         (root / "b").mkdir()
         same = os.urandom(150_000)
@@ -461,7 +461,7 @@ def check_duplicates(binary):
 
 def check_html(binary):
     """Pro: --html writes a self-contained page beside the usual report."""
-    with tempfile.TemporaryDirectory(prefix="space16x-html-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-html-") as directory:
         root = Path(directory).resolve()
         (root / "data" / "<clips>").mkdir(parents=True)
         (root / "data" / "<clips>" / "talk.mov").write_bytes(os.urandom(200_000))
@@ -483,7 +483,7 @@ def check_html(binary):
 
 def check_explain(binary):
     """Pro: explain shows the volume of a folder and the space a scan can't see."""
-    with tempfile.TemporaryDirectory(prefix="space16x-explain-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-explain-") as directory:
         folder = Path(directory).resolve()
         held = folder / "held.log"
         with held.open("wb") as stream:
@@ -509,7 +509,7 @@ def check_explain(binary):
         assert "deleted file" in plain and str(held) in plain, plain
     for invalid in (("explain", "a", "b"), ("explain", "--all")):
         assert run(binary, *invalid, status=1).stderr
-    assert run(binary, "explain", "/no/such/space16x/path", status=1).stderr
+    assert run(binary, "explain", "/no/such/diskuse16x/path", status=1).stderr
 
 
 def build_modified_fixture(root):
@@ -532,7 +532,7 @@ def build_modified_fixture(root):
 
 def check_modified(binary):
     """Pro: JSON reports newest modification times, and --older-than keeps older files."""
-    with tempfile.TemporaryDirectory(prefix="space16x-modified-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-modified-") as directory:
         root = Path(directory).resolve()
         table = build_modified_fixture(root)
         report = json.loads(run(binary, "scan", root, "--depth", "3", "--json").stdout)
@@ -559,7 +559,7 @@ def check_modified(binary):
 
 def check_types(binary):
     """Pro: --types lists the space each file extension uses."""
-    with tempfile.TemporaryDirectory(prefix="space16x-types-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-types-") as directory:
         root = Path(directory).resolve()
         (root / "clips").mkdir()
         for name, size in (("clips/a.MOV", 300_000), ("clips/b.mov", 200_000), ("notes.txt", 9_000),
@@ -596,7 +596,7 @@ def check_types(binary):
 
 def check_history(binary):
     """Pro: history keeps scans only when asked, lists them, and compares with them."""
-    with tempfile.TemporaryDirectory(prefix="space16x-history-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-history-") as directory:
         base = Path(directory).resolve()
         state = base / "state"
         env = {**os.environ, "XDG_STATE_HOME": str(state)}
@@ -613,7 +613,7 @@ def check_history(binary):
 
         saved = run(binary, "history", "save", root, "--exclude", "*.log", env=env)
         assert saved.stdout.startswith(f"Saved {root} ("), saved.stdout
-        folder = state / "space16x" / "history"
+        folder = state / "diskuse16x" / "history"
         assert folder.stat().st_mode & 0o777 == 0o700
         listing = json.loads(run(binary, "history", root, "--json", env=env).stdout)
         assert listing["directory"]["path"] == str(folder) and len(listing["scans"]) == 1, listing
@@ -621,7 +621,7 @@ def check_history(binary):
         assert scan["scope"] == str(root) and scan["itemCount"] == 2 and not scan["isPartial"], scan
         export = Path(scan["path"]["path"])
         assert export.parent == folder and export.stat().st_mode & 0o777 == 0o600
-        assert json.loads(export.read_text(encoding="utf-8"))[2]["space16x_excludes"] == ["*.log"]
+        assert json.loads(export.read_text(encoding="utf-8"))[2]["diskuse16x_excludes"] == ["*.log"]
         assert json.loads(run(binary, "history", base, "--json", env=env).stdout)["scans"] == []
         text = run(binary, "history", env=env).stdout.splitlines()
         assert text[0].split() == ["Saved", "Size", "Items", "Path"] and text[1].endswith(str(root)), text
@@ -658,11 +658,11 @@ def check_deep_tree(binary, root):
 
 def main():
     if len(sys.argv) != 2:
-        raise SystemExit(f"Usage: {sys.argv[0]} PATH-TO-SPACE16X")
+        raise SystemExit(f"Usage: {sys.argv[0]} PATH-TO-DISKUSE16X")
     binary = str(Path(sys.argv[1]).resolve(strict=True))
-    with tempfile.TemporaryDirectory(prefix="space16x-cli-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-cli-") as directory:
         check(binary, Path(directory).resolve())
-    with tempfile.TemporaryDirectory(prefix="space16x-deep-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-deep-") as directory:
         check_deep_tree(binary, Path(directory).resolve())
     check_volumes(binary)
     if edition(binary) == "pro":

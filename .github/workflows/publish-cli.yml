@@ -71,29 +71,29 @@ jobs:
       - name: Collect and verify the tested release assets
         shell: bash
         run: |
-          downloads="$RUNNER_TEMP/space16x-cli"
-          release="$RUNNER_TEMP/space16x-release"
+          downloads="$RUNNER_TEMP/diskuse16x-cli"
+          release="$RUNNER_TEMP/diskuse16x-release"
           mkdir -p "$release"
-          gh run download "$GITHUB_RUN_ID" --repo "$GH_REPO" --pattern 'space16x-cli-*' --dir "$downloads"
+          gh run download "$GITHUB_RUN_ID" --repo "$GH_REPO" --pattern 'diskuse16x-cli-*' --dir "$downloads"
           for target in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
-            folder="$downloads/space16x-cli-$target"
+            folder="$downloads/diskuse16x-cli-$target"
             # Basic and Pro archives, built and tested from the same tag.
-            for archive in "space16x-$target.tar.gz" "space16x-pro-$target.tar.gz"; do
+            for archive in "diskuse16x-$target.tar.gz" "diskuse16x-pro-$target.tar.gz"; do
               (cd "$folder" && sha256sum -c "$archive.sha256")
               cp "$folder/$archive" "$folder/$archive.sha256" "$release/"
             done
           done
           # The Linux .deb and .rpm packages, built and checked from the same archives.
           for target in aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
-            folder="$downloads/space16x-cli-$target"
+            folder="$downloads/diskuse16x-cli-$target"
             case "$target" in aarch64-*) deb=arm64 rpm=aarch64 ;; *) deb=amd64 rpm=x86_64 ;; esac
-            for package in "space16x_$deb.deb" "space16x-pro_$deb.deb" "space16x.$rpm.rpm" "space16x-pro.$rpm.rpm"; do
+            for package in "diskuse16x_$deb.deb" "diskuse16x-pro_$deb.deb" "diskuse16x.$rpm.rpm" "diskuse16x-pro.$rpm.rpm"; do
               (cd "$folder" && sha256sum -c "$package.sha256")
               cp "$folder/$package" "$folder/$package.sha256" "$release/"
             done
           done
           # Publish the installer with the release so users run the reviewed, tagged script.
-          cp "$downloads/space16x-cli-installer/install.sh" "$release/install.sh"
+          cp "$downloads/diskuse16x-cli-installer/install.sh" "$release/install.sh"
           (cd "$release" && sha256sum install.sh > install.sh.sha256)
 
           version="$(cat scripts/release-version)"
@@ -104,16 +104,16 @@ jobs:
           read -r app_digest _ < "$release/$app.sha256"
           scripts/render-cask "$version" "$app_digest" > "$release/space16x.rb"
           # The CLI formulas, from the archives' digests.
-          scripts/render-formula "$version" "$release" > "$release/space16x-cli.rb"
-          scripts/render-formula --pro "$version" "$release" > "$release/space16x-cli-pro.rb"
+          scripts/render-formula "$version" "$release" > "$release/du16x.rb"
+          scripts/render-formula --pro "$version" "$release" > "$release/du16x-pro.rb"
           echo "RELEASE_DIR=$release" >> "$GITHUB_ENV"
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
-            ${{ env.RELEASE_DIR }}/space16x-*.tar.gz
-            ${{ env.RELEASE_DIR }}/space16x*.deb
-            ${{ env.RELEASE_DIR }}/space16x*.rpm
+            ${{ env.RELEASE_DIR }}/diskuse16x-*.tar.gz
+            ${{ env.RELEASE_DIR }}/diskuse16x*.deb
+            ${{ env.RELEASE_DIR }}/diskuse16x*.rpm
             ${{ env.RELEASE_DIR }}/space16x-*-macos-universal.zip
             ${{ env.RELEASE_DIR }}/install.sh
       - name: Publish the verified release assets
@@ -123,12 +123,12 @@ jobs:
           scripts/release-notes "$(cat scripts/release-version)" > "$RUNNER_TEMP/release-notes.md"
           cd "$RELEASE_DIR"
           gh release create "$GITHUB_REF_NAME" --verify-tag \
-            --title "Space 16X $GITHUB_REF_NAME" \
+            --title "DiskUse16x $GITHUB_REF_NAME" \
             --notes-file "$RUNNER_TEMP/release-notes.md" \
-            space16x-*.tar.gz space16x-*.tar.gz.sha256 \
-            space16x*.deb space16x*.deb.sha256 space16x*.rpm space16x*.rpm.sha256 \
+            diskuse16x-*.tar.gz diskuse16x-*.tar.gz.sha256 \
+            diskuse16x*.deb diskuse16x*.deb.sha256 diskuse16x*.rpm diskuse16x*.rpm.sha256 \
             space16x-*-macos-universal.zip space16x-*-macos-universal.zip.sha256 \
-            space16x.rb space16x-cli.rb space16x-cli-pro.rb install.sh install.sh.sha256
+            space16x.rb du16x.rb du16x-pro.rb install.sh install.sh.sha256
       - name: Update the Homebrew tap
         shell: bash
         env:
@@ -137,11 +137,11 @@ jobs:
           TAP_REPO: engrmnaveed/homebrew-tap
         run: |
           if [[ -z "$HOMEBREW_TAP_DEPLOY_KEY" ]]; then
-            echo "::notice::HOMEBREW_TAP_DEPLOY_KEY is not set. Commit space16x.rb from the release to $TAP_REPO/Casks, and space16x-cli.rb and space16x-cli-pro.rb to $TAP_REPO/Formula, by hand."
+            echo "::notice::HOMEBREW_TAP_DEPLOY_KEY is not set. Commit space16x.rb from the release to $TAP_REPO/Casks, and du16x.rb and du16x-pro.rb to $TAP_REPO/Formula, by hand."
             exit 0
           fi
           umask 077
-          ssh_dir="$(mktemp -d "$RUNNER_TEMP/space16x-tap-ssh.XXXXXX")"
+          ssh_dir="$(mktemp -d "$RUNNER_TEMP/diskuse16x-tap-ssh.XXXXXX")"
           trap 'rm -rf "$ssh_dir"' EXIT
           printf '%s\n' "$HOMEBREW_TAP_DEPLOY_KEY" > "$ssh_dir/key"
           unset HOMEBREW_TAP_DEPLOY_KEY
@@ -153,14 +153,14 @@ jobs:
           git clone --depth 1 "git@github.com:$TAP_REPO.git" "$tap"
           mkdir -p "$tap/Casks" "$tap/Formula"
           cp "$RELEASE_DIR/space16x.rb" "$tap/Casks/space16x.rb"
-          cp "$RELEASE_DIR/space16x-cli.rb" "$RELEASE_DIR/space16x-cli-pro.rb" "$tap/Formula/"
+          cp "$RELEASE_DIR/du16x.rb" "$RELEASE_DIR/du16x-pro.rb" "$tap/Formula/"
           cd "$tap"
-          git add Casks/space16x.rb Formula/space16x-cli.rb Formula/space16x-cli-pro.rb
+          git add Casks/space16x.rb Formula/du16x.rb Formula/du16x-pro.rb
           if git diff --cached --quiet; then
             echo "The tap already has this cask and these formulas."
             exit 0
           fi
           git -c user.name='github-actions[bot]' \
             -c user.email='41898283+github-actions[bot]@users.noreply.github.com' \
-            commit -m "space16x ${GITHUB_REF_NAME#v}"
+            commit -m "diskuse16x ${GITHUB_REF_NAME#v}"
           git push origin HEAD

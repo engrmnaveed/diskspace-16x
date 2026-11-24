@@ -27,7 +27,7 @@ pub fn move_to_trash(path: &Path) -> io::Result<PathBuf> {
     let home_trash = home_trash().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::NotFound,
-            "Set HOME or XDG_DATA_HOME so Space 16X can find your Trash.",
+            "Set HOME or XDG_DATA_HOME so DiskUse16x can find your Trash.",
         )
     })?;
     move_to_trash_with(path, &home_trash, unsafe { libc::geteuid() })
@@ -93,7 +93,7 @@ fn mount_top(item: &Path, device: u64) -> io::Result<PathBuf> {
     if fs::metadata(&top)?.dev() != device {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "Space 16X doesn't move mount points to the Trash.",
+            "DiskUse16x doesn't move mount points to the Trash.",
         ));
     }
     while let Some(parent) = top.parent() {
@@ -108,7 +108,7 @@ fn mount_top(item: &Path, device: u64) -> io::Result<PathBuf> {
 fn cross_device() -> io::Error {
     io::Error::new(
         io::ErrorKind::CrossesDevices,
-        "This disk has no Trash for the item, and Space 16X won't copy it to another disk.",
+        "This disk has no Trash for the item, and DiskUse16x won't copy it to another disk.",
     )
 }
 

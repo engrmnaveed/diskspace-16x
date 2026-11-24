@@ -296,6 +296,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "diskuse16x"
+version = "0.9.1"
+dependencies = [
+ "crossterm",
+ "libc",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "unicode-width",
+]
+
+[[package]]
 name = "document-features"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1264,18 +1276,6 @@ name = "smallvec"
 version = "1.16.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3244542535d5de959d90ec55d1b5ff0fd2bb7b1310223907d5f11932847f7b59"
-
-[[package]]
-name = "space16x"
-version = "0.9.1"
-dependencies = [
- "crossterm",
- "libc",
- "ratatui",
- "serde",
- "serde_json",
- "unicode-width",
-]
 
 [[package]]
 name = "stacker"

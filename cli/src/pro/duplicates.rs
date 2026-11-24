@@ -1,4 +1,4 @@
-//! `space16x duplicates`: files with identical contents. This is the one command that
+//! `diskuse16x duplicates`: files with identical contents. This is the one command that
 //! reads file contents, and only because the user ran it, never during a scan.
 //!
 //! It scans metadata, groups files by length, and reads only files that share a length
@@ -263,7 +263,7 @@ impl Search {
         let shared = Arc::clone(&job);
         let searched = Arc::clone(tree);
         std::thread::Builder::new()
-            .name("space16x-duplicates".into())
+            .name("diskuse16x-duplicates".into())
             .spawn(move || {
                 let (groups, unread) = find(&searched, min_size, threads, &shared.cancelled);
                 if shared.cancelled.load(Ordering::Relaxed) {
@@ -503,7 +503,8 @@ mod tests {
 
     #[test]
     fn groups_files_with_the_same_contents() {
-        let root = std::env::temp_dir().join(format!("space16x-duplicates-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("diskuse16x-duplicates-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("b")).unwrap();
         let big: Vec<u8> = (0..200_000_u32)
@@ -611,8 +612,10 @@ mod tests {
     #[test]
     fn counts_only_what_removing_clones_frees() {
         use std::os::unix::ffi::OsStrExt;
-        let root =
-            std::env::temp_dir().join(format!("space16x-duplicate-clones-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "diskuse16x-duplicate-clones-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let contents: Vec<u8> = (0..300_000_u32)

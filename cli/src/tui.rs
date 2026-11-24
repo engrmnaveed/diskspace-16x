@@ -41,7 +41,7 @@ pub fn run(source: Source, plain: bool, read_only: bool) -> io::Result<()> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "explore requires an interactive terminal. Use space16x scan for reports and scripts.",
+            "explore requires an interactive terminal. Use diskuse16x scan for reports and scripts.",
         ));
     }
 
@@ -237,7 +237,7 @@ impl ScanWorker {
         let worker_cancelled = Arc::clone(&cancelled);
         let worker_update = Arc::clone(&update);
         let thread = thread::Builder::new()
-            .name("space16x-scan".into())
+            .name("diskuse16x-scan".into())
             .spawn(move || {
                 let notify = |event: ScanEvent| {
                     let mut pending = worker_update

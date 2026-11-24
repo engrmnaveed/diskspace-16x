@@ -14,7 +14,7 @@ usage() {
     echo "Usage: $0 [--pro] [TARGET]. Use the native target, or build x86_64-apple-darwin on an Apple silicon Mac with Rosetta." >&2
     exit 1
 }
-# --pro builds the Pro edition into space16x-pro-TARGET.tar.gz.
+# --pro builds the Pro edition into diskuse16x-pro-TARGET.tar.gz.
 edition=
 if [ "${1:-}" = --pro ]; then
     edition=pro
@@ -31,25 +31,25 @@ version="$(cat scripts/release-version)"
 target_dir="${CARGO_TARGET_DIR:-$project/.build/cli-release}"
 case "$target_dir" in /*) ;; *) target_dir="$project/$target_dir" ;; esac
 if [ "$edition" = pro ]; then
-    asset="space16x-pro-$target.tar.gz"
-    expected_version="space16x $version (pro)"
+    asset="diskuse16x-pro-$target.tar.gz"
+    expected_version="diskuse16x $version (pro)"
     target_dir="$target_dir-pro"
     set -- --features pro
 else
-    asset="space16x-$target.tar.gz"
-    expected_version="space16x $version"
+    asset="diskuse16x-$target.tar.gz"
+    expected_version="diskuse16x $version"
     set --
 fi
 case "$native" in *-apple-darwin) export MACOSX_DEPLOYMENT_TARGET=14.0 ;; esac
 (cd cli && cargo build --locked --release --target "$target" --target-dir "$target_dir" "$@" >&2)
 
 mkdir -p dist
-stage="$(mktemp -d "$project/dist/.space16x-cli.XXXXXX")"
+stage="$(mktemp -d "$project/dist/.diskuse16x-cli.XXXXXX")"
 trap 'rm -rf "$stage"' 0
 payload="$stage/payload"
 mkdir "$payload"
-binary="$payload/space16x"
-install -m 0755 "$target_dir/$target/release/space16x" "$binary"
+binary="$payload/diskuse16x"
+install -m 0755 "$target_dir/$target/release/diskuse16x" "$binary"
 case "$native" in
     *-apple-darwin)
         architecture="${target%%-*}"
@@ -73,9 +73,12 @@ if [ "$("$binary" --version)" != "$expected_version" ]; then
 fi
 mkdir "$stage/fixture"
 "$binary" scan "$stage/fixture" --json >/dev/null
+# du16x is the short name, a link beside the executable.
+ln -s diskuse16x "$payload/du16x"
+[ "$("$payload/du16x" --version)" = "$expected_version" ] || { echo "du16x doesn't run diskuse16x." >&2; exit 1; }
 
 cp docs/cli.md docs/example-report.json "$payload/"
-set -- space16x cli.md example-report.json
+set -- diskuse16x du16x cli.md example-report.json
 # Only Pro ships the Pro reference, which keeps the Basic archive small.
 if [ "$edition" = pro ]; then
     cp docs/cli-pro.md "$payload/"

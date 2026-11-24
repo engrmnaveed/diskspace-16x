@@ -12,8 +12,8 @@ import tempfile
 
 
 INSTALLER = Path(__file__).resolve().with_name("install.sh")
-BINARY = b"#!/bin/sh\nprintf 'space16x 0.2.0\\n'\n"
-PRO_BINARY = b"#!/bin/sh\nprintf 'space16x 0.2.0 (pro)\\n'\n"
+BINARY = b"#!/bin/sh\nprintf 'diskuse16x 0.2.0\\n'\n"
+PRO_BINARY = b"#!/bin/sh\nprintf 'diskuse16x 0.2.0 (pro)\\n'\n"
 MOCK_DOWNLOAD = """#!/bin/sh
 set -eu
 if [ "${1:-}" = --help ]; then
@@ -59,7 +59,7 @@ def setup(root, *, os_name, arch, target, transport, release="latest/download",
     downloads = root / "download"
     tools.mkdir()
     downloads.mkdir()
-    commands = ("awk", "cat", "chmod", "cp", "grep", "gzip", "mkdir", "mktemp", "mv",
+    commands = ("awk", "cat", "chmod", "cp", "grep", "gzip", "ln", "mkdir", "mktemp", "mv",
                 "od", "readlink", "rm", "rmdir", "tail", "tar", "tr")
     for name in commands:
         source = shutil.which(name)
@@ -78,7 +78,7 @@ def setup(root, *, os_name, arch, target, transport, release="latest/download",
     if os_name == "Darwin":
         executable(tools / "sw_vers", f"#!/bin/sh\necho {macos_version}\n")
 
-    asset = f"space16x-{target}.tar.gz"
+    asset = f"diskuse16x-{target}.tar.gz"
     archive, checksum = release_archive(downloads, asset, BINARY)
     env = os.environ | {
         "PATH": str(tools),
@@ -97,7 +97,7 @@ def setup(root, *, os_name, arch, target, transport, release="latest/download",
 def release_archive(downloads, asset, binary):
     archive = downloads / asset
     with tarfile.open(archive, "w:gz") as stream:
-        member = tarfile.TarInfo("space16x")
+        member = tarfile.TarInfo("diskuse16x")
         member.size = len(binary)
         stream.addfile(member, io.BytesIO(binary))
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
@@ -108,14 +108,14 @@ def release_archive(downloads, asset, binary):
 
 def check_editions(platform):
     """--pro installs the Pro archive over Basic, and a plain install switches back."""
-    with tempfile.TemporaryDirectory(prefix="space16x-install-qa-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-install-qa-") as directory:
         root = Path(directory).resolve()
         env, archive, _ = setup(root, **platform)
-        installed = root / "home/.local/share/space16x/bin/space16x"
+        installed = root / "home/.local/share/diskuse16x/bin/diskuse16x"
         result = run(root, env)
         assert result.returncode == 0 and installed.read_bytes() == BINARY, result.stderr
 
-        pro_asset = f"space16x-pro-{platform['target']}.tar.gz"
+        pro_asset = f"diskuse16x-pro-{platform['target']}.tar.gz"
         pro_env = env | {"TEST_ASSET": pro_asset, "TEST_URL": env["TEST_URL"].replace(archive.name, pro_asset)}
         result = run(root, pro_env, "--pro")
         assert result.returncode == 1 and f"Could not download {pro_asset}" in result.stderr, result.stderr
@@ -123,7 +123,7 @@ def check_editions(platform):
 
         release_archive(archive.parent, pro_asset, PRO_BINARY)
         result = run(root, pro_env, "--pro")
-        assert result.returncode == 0 and "Installed Space 16X Pro" in result.stderr, result.stderr
+        assert result.returncode == 0 and "Installed DiskUse16x Pro" in result.stderr, result.stderr
         assert installed.read_bytes() == PRO_BINARY and os.access(installed, os.X_OK)
         assert pro_asset in Path(env["TEST_ROUTE_LOG"]).read_text(encoding="utf-8")
 
@@ -142,22 +142,105 @@ def run(root, env, *args):
 def accept(root, platform, version=None):
     release = f"download/v{version.lstrip('v')}" if version else "latest/download"
     if version:
-        repo = "example/space16x"
+        repo = "example/diskuse16x"
         args = ["--repo", repo, "--version", version, "--bin-dir", "path with spaces"]
         bin_dir = root / "path with spaces"
     else:
         repo = "engrmnaveed/diskspace-16x"
         args = []
-        bin_dir = root / "home/.local/share/space16x/bin"
+        bin_dir = root / "home/.local/share/diskuse16x/bin"
     env, archive, checksum = setup(root, **platform, release=release, repo=repo)
     result = run(root, env, *args, "--shell-path")
     assert result.returncode == 0, result.stderr
-    installed = bin_dir / "space16x"
+    installed = bin_dir / "diskuse16x"
     assert installed.read_bytes() == BINARY and os.access(installed, os.X_OK)
-    assert not list(bin_dir.glob(".space16x-install.*"))
+    assert os.readlink(bin_dir / "du16x") == "diskuse16x"
+    assert not list(bin_dir.glob(".diskuse16x-install.*"))
     assert result.stdout.strip() == f"{bin_dir}:{env['PATH']}"
-    assert "Space 16X installer" in (root / "home/.bashrc").read_text()
+    assert "DiskUse16x installer" in (root / "home/.bashrc").read_text()
     return env, archive, checksum, args, installed
+
+
+LEGACY_LINE = ('[ ! -r "$HOME/.local/share/space16x/env.sh" ] || '
+               '. "$HOME/.local/share/space16x/env.sh" # Space 16X installer')
+
+
+def legacy_install(home, bin_dir, binary=BINARY):
+    """The state that install.sh made for the space16x command before 1.0, with bash."""
+    state = home / ".local/share/space16x"
+    state.mkdir(parents=True)
+    created = [str(state / "bin")] if bin_dir == state / "bin" else []
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    (bin_dir / "space16x").write_bytes(binary)
+    (bin_dir / "space16x").chmod(0o755)
+    digest = hashlib.sha256(binary).hexdigest()
+    (state / "receipt").write_text(f"{bin_dir}\n{digest}\ntrue\n", encoding="utf-8")
+    (state / "dirs").write_text("".join(f"{path}\n" for path in created), encoding="utf-8")
+    (state / "env.sh").write_text("# earlier PATH setup\n", encoding="utf-8")
+    (home / ".bashrc").write_text(f"# Personal settings\n{LEGACY_LINE}\n", encoding="utf-8")
+    (state / "profiles").write_text(f"sh\texisting\t{home / '.bashrc'}\n", encoding="utf-8")
+    return state
+
+
+def check_legacy_migration(platform):
+    """Installing over a pre-1.0 space16x installation replaces it and keeps the user's files."""
+    # The default folder: the old command and its shell setup go, and the new ones arrive.
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-install-qa-") as directory:
+        root = Path(directory).resolve()
+        env, _, _ = setup(root, **platform)
+        home = Path(env["HOME"])
+        old_state = legacy_install(home, home / ".local/share/space16x/bin")
+        old_bin = old_state / "bin"
+        active = env | {"PATH": f"{old_bin}:{env['PATH']}"}
+        result = run(root, active, "--shell-path")
+        assert result.returncode == 0 and "Removed the earlier space16x" in result.stderr, result.stderr
+        new_bin = home / ".local/share/diskuse16x/bin"
+        assert (new_bin / "diskuse16x").read_bytes() == BINARY
+        assert os.readlink(new_bin / "du16x") == "diskuse16x"
+        assert not old_state.exists()
+        assert result.stdout.strip() == f"{new_bin}:{env['PATH']}"
+        bashrc = (home / ".bashrc").read_text()
+        assert LEGACY_LINE not in bashrc and "# DiskUse16x installer" in bashrc
+        assert bashrc.startswith("# Personal settings\n")
+
+    # A folder the user chose: the new command goes there, and a replaced executable stays.
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-install-qa-") as directory:
+        root = Path(directory).resolve()
+        env, _, _ = setup(root, **platform)
+        home = Path(env["HOME"])
+        chosen = root / "my tools"
+        old_state = legacy_install(home, chosen)
+        (chosen / "space16x").write_bytes(b"a user's replacement")
+        result = run(root, env)
+        assert result.returncode == 0 and "Kept the replacement" in result.stderr, result.stderr
+        assert (chosen / "diskuse16x").read_bytes() == BINARY
+        assert os.readlink(chosen / "du16x") == "diskuse16x"
+        assert (chosen / "space16x").read_bytes() == b"a user's replacement"
+        assert not old_state.exists()
+
+    # --uninstall removes a pre-1.0 installation on its own too.
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-install-qa-") as directory:
+        root = Path(directory).resolve()
+        env, _, _ = setup(root, **platform)
+        home = Path(env["HOME"])
+        old_state = legacy_install(home, home / ".local/share/space16x/bin")
+        active = env | {"PATH": f"{old_state / 'bin'}:{env['PATH']}"}
+        result = run(root, active, "--uninstall", "--shell-path")
+        assert result.returncode == 0 and "Removed the earlier space16x" in result.stderr, result.stderr
+        assert result.stdout.strip() == env["PATH"]
+        assert not old_state.exists()
+        assert (home / ".bashrc").read_text() == "# Personal settings\n"
+
+    # A file named du16x that the installer didn't make is never replaced.
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-install-qa-") as directory:
+        root = Path(directory).resolve()
+        env, _, _ = setup(root, **platform)
+        theirs = root / "bin"
+        theirs.mkdir()
+        (theirs / "du16x").write_bytes(b"another tool")
+        result = run(root, env, "--bin-dir", str(theirs))
+        assert result.returncode == 1 and "unmanaged file already exists" in result.stderr, result.stderr
+        assert (theirs / "du16x").read_bytes() == b"another tool"
 
 
 def main():
@@ -168,7 +251,7 @@ def main():
         dict(os_name="Linux", arch="x86_64", target="x86_64-unknown-linux-musl", transport="curl"),
     )
     for platform in platforms:
-        with tempfile.TemporaryDirectory(prefix="space16x-install-qa-") as directory:
+        with tempfile.TemporaryDirectory(prefix="diskuse16x-install-qa-") as directory:
             root = Path(directory).resolve()
             version = "v0.2.0" if platform["transport"] == "wget" else None
             env, archive, checksum, args, installed = accept(root, platform, version)
@@ -178,7 +261,7 @@ def main():
             result = run(root, env, *args)
             assert result.returncode == 1 and "checksum mismatch" in result.stderr
             assert installed.read_bytes() == BINARY
-            assert not list(installed.parent.glob(".space16x-install.*"))
+            assert not list(installed.parent.glob(".diskuse16x-install.*"))
 
             checksum.write_text(original_checksum, encoding="utf-8")
             if platform["transport"] == "wget":
@@ -202,15 +285,16 @@ def main():
             result = run(root, active, "--uninstall", "--shell-path")
             assert result.returncode == 0, result.stderr
             assert result.stdout.strip() == env["PATH"]
-            assert not installed.exists()
+            assert not installed.exists() and not (installed.parent / "du16x").is_symlink()
             assert not (root / "home/.bashrc").exists()
             assert not (root / "home/.profile").exists()
-            assert not (root / "home/.local/share/space16x").exists()
+            assert not (root / "home/.local/share/diskuse16x").exists()
 
     for platform in (platforms[0], platforms[3]):
         check_editions(platform)
+        check_legacy_migration(platform)
 
-    with tempfile.TemporaryDirectory(prefix="space16x-install-qa-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-install-qa-") as directory:
         root = Path(directory).resolve()
         env, _, _ = setup(root, **platforms[0])
         home = Path(env["HOME"])
@@ -226,8 +310,8 @@ def main():
         active = env | {"PATH": result.stdout.strip()}
         result = run(root, active, "--shell-path")
         assert result.returncode == 0, result.stderr
-        assert profile.read_text().count("# Space 16X installer") == 1
-        binary = home / ".local/share/space16x/bin/space16x"
+        assert profile.read_text().count("# DiskUse16x installer") == 1
+        binary = home / ".local/share/diskuse16x/bin/diskuse16x"
         binary.write_bytes(b"a user's replacement")
         result = run(root, active, "--uninstall", "--shell-path")
         assert result.returncode == 0 and "Kept the replacement" in result.stderr
@@ -236,14 +320,14 @@ def main():
         assert profile.read_bytes() == original and profile.stat().st_mode & 0o777 == 0o640
         assert binary.read_bytes() == b"a user's replacement"
 
-    with tempfile.TemporaryDirectory(prefix="space16x-install-qa-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-install-qa-") as directory:
         root = Path(directory).resolve()
         unsupported = platforms[0] | {"arch": "riscv64"}
         env, _, _ = setup(root, **unsupported)
-        result = run(root, env, "--repo", "example/space16x")
+        result = run(root, env, "--repo", "example/diskuse16x")
         assert result.returncode == 1 and "No prebuilt CLI" in result.stderr
 
-    with tempfile.TemporaryDirectory(prefix="space16x-install-qa-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-install-qa-") as directory:
         root = Path(directory).resolve()
         env, _, _ = setup(root, **platforms[0], macos_version="13.7.6")
         result = run(root, env)

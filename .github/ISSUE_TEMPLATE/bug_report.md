@@ -13,6 +13,6 @@ Use a synthetic folder if possible. Share the command or app action, expected re
 
 ## Environment
 
-Include the Space 16X version, operating system, architecture, and filesystem type if relevant.
+Include the DiskUse16x version, operating system, architecture, and filesystem type if relevant.
 
 If you share output or a screenshot, redact personal paths and filenames.

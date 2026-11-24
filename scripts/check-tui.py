@@ -113,7 +113,7 @@ def check_sort_size_and_color(binary, fixture):
 
 def check_duplicates_and_explain(binary):
     """Pro: D lists duplicates once Enter starts comparing, and E explains the volume."""
-    with tempfile.TemporaryDirectory(prefix="space16x-tui-duplicates-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-tui-duplicates-") as directory:
         root = Path(directory).resolve()
         same = os.urandom(1_200_000)
         (root / "a.bin").write_bytes(same)
@@ -142,7 +142,7 @@ def check_trash(binary):
     On Linux the FreeDesktop Trash goes to a scratch XDG_DATA_HOME. On macOS the item
     goes to the real Trash, so a local run stops before confirming unless CI is set.
     """
-    with tempfile.TemporaryDirectory(prefix="space16x-trash-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-trash-") as directory:
         root = Path(directory).resolve()
         scope = root / "scope"
         (scope / "keep").mkdir(parents=True)
@@ -150,12 +150,13 @@ def check_trash(binary):
         victim = scope / "trash-me"
         victim.mkdir()
         (victim / "data.bin").write_bytes(os.urandom(65_536))
-        environment = {key: value for key, value in os.environ.items() if key != "SPACE16X_READ_ONLY"}
+        environment = {key: value for key, value in os.environ.items()
+                       if key not in ("DISKUSE16X_READ_ONLY", "SPACE16X_READ_ONLY")}
         environment["XDG_DATA_HOME"] = str(root / "data")
 
         for command, env in (
             ([binary, "--read-only", scope], environment),
-            ([binary, scope], {**environment, "SPACE16X_READ_ONLY": "1"}),
+            ([binary, scope], {**environment, "DISKUSE16X_READ_ONLY": "1"}),
         ):
             with Terminal(command, env=env) as terminal:
                 terminal.expect(b"trash-me")
@@ -189,7 +190,7 @@ def check_trash(binary):
 
 def check_rescan(binary):
     """Rescan the open folder after it changes on disk, and the whole scope from the top."""
-    with tempfile.TemporaryDirectory(prefix="space16x-rescan-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-rescan-") as directory:
         scope = Path(directory).resolve()
         grow = scope / "grow"
         grow.mkdir()
@@ -212,7 +213,7 @@ def check_rescan(binary):
 
 def check_import(binary):
     """Browse a saved scan from a file and from a pipe, read-only."""
-    with tempfile.TemporaryDirectory(prefix="space16x-import-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-import-") as directory:
         scope = Path(directory).resolve() / "saved"
         (scope / "kept-folder").mkdir(parents=True)
         (scope / "kept-folder" / "inner.bin").write_bytes(os.urandom(30_000))
@@ -234,9 +235,9 @@ def check_import(binary):
 
 def main():
     if len(sys.argv) != 2:
-        raise SystemExit(f"Usage: {sys.argv[0]} PATH-TO-SPACE16X")
+        raise SystemExit(f"Usage: {sys.argv[0]} PATH-TO-DISKUSE16X")
     binary = Path(sys.argv[1]).resolve(strict=True)
-    with tempfile.TemporaryDirectory(prefix="space16x-tui-") as directory:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-tui-") as directory:
         fixture = Path(directory).resolve()
         nested = fixture / "nested-alpha"
         nested.mkdir()

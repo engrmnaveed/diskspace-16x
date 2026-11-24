@@ -32,7 +32,7 @@ space16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercont
 space16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$space16x_path" ] && export PATH="$space16x_path" && unset space16x_path
 ```
 
-## Install Space 16X Pro
+## Install DiskUse16x Pro
 
 Space 16X comes in two free editions. Basic, which the commands above install, is the lightweight default. Pro adds more analysis, starting with `space16x diff`, which compares two scans. Both install the same `space16x` command in the same place, so installing one edition replaces the other. Add `--pro` to the installer:
 

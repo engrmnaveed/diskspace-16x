@@ -60,7 +60,7 @@ def hardware_name(os_name):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("binary", type=Path, help="path to a release build of space16x")
+    parser.add_argument("binary", type=Path, help="path to a release build of diskuse16x")
     parser.add_argument("--fixture-parent", type=Path, help="directory on the filesystem to benchmark")
     parser.add_argument(
         "--files", type=int, default=100_000,
@@ -74,7 +74,7 @@ def main():
     os_name = platform.system()
     if os_name not in ("Darwin", "Linux"):
         parser.error("The benchmark supports macOS and Linux.")
-    with tempfile.TemporaryDirectory(prefix="space16x-bench-", dir=args.fixture_parent) as path:
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-bench-", dir=args.fixture_parent) as path:
         root = Path(path).resolve()
         allocated_bytes = create_fixture(root, folders_per_group)
         run([binary, "scan", str(root), "--top", "20", "--json"], stdout=DEVNULL, check=True)

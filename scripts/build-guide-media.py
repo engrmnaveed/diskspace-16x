@@ -37,7 +37,7 @@ def build_cli(parser, given, pro):
     features = ["--features", "pro"] if pro else []
     subprocess.run([cargo, "build", "--release", "--locked", *features, "--target-dir", target],
                    cwd=ROOT / "cli", check=True)
-    return target / "release" / "space16x"
+    return target / "release" / "diskuse16x"
 
 
 def build_capture(work):
