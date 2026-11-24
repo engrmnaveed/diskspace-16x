@@ -6,9 +6,15 @@ Prefer to watch? The **Mac app walkthrough** video [is on YouTube](https://youtu
 
 ## 1. Install and open DiskUse16x
 
-Install the app with Homebrew or download it from GitHub. [Install the Mac app](../install.md#install-the-mac-app) has both ways.
+The easiest way is one command. Open the **Terminal** app (it's in Applications → Utilities), paste this line and press Return:
 
-DiskUse16x is free and isn't notarized by Apple, so macOS asks you to approve it the first time:
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --app
+```
+
+It installs DiskUse16x into the Applications folder in your home folder. Open it from Spotlight (⌘Space, then type DiskUse16x) or Launchpad. It opens straight away.
+
+You can also install with Homebrew or download the app from GitHub, as [Install the Mac app](../install.md#install-the-mac-app) shows. DiskUse16x is free and isn't notarized by Apple, so in those two cases macOS asks you to approve it the first time:
 
 1. Open DiskUse16x. When macOS warns you, click **Done**. Don't click **Move to Trash**.
 2. Open **System Settings → Privacy & Security**, scroll down to **Security**, and click **Open Anyway**.

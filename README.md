@@ -72,13 +72,19 @@ Build and open the native app on macOS with Swift 6 or later.
 open "$(scripts/package-macos.sh)"
 ```
 
-Releases from 0.2.2 include the universal Mac app. Install it with Homebrew. Homebrew 6 and later require you to trust the tap first.
+Releases from 0.2.2 include the universal Mac app. From 1.0.0, the easiest way to install it is one command, which installs it into `~/Applications` and opens without the **Open Anyway** step:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --app
+```
+
+Or install it with Homebrew. Homebrew 6 and later require you to trust the tap first.
 
 ```sh
 brew tap engrmnaveed/tap && brew trust engrmnaveed/tap && brew install --cask engrmnaveed/tap/diskuse16x
 ```
 
-The app is free and open source, and it is not notarized by Apple, so macOS blocks the first launch. In the warning, click **Done**, not **Move to Trash**. Then open **System Settings → Privacy & Security**, scroll to **Security**, and click **Open Anyway**. See [Allow the first launch](docs/install.md#allow-the-first-launch) for every step. The [installation guide](docs/install.md#install-the-mac-app) also covers the direct download, verification, and removal.
+The app is free and open source, and it is not notarized by Apple, so with Homebrew or the ZIP, macOS blocks the first launch. In the warning, click **Done**, not **Move to Trash**. Then open **System Settings → Privacy & Security**, scroll to **Security**, and click **Open Anyway**. See [Allow the first launch](docs/install.md#allow-the-first-launch) for every step. The [installation guide](docs/install.md#install-the-mac-app) also covers the direct download, verification, and removal.
 
 Install a checksummed CLI build from GitHub without sudo. Paste either line in Bash or Zsh.
 

@@ -10,7 +10,7 @@ Besides that, it writes only files you ask for: a saved scan or report, and in P
 
 ## macOS says it can't verify the app
 
-DiskUse16x is free and isn't notarized by Apple, so macOS asks you to approve it once. Click **Done** in the warning, not **Move to Trash**. Then open **System Settings → Privacy & Security**, scroll to **Security**, and click **Open Anyway**. [Allow the first launch](../install.md#allow-the-first-launch) has every step, including what to do if **Open Anyway** isn't there.
+DiskUse16x is free and isn't notarized by Apple, so when you install it with Homebrew or the ZIP, macOS asks you to approve it once. Click **Done** in the warning, not **Move to Trash**. Then open **System Settings → Privacy & Security**, scroll to **Security**, and click **Open Anyway**. [Allow the first launch](../install.md#allow-the-first-launch) has every step, including what to do if **Open Anyway** isn't there. The [one-command installer](../install.md#install-with-one-command) skips this step.
 
 ## Some folders say "Protected"
 
@@ -68,14 +68,14 @@ It's the same app with a new name. Space 16X became DiskUse16x in version 1.0, a
 
 DiskUse16x never checks for updates by itself. In the Mac app, choose **Help → Check for Updates…** to open the newest release's page in your browser.
 
-- **Mac app:** if you installed with Homebrew, run `brew upgrade --cask diskuse16x`. Otherwise, download the new ZIP and replace the app in Applications. macOS may ask you to approve the first launch again.
+- **Mac app:** run the one-command installer again, or `brew upgrade --cask diskuse16x` if you installed with Homebrew. Otherwise, download the new ZIP and replace the app in Applications. macOS may ask you to approve the first launch again.
 - **Terminal:** run the one-line installer again. If you installed with Homebrew, run `brew upgrade du16x`.
 
 [Update DiskUse16x](../install.md#update-diskuse16x) has every way.
 
 ## How do I uninstall DiskUse16x?
 
-- **Mac app:** if you installed with Homebrew, run `brew uninstall --cask diskuse16x`. Otherwise, move **DiskUse16x** from Applications to the Trash.
+- **Mac app:** if you installed with Homebrew, run `brew uninstall --cask diskuse16x`. Otherwise, move **DiskUse16x** from Applications, or from the Applications folder in your home folder, to the Trash.
 - **Terminal:** run the installer with `--uninstall`, as [Uninstall the managed CLI](../install.md#uninstall-the-managed-cli) shows. If you installed with Homebrew, run `brew uninstall du16x`. For a Linux package, run `sudo apt remove diskuse16x` or `sudo dnf remove diskuse16x`. Add `-pro` to the name for Pro.
 
 ## Something's wrong, or I have an idea

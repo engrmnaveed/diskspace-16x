@@ -7,8 +7,10 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
+import zipfile
 
 
 INSTALLER = Path(__file__).resolve().with_name("install.sh")
@@ -24,15 +26,28 @@ if [ "${1:-}" = --help ]; then
 fi
 output=
 url=
+write_out=
+spider=false
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --output) output=$2; shift ;;
         --output-document=*) output=${1#*=} ;;
+        --write-out) write_out=$2; shift ;;
+        --spider) spider=true ;;
         http://*|https://*) url=$1 ;;
     esac
     shift
 done
 printf '%s\\n' "$url" >> "$TEST_ROUTE_LOG"
+case "$url" in
+    */releases/latest)
+        # GitHub answers releases/latest with a redirect to the newest tag.
+        location="${url%/latest}/tag/v$TEST_LATEST"
+        if [ -n "$write_out" ]; then printf '%s' "$location"; exit 0; fi
+        if "$spider"; then printf '  HTTP/1.1 302 Found\\n  Location: %s\\n' "$location" >&2; exit 8; fi
+        exit 1
+        ;;
+esac
 asset=${url##*/}
 case "$url" in
     "$TEST_URL"|"${TEST_URL}.sha256")
@@ -45,6 +60,25 @@ case "$url" in
     *) printf 'Unexpected URL: %s\\n' "$url" >&2; exit 1 ;;
 esac
 cp "$TEST_ASSETS/$asset" "$output"
+"""
+
+
+# Stand-ins for the macOS tools that --app uses, so the checks also run on Linux.
+APP_ID = "com.16xbrains.diskuse16x"
+MOCK_DITTO = f"""#!{sys.executable}
+import sys, zipfile
+assert sys.argv[1:3] == ["-x", "-k"], sys.argv
+zipfile.ZipFile(sys.argv[3]).extractall(sys.argv[4])
+"""
+# The test bundles keep their bundle ID as plain text in Info.plist.
+MOCK_PLUTIL = """#!/bin/sh
+[ "$1 $2 $3" = "-extract CFBundleIdentifier raw" ] && [ -f "$4" ] && cat "$4"
+"""
+MOCK_CODESIGN = """#!/bin/sh
+[ "${TEST_BAD_SIGNATURE:-0}" = 0 ]
+"""
+MOCK_PGREP = """#!/bin/sh
+[ "${TEST_APP_RUNNING:-0}" = 1 ]
 """
 
 
@@ -104,6 +138,91 @@ def release_archive(downloads, asset, binary):
     checksum = downloads / f"{asset}.sha256"
     checksum.write_text(f"{digest}  {asset}\n", encoding="utf-8")
     return archive, checksum
+
+
+def app_zip(downloads, version, marker, bundle_id=APP_ID):
+    """A release ZIP holding DiskUse16x.app, and its checksum file."""
+    asset = f"diskuse16x-{version}-macos-universal.zip"
+    with zipfile.ZipFile(downloads / asset, "w") as archive:
+        archive.writestr("DiskUse16x.app/Contents/Info.plist", bundle_id)
+        archive.writestr("DiskUse16x.app/Contents/MacOS/DiskUse16x", marker)
+    digest = hashlib.sha256((downloads / asset).read_bytes()).hexdigest()
+    (downloads / f"{asset}.sha256").write_text(f"{digest}  {asset}\n", encoding="utf-8")
+    return asset
+
+
+def check_app(platform):
+    """--app installs the Mac app into ~/Applications and replaces only its own earlier copy."""
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-install-qa-") as directory:
+        root = Path(directory).resolve()
+        env, archive, _ = setup(root, **platform)
+        tools = Path(env["PATH"])
+        for name, content in (("ditto", MOCK_DITTO), ("plutil", MOCK_PLUTIL),
+                              ("codesign", MOCK_CODESIGN), ("pgrep", MOCK_PGREP)):
+            executable(tools / name, content)
+        downloads = archive.parent
+        repo = "engrmnaveed/diskuse16x"
+        asset = app_zip(downloads, "1.2.3", "first")
+        url = f"https://github.com/{repo}/releases/download/v1.2.3/{asset}"
+        env |= {"TEST_ASSET": asset, "TEST_URL": url, "TEST_LATEST": "1.2.3"}
+        installed = Path(env["HOME"]) / "Applications/DiskUse16x.app"
+        executable_path = installed / "Contents/MacOS/DiskUse16x"
+        routes = Path(env["TEST_ROUTE_LOG"])
+
+        # The latest release, found through GitHub's redirect.
+        result = run(root, env, "--app")
+        assert result.returncode == 0 and "Installed" in result.stderr, result.stderr
+        assert executable_path.read_text() == "first"
+        assert f"https://github.com/{repo}/releases/latest" in routes.read_text()
+
+        # A named version replaces the earlier copy, without asking for the latest one.
+        routes.unlink()
+        app_zip(downloads, "1.2.3", "second")
+        result = run(root, env, "--app", "--version", "v1.2.3")
+        assert result.returncode == 0, result.stderr
+        assert executable_path.read_text() == "second"
+        assert "releases/latest" not in routes.read_text()
+
+        # The app is running, the checksum is wrong, or the signature fails: nothing changes.
+        result = run(root, env | {"TEST_APP_RUNNING": "1"}, "--app")
+        assert result.returncode == 1 and "Quit DiskUse16x" in result.stderr, result.stderr
+        result = run(root, env | {"TEST_BAD_SIGNATURE": "1"}, "--app")
+        assert result.returncode == 1 and "signature" in result.stderr, result.stderr
+        checksum = downloads / f"{asset}.sha256"
+        good = checksum.read_text()
+        checksum.write_text(f"{'0' * 64}  {asset}\n")
+        result = run(root, env, "--app")
+        assert result.returncode == 1 and "checksum mismatch" in result.stderr, result.stderr
+        checksum.write_text(good)
+        assert executable_path.read_text() == "second"
+
+        # A ZIP whose app has another bundle ID is refused.
+        app_zip(downloads, "1.2.3", "other", bundle_id="com.example.other")
+        result = run(root, env, "--app")
+        assert result.returncode == 1 and "doesn't contain DiskUse16x.app" in result.stderr, result.stderr
+        app_zip(downloads, "1.2.3", "third")
+
+        # --app takes no CLI options, and --uninstall --app removes only its own copy.
+        result = run(root, env, "--app", "--pro")
+        assert result.returncode == 1 and "takes no --pro" in result.stderr, result.stderr
+        result = run(root, env, "--uninstall", "--app")
+        assert result.returncode == 0 and "Removed" in result.stderr and not installed.exists(), result.stderr
+        result = run(root, env, "--uninstall", "--app")
+        assert result.returncode == 0 and "No DiskUse16x app" in result.stderr, result.stderr
+        (installed / "Contents").mkdir(parents=True)
+        (installed / "Contents/Info.plist").write_text("com.example.other")
+        for args in (("--app",), ("--uninstall", "--app")):
+            result = run(root, env, *args)
+            assert result.returncode == 1 and "Something other than DiskUse16x" in result.stderr, result.stderr
+            assert (installed / "Contents/Info.plist").read_text() == "com.example.other"
+
+    # The Mac app doesn't install on Linux.
+    with tempfile.TemporaryDirectory(prefix="diskuse16x-install-qa-") as directory:
+        root = Path(directory).resolve()
+        linux = dict(os_name="Linux", arch="x86_64", target="x86_64-unknown-linux-musl", transport="curl")
+        env, _, _ = setup(root, **linux)
+        result = run(root, env, "--app")
+        assert result.returncode == 1 and "macOS only" in result.stderr, result.stderr
 
 
 def check_editions(platform):
@@ -293,6 +412,8 @@ def main():
     for platform in (platforms[0], platforms[3]):
         check_editions(platform)
         check_legacy_migration(platform)
+    check_app(platforms[0])
+    check_app(platforms[0] | {"transport": "wget"})
 
     with tempfile.TemporaryDirectory(prefix="diskuse16x-install-qa-") as directory:
         root = Path(directory).resolve()
