@@ -6,7 +6,7 @@ This file is the durable record of the roadmap and its progress. Work on it can 
 
 Status key: `[x]` landed on `main` · `[~]` in progress (see **Resume here**) · `[ ]` not started.
 
-**Resume here** — **M8 (v1.0.0) Ready for the public** is nearly done. Merged: the owner's decisions, M8.3 (with `install.sh --app`), M8.4 (Homebrew formulas, `.deb`/`.rpm`, crates.io), M8.5, M8.6, M8.8, M8.10 (the rename to **DiskUse16x**, with the repository now `engrmnaveed/diskuse16x`) and the VoiceOver fixes. **In progress:** M8.2's macOS 14.6.1 VM run (installed with Apple's Virtualization framework, waiting for the owner to grant control of its window), then the `release/v1.0.0` PR and the tag. **The owner's:** M8.1's checklist in `docs/qa.md`, M8.7's budget, M8.9's three repository settings, the crates.io token, approving the publish run, and uploading the new walkthroughs and Short. After the release, remove the session's test VM, builds and preferences, as the owner asked. Cross-platform work comes after v1.0.0 and waits for the owner's feasibility review (see **Future**).
+**Resume here** — **M8 (v1.0.0) Ready for the public** is nearly done. Merged: the owner's decisions, M8.3 (with `install.sh --app`), M8.4 (Homebrew formulas, `.deb`/`.rpm`, crates.io), M8.5, M8.6, M8.8, M8.10 (the rename to **DiskUse16x**, with the repository now `engrmnaveed/diskuse16x`) and the VoiceOver fixes. M8.2 is done (macOS 14.6.1 in a VM, VoiceOver). **Next:** merge the `release/v1.0.0` PR and push the tag. **The owner's:** M8.1's checklist in `docs/qa.md`, M8.7's budget, M8.9's three repository settings, the crates.io token, approving the publish run, and uploading the new walkthroughs and Short. After the release, remove the session's test VM, builds and preferences, as the owner asked. Cross-platform work comes after v1.0.0 and waits for the owner's feasibility review (see **Future**).
 
 ### M1 (v0.3.0) Focus [Basic]
 - [x] M1.1 Rust: `apparentBytes` and `itemCount` in the scanner, JSON schema 3 (`apparentBytes`, `itemCount`, `rankedBy`, `edition`), `scan --apparent`
@@ -117,12 +117,12 @@ The features now cover every gap in §2, so M8 adds no new views. It checks what
 
   Record the results in `docs/qa.md` and fix what they find.
   - **Next step (owner):** the checklist under **1.0.0** in `docs/qa.md` lists these six checks plus the 1.0 additions (Help menu, settings import, Full Disk Access, VoiceOver in Settings), ready to tick on the 1.0 build.
-- [~] M8.2 Check the support claims nobody has tested:
+- [x] M8.2 Check the support claims nobody has tested:
   - **macOS 14,** the stated minimum: run the release app in a macOS 14 virtual machine on Apple silicon, through the core rows of `docs/manual-qa.md`.
   - **VoiceOver:** a pass over the main window, its sheets and Settings, adding any labels that are missing.
   - **A physical Intel Mac** and **Linux on real hardware** (the Linux benchmark has only run in Docker on a Mac): run them if the owner has the hardware. Otherwise post them as contribution issues (M8.9).
   - Record each result in `docs/qa.md`.
-  - **Progress (2026-11-24):** the owner approved downloading a macOS 14 image. The Intel Mac and real Linux hardware checks are posted as #96 and #97, with macOS 14 also as #93 for real hardware. **VoiceOver:** every view and sheet was checked in the accessibility tree, and the five unnamed controls it found (Settings' switches and threshold menu, the receipt sheet's fields) now have labels (`docs/qa.md`). The owner's M8.1 check 8 confirms them by ear. Still to do: the macOS 14 VM run.
+  - **Outcome (2026-11-24):** **macOS 14.6.1** ran in a VM made with Apple's Virtualization framework from Apple's restore image: 18 CLI checks and the core app rows passed, and the app opened without a Gatekeeper prompt (`docs/qa.md`). **VoiceOver:** every view and sheet was checked in the accessibility tree, and the five unnamed controls it found now have labels. The owner's M8.1 check 8 confirms them by ear. **Intel Mac and Linux on real hardware:** posted as #96 and #97, with macOS 14 on real hardware as #93, for contributors.
 - [x] M8.3 Notarization. **Owner decides** whether to join the Apple Developer Program (about $99 a year).
   - **If yes:** the owner stores the Developer ID and notarization credentials in the `release-signing` environment ([release procedure](release.md)). Each release publishes the notarized ZIP and cask. The guide and `docs/install.md` drop the **Open Anyway** steps and the note that Full Disk Access can reset after an update.
   - **If no:** record why here, and keep ad hoc signing and today's first-launch steps.
