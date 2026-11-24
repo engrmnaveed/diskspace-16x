@@ -147,11 +147,12 @@ The features now cover every gap in §2, so M8 adds no new views. It checks what
   - `PRD.md` for 1.0: its status line, its deferred list (duplicate hashing and background monitoring now ship in Pro), its public-release milestone, and the naming and launch decisions, which the owner confirms.
   - Mark this file's **Context** and **What exists today** as the 2026-11-21 starting point.
   - **Decision (2026-11-24): the name changes to DiskUse16x** before 1.0, with the commands `diskuse16x` and `du16x`. See M8.10.
-- [ ] M8.9 The GitHub page:
+- [~] M8.9 The GitHub page:
   - The owner approves a new description, topics and a homepage that points at the user guide, and a session sets them with `gh`.
   - The owner uploads a social preview image, which a session can prepare from `Branding/`.
   - The owner turns on Dependabot alerts and private vulnerability reporting in the repository settings.
   - Once the owner approves, post the three issues drafted in `docs/contribution-issues.md`, and any from M8.2, labelled **good first issue** or **help wanted**.
+  - **Progress (2026-11-24):** with the owner's approval, the description, the homepage (the user guide) and 14 topics are set, `Branding/SocialPreview.png` is ready, and five issues are posted (#93–#97, the three drafts plus an Intel Mac check and a real Linux machine from M8.2). **Still the owner's:** upload the social preview (**Settings → General → Social preview**) and turn on Dependabot alerts and security updates and private vulnerability reporting (**Settings → Advanced Security**). None was on when checked.
 - [ ] M8.10 Rename to DiskUse16x. **Decision (2026-11-24):** the owner renamed the product before 1.0, so the 1.x promise starts with the new names. Recorded choices:
   - **Names:** the product and app are **DiskUse16x** (`DiskUse16x.app`, written exactly so). The CLI answers to `diskuse16x` and `du16x`, one executable with `du16x` as a symlink in the archives, the installer, the packages and the formulas. `--version` prints `diskuse16x X.Y.Z`. The bundle ID becomes `com.16xbrains.diskuse16x`. The repository becomes `engrmnaveed/diskuse16x`, renamed with `gh` once the owner confirms (GitHub redirects the old URLs).
   - **Release assets and channels:** `diskuse16x-<target>.tar.gz`, `diskuse16x-pro-<target>.tar.gz`, `diskuse16x-X.Y.Z-macos-universal.zip`; the `.deb`/`.rpm` packages `diskuse16x` and `diskuse16x-pro`; the cask `diskuse16x`, which the tap's `cask_renames.json` maps from `space16x`; and the formulas `du16x` and `du16x-pro`, which leave `diskuse16x` to the cask. M8.4's `space16x-*` formula and package names were never published, so they simply change.
