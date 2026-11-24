@@ -34,7 +34,8 @@ The install and uninstall one-liners in the README and the installation guide ru
 The last step of **Publish release** runs `cargo publish --locked` from `cli/` when the `release` environment has a `CARGO_REGISTRY_TOKEN` secret. Without the secret, it logs a notice and skips. CI runs `cargo package --locked` in the Linux x86-64 job, so a release can't fail to package.
 
 - **One-time setup:** sign in to [crates.io](https://crates.io/) with GitHub and verify an email address. Under **Account Settings → API Tokens**, create a token with the **publish-new** and **publish-update** scopes, limited to the crate `diskuse16x`. Store it as the `CARGO_REGISTRY_TOKEN` secret in the `release` environment. After the first publish, you can narrow the token to **publish-update**, or switch to crates.io's trusted publishing.
-- **Each release:** the step publishes the tagged version once, and a rerun skips a version crates.io already has. crates.io keeps every version for good: a broken one can only be yanked.
+- **Each release:** the step runs `scripts/publish-crate`, which publishes the tagged version once and skips a version crates.io already has. crates.io keeps every version for good: a broken one can only be yanked.
+- **A release published without the token:** add the secret, then run **Actions → Publish crate** with the release's tag, such as `v1.0.0`. It checks out that tag in the `release` environment and runs the same script, which fails clearly if the secret is still missing.
 
 ### One-time repository settings
 
