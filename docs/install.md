@@ -174,7 +174,21 @@ The app in `dist` is built for the current Mac and ad hoc signed for local devel
 
 ## Install the Mac app
 
-Releases from 0.2.2 publish a universal Mac app for Apple silicon and Intel on macOS 14 or later. The app is ad hoc signed and is not notarized by Apple, because the project doesn't use a paid Apple Developer account. macOS blocks the first launch until you allow it once.
+Releases from 0.2.2 publish a universal Mac app for Apple silicon and Intel on macOS 14 or later. The app is ad hoc signed and is not notarized by Apple, because the project doesn't use a paid Apple Developer account. The one-command installer is the easiest way in. With Homebrew or the ZIP, macOS blocks the first launch until you allow it once.
+
+### Install with one command
+
+From 1.0.0, paste this into Terminal:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --app
+```
+
+It downloads the newest release's app ZIP, checks its SHA-256 checksum and the app's signature, and installs **DiskUse16x.app** into the Applications folder in your home folder, `~/Applications`, without an admin password. Spotlight and Launchpad find it there. If an earlier copy is in that folder, it replaces it. Quit DiskUse16x first.
+
+The app opens on its first launch without the **Open Anyway** step. macOS checks apps that carry the quarantine flag that browsers add to downloads, and curl doesn't add it. Tested on macOS 27.2: macOS's own assessment rejects the ad hoc app, and the installed copy still opens. This skips that one-time check on purpose, as the `xattr` command under [Allow the first launch](#allow-the-first-launch) does. The installer checks the checksum and signature instead, and `gh attestation verify` can confirm that the ZIP came from this project's release workflow, as [Install the release ZIP](#install-the-release-zip) shows.
+
+Run the same command to update the app. Add `--version 1.0.0` after `--app` for a particular release. Remove the app with `--uninstall --app` in place of `--app`. Your settings and saved scans stay.
 
 ### Install with Homebrew
 
@@ -210,7 +224,7 @@ Move **DiskUse16x.app** to Applications in Finder.
 
 ### Allow the first launch
 
-macOS blocks the first launch because the app isn't notarized by Apple. The project doesn't use a paid Apple Developer account. To check a download yourself, use the SHA-256 file and `gh attestation verify` as shown above. You only need to approve the app once.
+With Homebrew or the release ZIP, macOS blocks the first launch because the app isn't notarized by Apple. The [one-command installer](#install-with-one-command) avoids this step. The project doesn't use a paid Apple Developer account. To check a download yourself, use the SHA-256 file and `gh attestation verify` as shown above. You only need to approve the app once.
 
 1. Open DiskUse16x. macOS says it can't verify that the app is free of malware. Click **Done**. Don't click **Move to Trash**, which deletes the app.
 2. Open **System Settings → Privacy & Security**.
@@ -248,10 +262,11 @@ DiskUse16x never checks for updates on its own, and the app never connects to th
 - **CLI from the installer:** run the [one-liner](#install-the-cli-from-a-release) again, with `--pro` for Pro. It replaces the command with the newest release.
 - **CLI from Homebrew:** run `brew upgrade du16x`, or `brew upgrade du16x-pro` for Pro.
 - **Linux package:** download the new release's package and install it the same way, as [Install a Linux package](#install-a-linux-package) shows.
+- **Mac app from the one-command installer:** run [the same command](#install-with-one-command) again.
 - **Mac app from Homebrew:** run `brew upgrade --cask diskuse16x`.
 - **Mac app from the ZIP:** quit DiskUse16x, then download, verify and expand the new ZIP as in [Install the release ZIP](#install-the-release-zip), and drag the new **DiskUse16x.app** into Applications to replace the old one.
 
-The new app is a new download that isn't notarized, so macOS may ask you to [allow the first launch](#allow-the-first-launch) again. If protected folders come back after an update, turn **DiskUse16x** off and on again in [Full Disk Access](#full-disk-access).
+With Homebrew or the ZIP, the new app is a new download that isn't notarized, so macOS may ask you to [allow the first launch](#allow-the-first-launch) again. If protected folders come back after an update, turn **DiskUse16x** off and on again in [Full Disk Access](#full-disk-access).
 
 ## Upgrading from Space 16X
 

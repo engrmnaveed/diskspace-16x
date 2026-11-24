@@ -2,18 +2,24 @@
 # Install a checksummed DiskUse16x CLI release from a public GitHub repository.
 # It installs the diskuse16x command and du16x, a link to it, and replaces an
 # installation of the earlier space16x command that this installer made.
+# On a Mac, --app installs the DiskUse16x app into ~/Applications instead.
 set -eu
 
 usage() {
     cat <<'USAGE'
 Usage: install.sh [--pro] [--repo OWNER/REPO] [--version VERSION] [--bin-dir DIR] [--shell-path]
        install.sh --uninstall [--shell-path]
+       install.sh --app [--repo OWNER/REPO] [--version VERSION]
+       install.sh --uninstall --app
 
 Download the CLI for this OS and architecture, verify its SHA-256 checksum,
 and install it without sudo. The defaults are the latest release of
 engrmnaveed/diskuse16x and $HOME/.local/share/diskuse16x/bin.
 --pro installs DiskUse16x Pro, which replaces Basic. Run without it to switch back.
 --shell-path prints the updated PATH for the calling shell.
+--app installs the Mac app into ~/Applications, from the release's ZIP after
+checking its SHA-256 checksum and signature. It replaces only an earlier copy
+of DiskUse16x there. --uninstall --app removes that copy and keeps settings.
 USAGE
 }
 
@@ -28,6 +34,7 @@ bin_dir=
 action=install
 print_path=false
 edition=
+app=false
 while [ "$#" -gt 0 ]; do
     case "$1" in
         -h|--help)
@@ -36,6 +43,7 @@ while [ "$#" -gt 0 ]; do
             ;;
         --uninstall) action=uninstall; shift ;;
         --pro) edition=pro-; shift ;;
+        --app) app=true; shift ;;
         --shell-path) print_path=true; shift ;;
         --repo|--version|--bin-dir)
             [ "$#" -ge 2 ] && [ -n "$2" ] || fail "$1 requires a value."
@@ -51,6 +59,9 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "${HOME:-}" ] || fail "Set HOME before running the installer."
+if "$app" && { [ -n "$edition" ] || [ -n "$bin_dir" ]; }; then
+    fail "--app installs the Mac app, which has Pro built in, so it takes no --pro or --bin-dir."
+fi
 state=$HOME/.local/share/diskuse16x
 # Releases before 1.0 installed the space16x command from here.
 legacy_state=$HOME/.local/share/space16x
@@ -279,7 +290,42 @@ remove_from_path() {
 }
 
 safe_path "$state"
+app_id=com.16xbrains.diskuse16x
+app_dir=$HOME/Applications
+app_path=$app_dir/DiskUse16x.app
+
+# True when $1 is a DiskUse16x app bundle: a real folder with our bundle ID.
+is_our_app() {
+    [ -d "$1" ] && [ ! -L "$1" ] &&
+        [ "$(plutil -extract CFBundleIdentifier raw "$1/Contents/Info.plist" 2>/dev/null)" = "$app_id" ]
+}
+
+app_running() {
+    pgrep -x DiskUse16x >/dev/null 2>&1
+}
+
+# Moves an existing ~/Applications/DiskUse16x.app into the staging folder, which the
+# installer removes when it exits. Anything else at that path is left alone.
+take_existing_app() {
+    is_our_app "$app_path" ||
+        fail "Something other than DiskUse16x is at $app_path. Move it, then run the installer again."
+    ! app_running || fail "Quit DiskUse16x, then run the installer again."
+    mv "$app_path" "$stage/previous.app"
+}
+
 safe_path "$legacy_state"
+safe_path "$app_dir"
+if [ "$action" = uninstall ] && "$app"; then
+    [ "$(uname -s)" = Darwin ] || fail "--app is for macOS."
+    if [ ! -e "$app_path" ] && [ ! -L "$app_path" ]; then
+        printf 'No DiskUse16x app in %s.\n' "$app_dir" >&2
+        exit 0
+    fi
+    stage=$(mktemp -d "${TMPDIR:-/tmp}/diskuse16x-install.XXXXXX")
+    take_existing_app
+    printf 'Removed %s. Your settings and saved scans stay.\n' "$app_path" >&2
+    exit 0
+fi
 if [ "$action" = uninstall ]; then
     found=false
     if [ -f "$receipt" ]; then
@@ -344,11 +390,12 @@ case "$host_os:$host_arch" in
     Linux:x86_64|Linux:amd64) target=x86_64-unknown-linux-musl ;;
     *) fail "No prebuilt CLI for $host_os $host_arch. See docs/install.md for a source build." ;;
 esac
+if "$app" && [ "$host_os" != Darwin ]; then fail "--app installs the Mac app, so it runs on macOS only."; fi
 if [ "$host_os" = Darwin ]; then
     macos_version=$(sw_vers -productVersion) || fail "Could not determine the macOS version."
     major=${macos_version%%.*}
     case "$major" in ''|*[!0-9]*) fail "Could not determine the macOS version." ;; esac
-    [ "$major" -ge 14 ] || fail "The prebuilt CLI requires macOS 14 or later. Found $macos_version."
+    [ "$major" -ge 14 ] || fail "DiskUse16x requires macOS 14 or later. Found $macos_version."
 fi
 
 if command -v curl >/dev/null 2>&1; then
@@ -397,23 +444,80 @@ download() {
     esac
 }
 
+# Downloads $asset and its .sha256 file from $base into the staging folder, and checks it.
+fetch_verified() {
+    download "$base/$asset.sha256" "$stage/$asset.sha256" ||
+        fail "Could not download $asset.sha256 from $base. Check that this release publishes the requested target."
+    download "$base/$asset" "$stage/$asset" ||
+        fail "Could not download $asset from $base."
+    IFS=' ' read -r expected filename extra < "$stage/$asset.sha256" ||
+        fail "The release checksum file is empty or incomplete."
+    case "$filename" in
+        "$asset"|"*$asset") ;;
+        *) fail "The release checksum file names a different asset." ;;
+    esac
+    [ -z "$extra" ] && [ "${#expected}" -eq 64 ] || fail "Invalid SHA-256 checksum file."
+    case "$expected" in *[!0-9a-fA-F]*) fail "Invalid SHA-256 checksum file." ;; esac
+    expected=$(printf '%s' "$expected" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+    [ "$(digest "$stage/$asset")" = "$expected" ] || fail "SHA-256 checksum mismatch for $asset."
+}
+
+# Prints the latest release's version, from where GitHub redirects releases/latest.
+latest_version() {
+    latest_url=https://github.com/$repo/releases/latest
+    case "$downloader" in
+        curl)
+            location=$(curl --disable --silent --show-error --proto '=https' --connect-timeout 15 \
+                --max-time 60 --output /dev/null --write-out '%{redirect_url}' "$latest_url") || return 1
+            ;;
+        wget)
+            LC_ALL=C wget --no-config --no-hsts --max-redirect=0 --server-response --spider \
+                --timeout=20 "$latest_url" 2> "$stage/wget-latest" || :
+            location=$(awk 'tolower($1) == "location:" { sub(/\r$/, "", $2); print $2; exit }' "$stage/wget-latest")
+            ;;
+    esac
+    case "$location" in
+        "https://github.com/$repo/releases/tag/v"*) printf '%s\n' "${location##*/releases/tag/v}" ;;
+        *) return 1 ;;
+    esac
+}
+
+if "$app"; then
+    if [ -z "$version" ]; then
+        version=$(latest_version) || fail "Could not find the latest release of $repo."
+        printf '%s\n' "$version" | LC_ALL=C grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?$' ||
+            fail "The latest release has an unexpected version."
+        case "$version" in *[!A-Za-z0-9.-]*) fail "The latest release has an unexpected version." ;; esac
+    fi
+    asset=diskuse16x-$version-macos-universal.zip
+    base=https://github.com/$repo/releases/download/v$version
+    fetch_verified
+    ditto -x -k "$stage/$asset" "$stage/app" || fail "Could not expand $asset."
+    new_app=$stage/app/DiskUse16x.app
+    is_our_app "$new_app" || fail "The release ZIP doesn't contain DiskUse16x.app."
+    codesign --verify --strict "$new_app" 2>/dev/null || fail "The app's signature doesn't verify."
+    if [ -e "$app_path" ] || [ -L "$app_path" ]; then take_existing_app; fi
+    mkdir -p "$app_dir"
+    if ! mv "$new_app" "$app_path"; then
+        if [ -d "$stage/previous.app" ]; then mv "$stage/previous.app" "$app_path"; fi
+        fail "Could not move DiskUse16x.app into $app_dir."
+    fi
+    printf 'Installed %s %s. Open it from Spotlight, Launchpad or %s.\n' "$app_path" "$version" "$app_dir" >&2
+    if [ -d /Applications/DiskUse16x.app ]; then
+        printf 'Another copy is in /Applications. Keep one of them, so Spotlight and Full Disk Access find the right one.\n' >&2
+    fi
+    for old_app in "/Applications/Space 16X.app" "$app_dir/Space 16X.app"; do
+        if [ -d "$old_app" ]; then
+            printf '%s, the app'"'"'s name before 1.0, is still installed. Move it to the Trash when you no longer need it.\n' "$old_app" >&2
+        fi
+    done
+    if "$print_path"; then printf '%s\n' "$PATH"; fi
+    exit 0
+fi
+
 asset=diskuse16x-$edition$target.tar.gz
 base=https://github.com/$repo/releases/$release
-download "$base/$asset.sha256" "$stage/$asset.sha256" ||
-    fail "Could not download $asset.sha256 from $base. Check that this release publishes the requested target."
-download "$base/$asset" "$stage/$asset" ||
-    fail "Could not download $asset from $base."
-
-IFS=' ' read -r expected filename extra < "$stage/$asset.sha256" ||
-    fail "The release checksum file is empty or incomplete."
-case "$filename" in
-    "$asset"|"*$asset") ;;
-    *) fail "The release checksum file names a different asset." ;;
-esac
-[ -z "$extra" ] && [ "${#expected}" -eq 64 ] || fail "Invalid SHA-256 checksum file."
-case "$expected" in *[!0-9a-fA-F]*) fail "Invalid SHA-256 checksum file." ;; esac
-expected=$(printf '%s' "$expected" | LC_ALL=C tr '[:upper:]' '[:lower:]')
-[ "$(digest "$stage/$asset")" = "$expected" ] || fail "SHA-256 checksum mismatch for $asset."
+fetch_verified
 
 # Stream only the executable into our staging directory, without unpacking paths.
 tar -xOzf "$stage/$asset" diskuse16x > "$stage/diskuse16x" ||
