@@ -2,10 +2,10 @@ cask "diskuse16x" do
   version "@VERSION@"
   sha256 "@SHA256@"
 
-  url "https://github.com/engrmnaveed/diskspace-16x/releases/download/v#{version}/diskuse16x-#{version}-macos-universal.zip"
+  url "https://github.com/engrmnaveed/diskuse16x/releases/download/v#{version}/diskuse16x-#{version}-macos-universal.zip"
   name "DiskUse16x"
   desc "Read-only disk space analyzer"
-  homepage "https://github.com/engrmnaveed/diskspace-16x"
+  homepage "https://github.com/engrmnaveed/diskuse16x"
 
   livecheck do
     url :url

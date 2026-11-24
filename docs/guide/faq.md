@@ -80,4 +80,4 @@ DiskUse16x never checks for updates by itself. In the Mac app, choose **Help →
 
 ## Something's wrong, or I have an idea
 
-Open an issue on [GitHub](https://github.com/engrmnaveed/diskspace-16x/issues). Say what you did, what you expected and what happened, plus your system version. Please remove personal names and paths from screenshots and reports.
+Open an issue on [GitHub](https://github.com/engrmnaveed/diskuse16x/issues). Say what you did, what you expected and what happened, plus your system version. Please remove personal names and paths from screenshots and reports.

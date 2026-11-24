@@ -54,7 +54,7 @@ def executable(path, content):
 
 
 def setup(root, *, os_name, arch, target, transport, release="latest/download",
-          repo="engrmnaveed/diskspace-16x", macos_version="14.0"):
+          repo="engrmnaveed/diskuse16x", macos_version="14.0"):
     tools = root / "tools"
     downloads = root / "download"
     tools.mkdir()
@@ -146,7 +146,7 @@ def accept(root, platform, version=None):
         args = ["--repo", repo, "--version", version, "--bin-dir", "path with spaces"]
         bin_dir = root / "path with spaces"
     else:
-        repo = "engrmnaveed/diskspace-16x"
+        repo = "engrmnaveed/diskuse16x"
         args = []
         bin_dir = root / "home/.local/share/diskuse16x/bin"
     env, archive, checksum = setup(root, **platform, release=release, repo=repo)

@@ -29,7 +29,7 @@ version="$(cat scripts/release-version)"
 package_version=$(printf '%s' "$version" | sed 's/-/~/g')
 expected="diskuse16x $version"
 [ "$edition" = basic ] || expected="$expected (pro)"
-homepage=https://github.com/engrmnaveed/diskspace-16x
+homepage=https://github.com/engrmnaveed/diskuse16x
 summary="Disk space explorer for the terminal"
 description="DiskUse16x shows what uses the space on a disk or in a folder, in an
 interactive explorer or as a JSON report. Its scans read file metadata only,

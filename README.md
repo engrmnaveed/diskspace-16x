@@ -83,11 +83,11 @@ The app is free and open source, and it is not notarized by Apple, so macOS bloc
 Install a checksummed CLI build from GitHub without sudo. Paste either line in Bash or Zsh.
 
 ```sh
-diskuse16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
+diskuse16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
 ```
 
 ```sh
-diskuse16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
+diskuse16x_path=$(wget -qO- https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
 ```
 
 Add `--pro` after `sh -s --` to install [DiskUse16x Pro](#editions), a free edition with more analysis, such as `diskuse16x diff`, `diskuse16x duplicates`, `scan --cleanup` and `diskuse16x explain`. The [Pro CLI reference](docs/cli-pro.md) documents them. It replaces Basic, and installing without `--pro` switches back.
@@ -95,7 +95,7 @@ Add `--pro` after `sh -s --` to install [DiskUse16x Pro](#editions), a free edit
 To uninstall and clean up this shell's PATH, run the same installer with `--uninstall`.
 
 ```sh
-diskuse16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
+diskuse16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
 ```
 
 From 1.0.0, the CLI also installs with Homebrew on macOS and Linux, as `du16x` or `du16x-pro` from the same tap, and Linux releases include `.deb` and `.rpm` packages. See [Install the CLI with Homebrew](docs/install.md#install-the-cli-with-homebrew) and [Install a Linux package](docs/install.md#install-a-linux-package).

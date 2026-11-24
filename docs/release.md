@@ -27,7 +27,7 @@ The cask and the CLI formulas are published through the public tap repository `e
 - **Each release:** the publish job commits `Casks/diskuse16x.rb`, `Formula/du16x.rb` and `Formula/du16x-pro.rb` to the tap after creating the release. Releases before 1.0 published the cask as `space16x`, so the job also removes `Casks/space16x.rb` and keeps `cask_renames.json` mapping it to `diskuse16x`, which moves its users over on `brew upgrade`.
 - **Without the secret:** the job skips the tap update and logs a notice. Download the three `.rb` files from the release and commit them to the same paths in the tap by hand.
 
-After the first release with `install.sh` is live and GitHub's latest-release URL serves the asset, update the install and uninstall commands in the README and installation guide to use that URL.
+The install and uninstall one-liners in the README and the installation guide run `releases/latest/download/install.sh`, so they need no change when the installer does. The repository was named `engrmnaveed/diskspace-16x` before 1.0. GitHub redirects that name, but releases before 1.0 are attested under it.
 
 ### One-time repository settings
 

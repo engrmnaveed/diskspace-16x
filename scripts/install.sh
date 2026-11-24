@@ -11,7 +11,7 @@ Usage: install.sh [--pro] [--repo OWNER/REPO] [--version VERSION] [--bin-dir DIR
 
 Download the CLI for this OS and architecture, verify its SHA-256 checksum,
 and install it without sudo. The defaults are the latest release of
-engrmnaveed/diskspace-16x and $HOME/.local/share/diskuse16x/bin.
+engrmnaveed/diskuse16x and $HOME/.local/share/diskuse16x/bin.
 --pro installs DiskUse16x Pro, which replaces Basic. Run without it to switch back.
 --shell-path prints the updated PATH for the calling shell.
 USAGE
@@ -22,7 +22,7 @@ fail() {
     exit 1
 }
 
-repo=engrmnaveed/diskspace-16x
+repo=engrmnaveed/diskuse16x
 version=
 bin_dir=
 action=install
