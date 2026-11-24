@@ -3,9 +3,16 @@ name = "diskuse16x"
 version = "0.9.1"
 edition = "2024"
 rust-version = "1.100"
-description = "A terminal disk space explorer for macOS and Linux"
+description = "A read-only disk space explorer for the terminal, on macOS and Linux"
 license = "MIT"
-publish = false
+repository = "https://github.com/engrmnaveed/diskuse16x"
+homepage = "https://github.com/engrmnaveed/diskuse16x/blob/main/docs/guide/README.md"
+documentation = "https://github.com/engrmnaveed/diskuse16x/blob/main/docs/cli.md"
+readme = "README.md"
+keywords = ["disk-usage", "disk-space", "ncdu", "tui", "treemap"]
+categories = ["command-line-utilities", "filesystem"]
+# crates.io gets only what builds the executable.
+include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]
 
 [features]
 # The Pro edition. Pro-only dependencies are optional and enabled here, as in

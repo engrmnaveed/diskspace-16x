@@ -29,6 +29,13 @@ The cask and the CLI formulas are published through the public tap repository `e
 
 The install and uninstall one-liners in the README and the installation guide run `releases/latest/download/install.sh`, so they need no change when the installer does. The repository was named `engrmnaveed/diskspace-16x` before 1.0. GitHub redirects that name, but releases before 1.0 are attested under it.
 
+### crates.io
+
+The last step of **Publish release** runs `cargo publish --locked` from `cli/` when the `release` environment has a `CARGO_REGISTRY_TOKEN` secret. Without the secret, it logs a notice and skips. CI runs `cargo package --locked` in the Linux x86-64 job, so a release can't fail to package.
+
+- **One-time setup:** sign in to [crates.io](https://crates.io/) with GitHub and verify an email address. Under **Account Settings → API Tokens**, create a token with the **publish-new** and **publish-update** scopes, limited to the crate `diskuse16x`. Store it as the `CARGO_REGISTRY_TOKEN` secret in the `release` environment. After the first publish, you can narrow the token to **publish-update**, or switch to crates.io's trusted publishing.
+- **Each release:** the step publishes the tagged version once, and a rerun skips a version crates.io already has. crates.io keeps every version for good: a broken one can only be yanked.
+
 ### One-time repository settings
 
 These settings live on GitHub, not in the repository. Set them before the next tag:

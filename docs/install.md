@@ -150,6 +150,16 @@ On openSUSE, install with `sudo zypper install --allow-unsigned-rpm ./diskuse16x
 
 To update a package, download the new release's package and install it the same way.
 
+## Install the CLI with Cargo
+
+With [Rustup](https://rustup.rs/) and a recent Rust, Cargo builds the CLI from source. Releases from 1.0.0 publish the `diskuse16x` crate to crates.io:
+
+```sh
+cargo install diskuse16x
+```
+
+Add `--features pro` for Pro. To build the newest code from GitHub instead, which needs no crates.io release, run `cargo install --git https://github.com/engrmnaveed/diskuse16x diskuse16x --locked`. Cargo installs the `diskuse16x` command into `~/.cargo/bin`. Add the short name yourself with `ln -s diskuse16x "$HOME/.cargo/bin/du16x"`. Update with the same command, and remove it with `cargo uninstall diskuse16x`.
+
 ## Build the CLI from source
 
 Install [Rustup](https://rustup.rs/) and a native linker for your system. Run the build from a checkout of the repository.
