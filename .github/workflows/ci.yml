@@ -150,6 +150,10 @@ jobs:
             eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           fi
           scripts/check-formula.sh "$CLI_TARGET"
+      - name: Check the crates.io package
+        if: matrix.runner == 'ubuntu-24.04'
+        working-directory: cli
+        run: cargo package --locked
       - name: Test installer platform routing and failure paths
         if: matrix.runner == 'ubuntu-24.04'
         run: python3 scripts/check-install.py
