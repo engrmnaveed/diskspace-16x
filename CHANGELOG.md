@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Promise a stable CLI for 1.x. `docs/cli.md` and `docs/cli-pro.md` say that within 1.x, commands and options, exit codes, JSON schema 3, the export format and Pro's scan history change only by additions. A breaking change waits for 2.0 and a new `schemaVersion`.
 - Find updates from the Mac app. **Help → Check for Updates…** opens the newest release's page in your browser, and **Help → Space 16X Help** opens the user guide. The app still never connects to the network itself. `docs/install.md` and the guide's FAQ say how to update each way you can install Space 16X.
 - Install the CLI with Homebrew on macOS and Linux. The `engrmnaveed/tap` tap adds the formulas `space16x-cli` (Basic) and `space16x-cli-pro` (Pro) beside the Mac app's `space16x` cask, and each release updates all three. Run `brew install engrmnaveed/tap/space16x-cli` after `brew tap engrmnaveed/tap` and `brew trust engrmnaveed/tap`.
 - Install the CLI on Linux from a `.deb` or `.rpm` package. Each release attaches `space16x_amd64.deb`, `space16x_arm64.deb`, `space16x.x86_64.rpm` and `space16x.aarch64.rpm`, and the same four for Pro as `space16x-pro…`, built from the static Linux executables, with SHA-256 files and attestations. They install `/usr/bin/space16x`, and installing one edition's package replaces the other with apt, or with dnf's `--allowerasing`. The packages aren't signed, so dnf notes that it skipped OpenPGP checks, and zypper needs `--allow-unsigned-rpm`.

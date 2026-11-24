@@ -160,6 +160,17 @@ The scanner reads filesystem metadata, skips symbolic links and mounts on other 
 
 On macOS, a startup-disk scan counts firmlinked directories such as `/Users` at their visible paths. It skips the corresponding directories under `/System/Volumes/Data` when their visible paths are in scope. Data-only directories remain in the report, and a direct scan of `/System/Volumes/Data` includes the firmlinked directories there.
 
+## Stability in 1.x
+
+From 1.0.0, every 1.x release keeps what scripts rely on, and changes it only by adding to it:
+
+- **Commands and options** keep their names and meaning. New ones may appear.
+- **Exit codes** `0`, `1` and `2` keep their meanings. A new code appears only with a new option that asks for it.
+- **JSON schema 3** keeps every field's name, type and meaning. New fields may appear, so ignore fields you don't know.
+- **Exports** from `scan --export` stay ncdu's JSON format, and every later 1.x release opens them. New `space16x_` keys may appear.
+
+A change that would break a script waits for 2.0, and a JSON change of that kind comes with a new `schemaVersion`. Text reports, messages and the explorer's screens are for people, and may change in any release. Scripts should read `--json`.
+
 ## Pro commands
 
 Space 16X Pro, a free edition, adds commands and scan options such as `diff`, `history`, `explain`, `duplicates`, `scan --cleanup` and `scan --html`. The [Pro CLI reference](cli-pro.md), included in the Pro archive, documents them. Basic answers them with a one-line hint to install Pro.
