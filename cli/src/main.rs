@@ -281,7 +281,7 @@ fn run(command: Command) -> io::Result<u8> {
         #[cfg(not(feature = "pro"))]
         Command::ProOnly(name) => {
             eprintln!(
-                "diskuse16x: {name} is in DiskUse16x Pro, a free edition. Install it with install.sh --pro: https://github.com/engrmnaveed/diskspace-16x/blob/main/docs/install.md#install-diskuse16x-pro"
+                "diskuse16x: {name} is in DiskUse16x Pro, a free edition. Install it with install.sh --pro: https://github.com/engrmnaveed/diskuse16x/blob/main/docs/install.md#install-diskuse16x-pro"
             );
             return Ok(1);
         }

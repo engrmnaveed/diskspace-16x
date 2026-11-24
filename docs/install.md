@@ -5,31 +5,31 @@
 In Bash, Zsh, or a POSIX shell, paste either one-liner.
 
 ```sh
-diskuse16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
+diskuse16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
 ```
 
 ```sh
-diskuse16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
+diskuse16x_path=$(wget -qO- https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
 ```
 
-The one-liners download the installer from a fixed commit. To review the script first, download it from the URL above, read it, and run `sh install.sh`. Releases from 0.2.2 also provide an attested `install.sh` alongside the archives on the [releases page](https://github.com/engrmnaveed/diskspace-16x/releases).
+The one-liners run the `install.sh` that the latest release publishes, so the installer always matches that release's archives. Each release attests it with GitHub build provenance. To review it first, download it from the URL above, read it, check it with `gh attestation verify install.sh` as [Verify a release archive](#verify-a-release-archive) shows, and run `sh install.sh`.
 
 Run `diskuse16x --version` or open the explorer with `diskuse16x`, or with its short name `du16x`, which the installer puts beside it. The installer checks the archive's SHA-256 digest and installs to `$HOME/.local/share/diskuse16x/bin`. It sets up your shell's startup file when needed, and the one-liner updates the current shell's PATH. Use curl or GNU Wget for the asset download. On a BusyBox-only image, install curl or use the manual archive instructions.
 
 Prefer a package manager? Use [Homebrew](#install-the-cli-with-homebrew) on macOS or Linux, or a [.deb or .rpm package](#install-a-linux-package) on Linux.
 
-Pass `--version 1.0.0` after `--shell-path` to select a published version from 1.0.0 on. Releases before 1.0 were named Space 16X: install one of them with the `install.sh` attached to that release. Use `--bin-dir PATH` to choose another directory or `--repo OWNER/REPO` for a public mirror with the same asset names. [GitHub Releases](https://github.com/engrmnaveed/diskspace-16x/releases)
+Pass `--version 1.0.0` after `--shell-path` to select a published version from 1.0.0 on. Releases before 1.0 were named Space 16X: install one of them with the `install.sh` attached to that release. Use `--bin-dir PATH` to choose another directory or `--repo OWNER/REPO` for a public mirror with the same asset names. [GitHub Releases](https://github.com/engrmnaveed/diskuse16x/releases)
 
 ## Uninstall the managed CLI
 
 Paste either line to remove the executable, installer files, and shell startup entries created by the installer. The command updates PATH in the current shell. It preserves pre-existing PATH entries and manually installed executables.
 
 ```sh
-diskuse16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
+diskuse16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
 ```
 
 ```sh
-diskuse16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
+diskuse16x_path=$(wget -qO- https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --uninstall --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
 ```
 
 ## Install DiskUse16x Pro
@@ -37,11 +37,11 @@ diskuse16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/disksp
 DiskUse16x comes in two free editions. Basic, which the commands above install, is the lightweight default. Pro adds more analysis, starting with `diskuse16x diff`, which compares two scans. Both install the same `diskuse16x` command in the same place, so installing one edition replaces the other. Add `--pro` to the installer:
 
 ```sh
-diskuse16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --pro --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
+diskuse16x_path=$(curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --pro --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
 ```
 
 ```sh
-diskuse16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --pro --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
+diskuse16x_path=$(wget -qO- https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --pro --shell-path) && [ -n "$diskuse16x_path" ] && export PATH="$diskuse16x_path" && unset diskuse16x_path
 ```
 
 `diskuse16x --version` ends with `(pro)` in the Pro edition. Run the Basic one-liner again to switch back. `--uninstall` removes either edition. In Basic, a Pro command such as `diskuse16x diff` prints a one-line hint to install Pro and exits with code 1. Releases from 0.6.0 publish `diskuse16x-pro-<target>.tar.gz` beside each Basic archive, built from the same tag. The [Pro CLI reference](cli-pro.md) documents Pro's commands. In the Mac app, Pro features are part of the one app: turn them on in **Settings → Pro features**.
@@ -51,7 +51,7 @@ diskuse16x_path=$(wget -qO- https://raw.githubusercontent.com/engrmnaveed/disksp
 Use Fish's list syntax to apply PATH immediately. Add `--uninstall` before `--shell-path` to remove the installation. The download can also use `wget -qO-`.
 
 ```fish
-set -l diskuse16x_path (curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/engrmnaveed/diskspace-16x/1be6dfd25c1c15000bca0d9b7c5c8c2fb141bf72/scripts/install.sh | sh -s -- --shell-path); and test -n "$diskuse16x_path"; and set -gx PATH (string split : -- "$diskuse16x_path")
+set -l diskuse16x_path (curl --proto '=https' --tlsv1.2 -fsSL https://github.com/engrmnaveed/diskuse16x/releases/latest/download/install.sh | sh -s -- --shell-path); and test -n "$diskuse16x_path"; and set -gx PATH (string split : -- "$diskuse16x_path")
 ```
 
 ### Candidate CLI targets
@@ -85,11 +85,11 @@ The SHA-256 file only proves the download wasn't corrupted, because it comes fro
 
 ```sh
 gh attestation verify diskuse16x-aarch64-apple-darwin.tar.gz \
-  --repo engrmnaveed/diskspace-16x \
-  --signer-workflow engrmnaveed/diskspace-16x/.github/workflows/publish-cli.yml
+  --repo engrmnaveed/diskuse16x \
+  --signer-workflow engrmnaveed/diskuse16x/.github/workflows/publish-cli.yml
 ```
 
-Use the same command with `install.sh` to verify the installer, or with a package name, such as `diskuse16x_amd64.deb`, to verify a Linux package. Add `--source-ref` with the full tag ref, such as `refs/tags/vX.Y.Z`, to require a specific release tag.
+Releases before 1.0 were attested under the repository's earlier name, so verify their files with `engrmnaveed/diskspace-16x` in both `--repo` and `--signer-workflow`. Use the same command with `install.sh` to verify the installer, or with a package name, such as `diskuse16x_amd64.deb`, to verify a Linux package. Add `--source-ref` with the full tag ref, such as `refs/tags/vX.Y.Z`, to require a specific release tag.
 
 ## Install the CLI with Homebrew
 
@@ -125,7 +125,7 @@ Releases from 1.0.0 attach `.deb` and `.rpm` packages, built from the same stati
 The names stay the same in every release, so `releases/latest/download/` always points at the newest one. On Debian or Ubuntu, download the package for your CPU and install it with apt. The commands below use Basic for x86-64.
 
 ```sh
-curl -fLO https://github.com/engrmnaveed/diskspace-16x/releases/latest/download/diskuse16x_amd64.deb
+curl -fLO https://github.com/engrmnaveed/diskuse16x/releases/latest/download/diskuse16x_amd64.deb
 ```
 
 ```sh
@@ -137,7 +137,7 @@ Installing the Pro package replaces Basic, and the reverse. Remove the command w
 On Fedora or RHEL, use dnf:
 
 ```sh
-curl -fLO https://github.com/engrmnaveed/diskspace-16x/releases/latest/download/diskuse16x.x86_64.rpm
+curl -fLO https://github.com/engrmnaveed/diskuse16x/releases/latest/download/diskuse16x.x86_64.rpm
 ```
 
 ```sh
@@ -196,13 +196,13 @@ Upgrade with `brew upgrade --cask diskuse16x`. Remove the app with `brew uninsta
 
 ### Install the release ZIP
 
-Download `diskuse16x-<version>-macos-universal.zip` and its `.sha256` file from the [releases page](https://github.com/engrmnaveed/diskspace-16x/releases). Verify the archive and expand it from the download directory. The commands below use version 0.9.1 as an example.
+Download `diskuse16x-<version>-macos-universal.zip` and its `.sha256` file from the [releases page](https://github.com/engrmnaveed/diskuse16x/releases). Verify the archive and expand it from the download directory. The commands below use version 0.9.1 as an example.
 
 ```sh
 shasum -a 256 -c diskuse16x-0.9.1-macos-universal.zip.sha256
 gh attestation verify diskuse16x-0.9.1-macos-universal.zip \
-  --repo engrmnaveed/diskspace-16x \
-  --signer-workflow engrmnaveed/diskspace-16x/.github/workflows/publish-cli.yml
+  --repo engrmnaveed/diskuse16x \
+  --signer-workflow engrmnaveed/diskuse16x/.github/workflows/publish-cli.yml
 ditto -x -k diskuse16x-0.9.1-macos-universal.zip .
 ```
 

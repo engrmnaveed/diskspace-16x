@@ -1,6 +1,6 @@
 class @CLASS@ < Formula
   desc "@DESC@"
-  homepage "https://github.com/engrmnaveed/diskspace-16x"
+  homepage "https://github.com/engrmnaveed/diskuse16x"
   version "@VERSION@"
   license "MIT"
 

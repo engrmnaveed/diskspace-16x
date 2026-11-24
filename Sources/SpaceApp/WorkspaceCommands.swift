@@ -29,8 +29,8 @@ struct WorkspaceWindow: View {
 
 /// Pages the Help menu opens in the browser. The app itself never connects to the network.
 enum ProjectLinks {
-    static let guide = URL(string: "https://github.com/engrmnaveed/diskspace-16x/blob/main/docs/guide/README.md")!
-    static let latestRelease = URL(string: "https://github.com/engrmnaveed/diskspace-16x/releases/latest")!
+    static let guide = URL(string: "https://github.com/engrmnaveed/diskuse16x/blob/main/docs/guide/README.md")!
+    static let latestRelease = URL(string: "https://github.com/engrmnaveed/diskuse16x/releases/latest")!
 }
 
 /// The menus, acting on the focused window's workspace. Without a focused window, as

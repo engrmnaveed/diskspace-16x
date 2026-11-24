@@ -28,7 +28,7 @@ printf '%s\n' "$version" | LC_ALL=C grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-
 # grep works line by line. Check the entire value before substituting it.
 case "$version" in *[!A-Za-z0-9.-]*) echo "Invalid characters in VERSION." >&2; exit 1 ;; esac
 if [ -z "$url_base" ]; then
-    url_base='https://github.com/engrmnaveed/diskspace-16x/releases/download/v#{version}'
+    url_base='https://github.com/engrmnaveed/diskuse16x/releases/download/v#{version}'
 fi
 case "$url_base" in
     *[!A-Za-z0-9/:._~#{}-]*) echo "Invalid characters in the URL base." >&2; exit 1 ;;
