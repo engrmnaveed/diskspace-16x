@@ -1,5 +1,14 @@
 import Foundation
 
+/// Where settings live: `UserDefaults`, or a stand-in in tests.
+public protocol SettingsStore: AnyObject {
+    func object(forKey defaultName: String) -> Any?
+    func bool(forKey defaultName: String) -> Bool
+    func set(_ value: Any?, forKey defaultName: String)
+}
+
+extension UserDefaults: SettingsStore {}
+
 /// The settings of Space 16X, this app's name before 1.0, which kept them under another
 /// bundle identifier. The app copies them once, on its first launch as DiskUse16x.
 public enum LegacySettings {
@@ -17,7 +26,7 @@ public enum LegacySettings {
     /// Copies each setting that `old` has and `defaults` doesn't, the first time only.
     /// Returns the keys it copied.
     @discardableResult
-    public static func importOnce(from old: [String: Any]?, into defaults: UserDefaults) -> [String] {
+    public static func importOnce(from old: [String: Any]?, into defaults: SettingsStore) -> [String] {
         guard !defaults.bool(forKey: importedKey) else { return [] }
         var copied: [String] = []
         for key in keys {
